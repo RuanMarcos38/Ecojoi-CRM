@@ -4,6 +4,13 @@ import styles from './welcome.module.css';
 export default function Home() {
   return (
     <main className={styles.page}>
+      <div className={styles.desktopReference} aria-hidden="true">
+        <img src="/ecojoi-welcome-reference.webp" alt="" />
+      </div>
+      <Link href="/app" className={styles.desktopCta} aria-label="Acessar CRM">
+        <span className={styles.visuallyHidden}>Acessar CRM</span>
+      </Link>
+
       <section className={styles.copy}>
         <div className={styles.brand}>
           <div className={styles.logoMark}>◒</div>
