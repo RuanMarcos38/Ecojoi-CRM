@@ -2,6 +2,7 @@ import './globals.css';
 import './polish.css';
 import './responsive-enterprise.css';
 import './corporate-design.css';
+import './approved-layout.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
