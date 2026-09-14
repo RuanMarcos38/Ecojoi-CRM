@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Bot, Clock3, MessageSquareText, Plus, Settings2, Trash2, X } from 'lucide-react';
+import styles from './pipeline.module.css';
 
 type Deal = {
   id: string;
@@ -128,7 +129,7 @@ export default function Pipeline() {
     await load();
   }
 
-  return <div className="content pipeline-page">
+  return <div className={`content pipeline-page ${styles.root}`}>
     <div className="page-head">
       <div><h1 className="page-title">Pipeline Comercial</h1><p className="page-sub">Oportunidades, tempo em etapa e mensagens automáticas em uma única operação.</p></div>
       <div className="page-actions">
