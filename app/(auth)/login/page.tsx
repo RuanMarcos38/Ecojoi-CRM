@@ -1,0 +1,10 @@
+'use client';
+import { FormEvent, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage(){
+  const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [error,setError]=useState(''); const [loading,setLoading]=useState(false); const router=useRouter();
+  async function submit(e:FormEvent){e.preventDefault();setError('');setLoading(true);try{const supabase=createClient();const {error}=await supabase.auth.signInWithPassword({email,password});if(error) throw error;router.push('/app');router.refresh()}catch(err){setError(err instanceof Error?err.message:'Falha ao entrar')}finally{setLoading(false)}}
+  return <div className="login-page"><section className="login-art"><div className="login-copy"><small>SEU ATENDIMENTO E GESTÃO EM UM SÓ LUGAR</small><div className="big">ecojoi<br/>CRM</div><p>Atendimento, vendas, relacionamento, automações e gestão comercial com isolamento completo entre empresas.</p></div></section><section className="login-panel"><div className="login-box"><div className="brand" style={{color:'#054735',padding:0}}><div className="brand-mark" style={{borderColor:'#054735'}}></div><div className="brand-name">ecojoi</div></div><h1>Acesse sua conta</h1><p className="muted">Entre com seu usuário corporativo.</p><form onSubmit={submit}>{error&&<div className="error">{error}</div>}<div className="field"><label>E-mail</label><input className="input" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@empresa.com"/></div><div className="field"><label>Senha</label><input className="input" type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/></div><button className="btn btn-primary" disabled={loading}>{loading?'Entrando...':'Entrar no CRM'}</button></form></div></section></div>
+}

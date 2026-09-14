@@ -1,0 +1,8 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { requirePermission } from '@/lib/auth/context';
+import { audit } from '@/lib/server/audit';
+const schema=z.object({title:z.string().min(2).max(180),description:z.string().max(2000).optional().nullable(),priority:z.enum(['low','medium','high']).default('medium'),due_at:z.string().datetime().optional().nullable(),related_contact_id:z.string().uuid().optional().nullable()});
+export async function GET(){try{const ctx=await requirePermission('tasks.view');const supabase=await createClient();const {data,error}=await supabase.from('tasks').select('id,title,description,status,priority,due_at,created_at,contact:contacts(id,name)').eq('tenant_id',ctx.tenantId).order('due_at',{ascending:true,nullsFirst:false});if(error)throw error;return NextResponse.json({data})}catch(e){if(e instanceof Response)return e;return NextResponse.json({error:'tasks_fetch_failed'},{status:500})}}
+export async function POST(req:Request){try{const ctx=await requirePermission('tasks.create');const body=schema.parse(await req.json());const supabase=await createClient();const {data,error}=await supabase.from('tasks').insert({...body,tenant_id:ctx.tenantId,created_by:ctx.userId,assigned_to:ctx.userId}).select().single();if(error)throw error;await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'task.create',entity:'task',entityId:data.id});return NextResponse.json({data},{status:201})}catch(e){if(e instanceof Response)return e;if(e instanceof z.ZodError)return NextResponse.json({error:'invalid_payload'},{status:400});return NextResponse.json({error:'task_create_failed'},{status:500})}}
