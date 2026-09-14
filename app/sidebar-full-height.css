@@ -1,0 +1,21 @@
+/* Ecojoi CRM — sidebar acompanha toda a altura da página.
+   Ajuste exclusivamente visual; não altera lógica, rotas, APIs ou dados. */
+
+@media (min-width: 768px) {
+  .shell {
+    align-items: stretch;
+  }
+
+  .sidebar {
+    position: relative;
+    top: auto;
+    height: auto;
+    min-height: 100%;
+    align-self: stretch;
+    overflow-y: visible;
+  }
+
+  .nav {
+    overflow: visible;
+  }
+}
