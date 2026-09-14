@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 
+const BUCKET = 'ecojoi-message-attachments';
 const createSchema = z.object({
   contact_id: z.string().uuid(),
   channel: z.enum(['internal', 'whatsapp', 'instagram', 'facebook', 'email']).default('internal')
@@ -16,13 +17,22 @@ export async function GET() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('conversations')
-      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,contact:contacts(id,name,email,phone),messages(id,direction,body,created_at)')
+      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,contact:contacts(id,name,email,phone),messages(id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
       .eq('tenant_id', ctx.tenantId)
       .order('updated_at', { ascending: false })
       .limit(80);
 
     if (error) throw error;
-    return NextResponse.json({ data });
+    const hydrated = await Promise.all((data ?? []).map(async conversation => {
+      const messages = await Promise.all((conversation.messages ?? []).map(async (message: any) => {
+        if (!message.attachment_path) return { ...message, attachment_url: null };
+        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(message.attachment_path, 3600);
+        return { ...message, attachment_url: signed?.signedUrl ?? null };
+      }));
+      messages.sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+      return { ...conversation, messages };
+    }));
+    return NextResponse.json({ data: hydrated });
   } catch (e) {
     if (e instanceof Response) return e;
     return NextResponse.json({ error: 'conversation_fetch_failed' }, { status: 500 });
