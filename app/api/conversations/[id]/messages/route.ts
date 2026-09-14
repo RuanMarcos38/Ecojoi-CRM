@@ -29,10 +29,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'conversation_not_in_human_service' }, { status: 409 });
     }
-    if (conversation.channel !== 'internal') {
-      return NextResponse.json({ error: 'external_channel_requires_configured_provider' }, { status: 409 });
-    }
 
+    const status = conversation.channel === 'internal' ? 'sent' : 'queued';
     const { data, error } = await supabase
       .from('messages')
       .insert({
@@ -41,7 +39,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         direction: 'outbound',
         body: body.body,
         sender_user_id: ctx.userId,
-        status: 'sent'
+        status,
+        message_type: 'text'
       })
       .select()
       .single();
@@ -59,10 +58,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       userId: ctx.userId,
       action: 'message.send',
       entity: 'conversation',
-      entityId: id
+      entityId: id,
+      metadata: { channel: conversation.channel, status }
     });
 
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json({ data, delivery: status }, { status: 201 });
   } catch (e) {
     if (e instanceof Response) return e;
     if (e instanceof z.ZodError) return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
