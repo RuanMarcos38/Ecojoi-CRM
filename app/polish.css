@@ -1,0 +1,132 @@
+html, body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  letter-spacing: -0.005em;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button {
+  letter-spacing: -0.01em;
+}
+
+.btn {
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  justify-content: center;
+  white-space: nowrap;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  box-shadow: 0 4px 10px rgba(11,109,76,.13);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #075b43;
+  box-shadow: 0 6px 14px rgba(11,109,76,.17);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #f7f9f7;
+  border-color: #d8dfda;
+}
+
+.icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 8px;
+}
+
+.page-title {
+  font-size: clamp(24px, 2.4vw, 30px);
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  color: #17211d;
+}
+
+.page-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #748079;
+}
+
+.card {
+  border-color: #e7ebe8;
+  box-shadow: 0 3px 12px rgba(21,43,34,.035);
+}
+
+.input,
+.textarea,
+.select {
+  border-radius: 10px;
+  border-color: #dfe5e1;
+  font-size: 12px;
+  color: #24332d;
+  background: #fff;
+}
+
+.field label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #53615b;
+  letter-spacing: .01em;
+}
+
+.table th {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.table td {
+  font-size: 12px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.nav a {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.nav-title {
+  font-size: 9px;
+  letter-spacing: 1.2px;
+}
+
+.topbar {
+  box-shadow: 0 1px 0 rgba(26,48,39,.025);
+}
+
+.search {
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .btn {
+    min-height: 38px;
+  }
+}

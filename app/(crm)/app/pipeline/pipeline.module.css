@@ -1,0 +1,219 @@
+.root {
+  min-width: 0;
+}
+
+.root :global(.page-actions) {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.root :global(.page-actions .btn),
+.root :global(.pipeline-form .btn),
+.root :global(.pipeline-automation-panel .btn) {
+  min-height: 40px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.root :global(.pipeline-feedback) {
+  margin: 12px 0;
+}
+
+.root :global(.pipeline-form),
+.root :global(.pipeline-automation-panel) {
+  border-radius: 14px;
+  box-shadow: 0 3px 12px rgba(21,43,34,.035);
+}
+
+.root :global(.section-head) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.root :global(.section-head h3) { margin: 0; font-size: 14px; letter-spacing: -.015em; }
+.root :global(.section-head p) { margin: 4px 0 0; color: #78847f; font-size: 10px; }
+
+.root :global(.pipeline-form-grid) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.root :global(.pipeline-form .field label),
+.root :global(.pipeline-automation-panel .field label) {
+  font-size: 10px;
+  letter-spacing: .01em;
+}
+
+.root :global(.automation-rule-form) {
+  padding: 14px;
+  border-radius: 11px;
+  background: #f7f9f7;
+  border: 1px solid #e8ece9;
+  margin-bottom: 15px;
+  display: grid;
+  gap: 11px;
+}
+
+.root :global(.time-rule) {
+  display: grid;
+  grid-template-columns: .7fr 1fr;
+  gap: 7px;
+}
+
+.root :global(.template-help) {
+  color: #7c8882;
+  font-size: 9px;
+}
+.root :global(.template-help code) {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #edf2ee;
+  color: #34423c;
+  margin-right: 4px;
+}
+
+.root :global(.automation-rule-list) {
+  display: grid;
+  gap: 8px;
+}
+
+.root :global(.automation-rule) {
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid #e8ece9;
+  border-radius: 11px;
+  background: #fff;
+}
+.root :global(.automation-rule-off) { opacity: .6; }
+.root :global(.automation-rule-icon) {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #0b6d4c;
+  background: #eaf6ed;
+}
+.root :global(.automation-rule-copy) { min-width: 0; display: grid; gap: 3px; }
+.root :global(.automation-rule-copy strong) { font-size: 11px; }
+.root :global(.automation-rule-copy span) { font-size: 9px; color: #6f7d77; text-transform: capitalize; }
+.root :global(.automation-rule-copy p) { margin: 2px 0 0; color: #78847f; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.root :global(.automation-rule-actions) { display: flex; gap: 6px; align-items: center; }
+.root :global(.automation-note) {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #f6f8f6;
+  color: #748079;
+  font-size: 9px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.root :global(.pipeline-kanban) {
+  margin-top: 16px;
+  gap: 11px;
+}
+
+.root :global(.pipeline-kanban .column) {
+  min-height: 490px;
+  border-radius: 13px;
+  background: #f1f4f2;
+  padding: 10px;
+}
+
+.root :global(.pipeline-kanban .column-head) {
+  padding: 2px 2px 8px;
+  font-size: 11px;
+  letter-spacing: -.01em;
+}
+
+.root :global(.stage-automation-hint) {
+  margin: 0 0 8px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: #eaf6ed;
+  color: #2a6f42;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.root :global(.pipeline-deal) {
+  border-radius: 11px;
+  padding: 11px;
+  box-shadow: 0 2px 7px rgba(20,43,34,.04);
+}
+
+.root :global(.pipeline-deal strong) {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.root :global(.deal-contact) {
+  margin-top: 4px;
+  color: #78847f;
+  font-size: 9px;
+}
+
+.root :global(.deal-kpis) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 9px;
+}
+.root :global(.deal-kpis span) {
+  padding: 6px;
+  border-radius: 7px;
+  background: #f7f9f7;
+  color: #7a8680;
+  font-size: 8px;
+  display: grid;
+  gap: 1px;
+}
+.root :global(.deal-kpis b) { color: #2e3d37; font-size: 9px; }
+
+.root :global(.deal-value) {
+  margin-top: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #19362b;
+}
+
+.root :global(.deal-next-message) {
+  margin-top: 8px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: #fff8e5;
+  color: #8c6613;
+  border: 1px solid #f0dfa9;
+  font-size: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.root :global(.deal-next-message.completed) { background: #edf7ef; color: #2b7043; border-color: #d0e8d6; }
+.root :global(.pipeline-deal .compact-select) { font-size: 9px; min-height: 32px; border-radius: 8px; }
+
+@media (max-width: 1200px) {
+  .root :global(.pipeline-form-grid) { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 760px) {
+  .root :global(.page-actions) { width: 100%; }
+  .root :global(.page-actions .btn) { flex: 1; }
+  .root :global(.pipeline-form-grid) { grid-template-columns: 1fr; }
+  .root :global(.section-head) { flex-direction: column; }
+  .root :global(.automation-rule) { grid-template-columns: 34px 1fr; }
+  .root :global(.automation-rule-actions) { grid-column: 1 / -1; justify-content: flex-end; }
+}
