@@ -61,7 +61,7 @@ export default function Home() {
             Centralize atendimento, contatos, oportunidades e automações em um CRM desenvolvido
             para uma operação comercial mais ágil, organizada e profissional.
           </p>
-          <Link href="/app" className={styles.primaryButton}>
+          <Link href="/login" className={styles.primaryButton}>
             Acessar CRM
             <ArrowRight size={18} strokeWidth={2.2} aria-hidden="true" />
           </Link>
