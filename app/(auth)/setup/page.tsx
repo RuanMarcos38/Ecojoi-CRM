@@ -1,0 +1,12 @@
+'use client';
+import { FormEvent,useEffect,useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+
+function slugify(v:string){return v.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,63)}
+export default function SetupPage(){
+  const [fullName,setFullName]=useState('');const [company,setCompany]=useState('');const [slug,setSlug]=useState('');const [manualSlug,setManualSlug]=useState(false);const [loading,setLoading]=useState(false);const [error,setError]=useState('');const router=useRouter();
+  useEffect(()=>{createClient().auth.getUser().then(({data})=>setFullName(String(data.user?.user_metadata?.full_name??'')))},[]);
+  async function submit(e:FormEvent){e.preventDefault();setLoading(true);setError('');const r=await fetch('/api/setup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company_name:company,company_slug:slug,full_name:fullName})});const d=await r.json();setLoading(false);if(!r.ok){setError(d.error==='company_slug_in_use'?'Esse identificador de empresa já está em uso.':'Não foi possível concluir a configuração.');return}router.push('/app');router.refresh()}
+  return <div className="setup-page"><div className="setup-card card"><div className="brand" style={{color:'#054735',padding:0}}><div className="brand-mark" style={{borderColor:'#054735'}}></div><div className="brand-name">ecojoi CRM</div></div><h1>Configure sua empresa</h1><p className="muted">Essa etapa cria o tenant, o perfil administrador e os recursos iniciais com RLS ativada.</p>{error&&<div className="error">{error}</div>}<form onSubmit={submit}><div className="field"><label>Seu nome</label><input className="input" value={fullName} onChange={e=>setFullName(e.target.value)} required minLength={2}/></div><div className="field"><label>Nome da empresa</label><input className="input" value={company} onChange={e=>{setCompany(e.target.value);if(!manualSlug)setSlug(slugify(e.target.value))}} required minLength={2}/></div><div className="field"><label>Identificador da empresa</label><input className="input" value={slug} onChange={e=>{setManualSlug(true);setSlug(slugify(e.target.value))}} required pattern="[a-z0-9][a-z0-9-]{1,62}"/><small className="muted">Usado internamente para identificar o tenant.</small></div><button className="btn btn-primary" disabled={loading}>{loading?'Configurando...':'Criar workspace'}</button></form></div></div>
+}

@@ -1,6 +1,6 @@
 # Ecojoi CRM
 
-CRM SaaS multiempresa criado do zero para atendimento, relacionamento e gestão comercial, com identidade visual inspirada nos materiais Ecojoi fornecidos.
+CRM SaaS multiempresa para atendimento, relacionamento e gestão comercial, com identidade visual inspirada nos materiais Ecojoi.
 
 ## Stack
 - Next.js 15 + React 19 + TypeScript
@@ -9,31 +9,59 @@ CRM SaaS multiempresa criado do zero para atendimento, relacionamento e gestão 
 - RBAC no backend
 - Tenant scoping em API e banco
 - Feature flags por empresa
-- Auditoria de ações críticas
+- Auditoria append-only via função segura
 
 ## Módulos
-Dashboard, Atendimento, Contatos, Leads, Pipeline, Tarefas, Automações, Relatórios, Equipe/Permissões e Configurações.
+- Dashboard com métricas reais
+- Atendimento/inbox interno
+- Contatos e Leads
+- Pipeline comercial
+- Tarefas e follow-ups
+- Automações (cadastro/ativação de regras)
+- Relatórios
+- Equipe e permissões
+- Configurações e Feature Flags
+- Auditoria
+- Área Super Admin para tenants
 
 ## Segurança multi-tenant
 1. O tenant nunca é confiado a partir do payload do navegador.
-2. A API deriva `tenant_id` do usuário autenticado em `profiles`.
-3. Todas as queries de negócio aplicam `.eq('tenant_id', ctx.tenantId)`.
-4. O banco repete a proteção com RLS via `has_tenant_access()`.
-5. Triggers impedem referências cruzadas em conversas/mensagens.
-6. RBAC é validado no backend antes de cada ação sensível.
-7. Feature flags são filtradas por tenant e alterações exigem papel administrativo.
+2. A API deriva `tenant_id` do perfil autenticado.
+3. Queries de negócio usam `id + tenant_id` para impedir IDOR.
+4. O PostgreSQL repete a proteção com RLS e `has_tenant_access()`.
+5. Triggers impedem referências cruzadas entre tenants.
+6. RBAC é validado no backend antes de ações sensíveis.
+7. Feature flags são tenant-scoped e também bloqueadas no backend.
+8. Logs de auditoria são escritos por RPC `SECURITY DEFINER`, sem UPDATE/DELETE público.
+9. Contas e tenants inativos são bloqueados no contexto autenticado.
 
-## Instalação
+## Instalação local
 ```bash
 cp .env.example .env.local
 npm install
 npm run dev
 ```
 
-Preencha `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+Preencha pelo menos:
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
+
+Para convites de usuários pela tela de Equipe, configure no servidor:
+```env
+SUPABASE_SERVICE_ROLE_KEY=
+```
+Nunca exponha essa chave no navegador nem use prefixo `NEXT_PUBLIC_` para ela.
 
 ## Banco
-Execute `database/migrations/001_init.sql` no SQL Editor do Supabase. Depois crie o primeiro usuário no Supabase Auth e associe-o a um tenant conforme `database/seed.example.sql`.
+Aplique em ordem:
+1. `database/migrations/001_init.sql`
+2. `database/migrations/002_security_and_modules.sql`
+
+Depois crie o primeiro usuário pelo fluxo `/register`. Ao entrar sem perfil, o sistema direciona para `/setup`, que chama a função protegida `bootstrap_tenant()` e cria a primeira empresa, o administrador e as flags padrão.
+
+`database/seed.example.sql` é apenas referência para cenários manuais/de teste; não coloque IDs reais no repositório.
 
 ## Verificações
 ```bash
@@ -43,7 +71,7 @@ npm run build
 ```
 
 ## Integrações externas
-O canal `internal` do atendimento funciona sem provedor externo. WhatsApp/Instagram/Facebook foram modelados como canais, mas o envio externo exige credenciais oficiais do respectivo provedor. O backend retorna erro explícito em vez de simular envio quando o canal externo não está configurado.
+O canal `internal` do Atendimento funciona com o banco do CRM. WhatsApp, Instagram, Facebook e e-mail estão modelados como canais, porém o envio externo real exige credenciais/API oficial do respectivo provedor. Enquanto um provedor externo não estiver configurado, o backend bloqueia o envio em vez de simular sucesso.
 
-## Variáveis
-Nunca exponha `SUPABASE_SERVICE_ROLE_KEY` no browser nem use prefixo `NEXT_PUBLIC_` para ela.
+## Automações
+O CRM permite cadastrar, ativar, editar e excluir regras de automação com isolamento por tenant. A execução assíncrona de regras/eventos externos deve ser ligada a um worker/Edge Function quando o provedor final for escolhido.

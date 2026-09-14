@@ -11,11 +11,20 @@ export async function getRequestContext(): Promise<RequestContext> {
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('tenant_id, role')
+    .select('tenant_id, role, active')
     .eq('id', user.id)
     .single();
 
   if (error || !profile?.tenant_id || !profile?.role) throw new Response('Profile not configured', { status: 403 });
+  if (profile.active !== true) throw new Response('User disabled', { status: 403 });
+
+  const { data: tenant, error: tenantError } = await supabase
+    .from('tenants')
+    .select('active')
+    .eq('id', profile.tenant_id)
+    .single();
+  if (tenantError || tenant?.active !== true) throw new Response('Tenant disabled', { status: 403 });
+
   return { userId: user.id, tenantId: profile.tenant_id, role: profile.role as Role, email: user.email };
 }
 
