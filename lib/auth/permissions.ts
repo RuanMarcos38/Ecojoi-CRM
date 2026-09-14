@@ -21,7 +21,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
   super_admin: all,
   company_admin: all,
   manager: all.filter(p => !['features.manage','settings.manage','team.manage','audit.view'].includes(p)),
-  user: ['contacts.view','contacts.create','contacts.update','conversations.view','conversations.create','conversations.send','deals.view','deals.create','deals.update','tasks.view','tasks.create','tasks.update']
+  user: ['contacts.view','contacts.create','contacts.update','conversations.view','conversations.create','conversations.send','conversations.manage','deals.view','deals.create','deals.update','tasks.view','tasks.create','tasks.update']
 };
 
 export function hasPermission(role: Role, permission: Permission) {
