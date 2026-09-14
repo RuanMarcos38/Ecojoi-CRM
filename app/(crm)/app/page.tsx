@@ -5,6 +5,7 @@ import {
   AlertTriangle, CheckCircle2, Clock3, FileSpreadsheet, FileText, ListTodo,
   MessagesSquare, TrendingUp, UserPlus, Users, WalletCards
 } from 'lucide-react';
+import styles from './dashboard.module.css';
 
 type Breakdown = { count: number };
 type Data = {
@@ -113,7 +114,7 @@ export default function Dashboard() {
     } finally { setExporting(''); }
   }
 
-  return <div className="content dashboard-page">
+  return <div className={`content dashboard-page ${styles.root}`}>
     <div className="page-head dashboard-head">
       <div><h1 className="page-title">Visão geral</h1><p className="page-sub">Indicadores executivos, operação comercial e atendimento do seu tenant.</p></div>
       <div className="dashboard-actions">
