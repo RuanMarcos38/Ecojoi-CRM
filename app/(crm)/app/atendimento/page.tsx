@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Bot, Clock3, Headphones, MoreHorizontal, Plus, Search, Send, UserCheck, X } from 'lucide-react';
+import styles from './attendance.module.css';
 
 type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = { id: string; direction: string; body: string; created_at: string };
@@ -155,7 +156,7 @@ export default function Atendimento() {
   }
 
   return (
-    <div className="chat-layout attendance-layout">
+    <div className={`chat-layout attendance-layout ${styles.root}`}>
       <aside className="chat-list">
         <div className="chat-list-head">
           <div>
