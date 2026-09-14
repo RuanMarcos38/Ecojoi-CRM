@@ -1,7 +1,7 @@
 .page {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(520px, .88fr) minmax(620px, 1.12fr);
+  grid-template-columns: 45.2% 54.8%;
   overflow: hidden;
   background: #f4f6f4;
   font-family: Inter, "Segoe UI Variable Text", "Segoe UI", Arial, Helvetica, sans-serif;
@@ -10,15 +10,15 @@
 .copy {
   position: relative;
   min-height: 100vh;
-  padding: 76px clamp(52px, 6.2vw, 104px);
+  padding: 110px clamp(56px, 6.15vw, 104px) 36px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   overflow: hidden;
   color: #fff;
   background:
-    radial-gradient(circle at 72% 18%, rgba(107, 196, 92, .10), transparent 34%),
-    linear-gradient(145deg, #064d3b 0%, #043c31 48%, #063f32 100%);
+    radial-gradient(circle at 70% 18%, rgba(105, 198, 89, .09), transparent 34%),
+    linear-gradient(145deg, #06513e 0%, #043c31 49%, #064534 100%);
   border-right: 1px solid rgba(255,255,255,.08);
 }
 
@@ -27,7 +27,7 @@
   content: '';
   position: absolute;
   pointer-events: none;
-  border: 1px solid rgba(126, 205, 111, .16);
+  border: 1px solid rgba(126, 205, 111, .15);
   border-radius: 50%;
 }
 
@@ -35,7 +35,7 @@
   width: 520px;
   height: 520px;
   right: -330px;
-  top: -110px;
+  top: -105px;
 }
 
 .copy::after {
@@ -47,8 +47,8 @@
 
 .brand {
   position: absolute;
-  top: 38px;
-  left: clamp(52px, 6.2vw, 104px);
+  top: 40px;
+  left: clamp(56px, 6.15vw, 104px);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -111,12 +111,12 @@
 .copy h1 {
   position: relative;
   z-index: 2;
-  max-width: 670px;
-  margin: 28px 0 0;
-  font-size: clamp(48px, 4.4vw, 72px);
-  line-height: .99;
+  max-width: 650px;
+  margin: 56px 0 0;
+  font-size: clamp(50px, 4.25vw, 70px);
+  line-height: 1.01;
   font-weight: 680;
-  letter-spacing: -.052em;
+  letter-spacing: -.05em;
   text-wrap: balance;
 }
 
@@ -129,9 +129,9 @@
   position: relative;
   z-index: 2;
   max-width: 610px;
-  margin: 30px 0 0;
-  color: rgba(255,255,255,.83);
-  font-size: clamp(15px, 1.05vw, 18px);
+  margin: 36px 0 0;
+  color: rgba(255,255,255,.84);
+  font-size: clamp(15px, 1.03vw, 18px);
   line-height: 1.62;
   letter-spacing: -.01em;
 }
@@ -140,13 +140,15 @@
   position: relative;
   z-index: 2;
   align-self: flex-start;
-  margin-top: 31px;
-  padding: 15px 22px;
+  margin-top: 28px;
+  min-width: 240px;
+  padding: 16px 24px;
   border: 1px solid rgba(255,255,255,.08);
   border-radius: 7px;
   background: linear-gradient(180deg, #93e47e 0%, #7fd269 100%);
   color: #073a2d;
   text-decoration: none;
+  text-align: center;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -.01em;
@@ -217,7 +219,7 @@
 
 .footer {
   position: absolute;
-  left: clamp(52px, 6.2vw, 104px);
+  left: clamp(56px, 6.15vw, 104px);
   bottom: 34px;
   color: rgba(255,255,255,.48);
   font-size: 8px;
@@ -227,39 +229,219 @@
   min-height: 100vh;
   position: relative;
   overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   background:
-    linear-gradient(90deg, rgba(248,250,248,.10), rgba(248,250,248,0) 18%),
-    url('https://images.unsplash.com/photo-1591088761584-d3f8540fc587?auto=format&fit=crop&fm=jpg&q=88&w=2000') center center / cover no-repeat;
+    linear-gradient(90deg, rgba(248,250,248,.05), rgba(248,250,248,0) 16%),
+    url('https://images.unsplash.com/photo-1591088761584-d3f8540fc587?auto=format&fit=crop&fm=jpg&q=92&w=2200') center center / cover no-repeat;
 }
 
 .visual::before {
   content: '';
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.02), rgba(7,49,39,.03)),
-    radial-gradient(circle at 25% 20%, rgba(255,255,255,.14), transparent 40%);
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(7,49,39,.025));
   pointer-events: none;
 }
 
-.visual::after {
-  content: 'Ecojoi CRM';
+.laptop {
   position: absolute;
-  left: 28px;
-  bottom: 28px;
-  padding: 8px 11px;
-  border: 1px solid rgba(255,255,255,.7);
-  border-radius: 6px;
-  background: rgba(255,255,255,.78);
-  color: #0b513d;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .02em;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 8px 24px rgba(18,45,34,.08);
+  z-index: 2;
+  top: 15.2%;
+  left: 13.5%;
+  width: 73.5%;
+  filter: drop-shadow(0 24px 34px rgba(18, 37, 30, .22));
 }
 
-.laptop,
+.screen {
+  aspect-ratio: 1.58;
+  padding: 8px;
+  border: 1px solid #2d3431;
+  border-radius: 13px 13px 5px 5px;
+  background: #202623;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+
+.screenInner {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 36px 1fr;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #101713;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-bottom: 1px solid #26302c;
+  background: #121916;
+  color: #dce6df;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.top span:last-child {
+  color: #77c267;
+  font-size: 8px;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 50px 30% 1fr;
+}
+
+.side {
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  border-right: 1px solid #26302b;
+  background: #0d1512;
+}
+
+.side i {
+  width: 17px;
+  height: 3px;
+  border-radius: 1px;
+  background: #3a4641;
+}
+
+.side i:first-child {
+  width: 27px;
+  height: 27px;
+  border-radius: 4px;
+  background: #0c6a49;
+}
+
+.list {
+  padding: 12px 10px;
+  border-right: 1px solid #2b3731;
+  background: #17201c;
+}
+
+.search {
+  height: 23px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  background: #25302b;
+}
+
+.person {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 7px;
+  border-bottom: 1px solid #27332d;
+  color: #e7eee9;
+}
+
+.person:first-of-type {
+  background: #223129;
+  border-radius: 4px;
+}
+
+.avatar {
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #e8f2e7;
+  color: #07533b;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.person div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.person b {
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.person small {
+  font-size: 6.5px;
+  color: #87968e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.person em {
+  font-style: normal;
+  font-size: 6px;
+  color: #748279;
+}
+
+.chat {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: #101713;
+}
+
+.chatHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #27322d;
+  color: #e4ece7;
+  font-size: 8px;
+}
+
+.chatThread {
+  padding: 18px;
+  background: #121a17;
+}
+
+.bubble {
+  max-width: 72%;
+  margin: 8px 0;
+  padding: 9px 10px;
+  border-radius: 5px;
+  background: #25312c;
+  color: #e5ece8;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.bubbleOut {
+  margin-left: auto;
+  background: #0d7250;
+  color: #effbf3;
+}
+
+.composer {
+  height: 30px;
+  margin: 0 12px 12px;
+  padding: 0 11px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  background: #242f2b;
+  color: #718078;
+  font-size: 7px;
+}
+
+.base {
+  width: 112%;
+  height: 22px;
+  margin-left: -6%;
+  border-radius: 1px 1px 10px 10px;
+  background: linear-gradient(#c6cbc8, #8c9490);
+  box-shadow: inset 0 1px #e6e9e7;
+}
+
 .metric,
 .signature {
   display: none;
@@ -282,6 +464,7 @@
   }
 
   .copy h1 {
+    margin-top: 44px;
     max-width: 760px;
     font-size: clamp(48px, 7vw, 66px);
   }
@@ -291,8 +474,13 @@
   }
 
   .visual {
-    min-height: 44vh;
-    background-position: center 44%;
+    min-height: 48vh;
+  }
+
+  .laptop {
+    top: 10%;
+    left: 17%;
+    width: 66%;
   }
 }
 
@@ -318,8 +506,12 @@
     font-size: 22px;
   }
 
+  .kicker {
+    margin-top: 0;
+  }
+
   .copy h1 {
-    margin-top: 24px;
+    margin-top: 32px;
     font-size: clamp(39px, 11vw, 52px);
     line-height: 1.02;
     letter-spacing: -.045em;
@@ -333,6 +525,7 @@
 
   .cta {
     width: 100%;
+    min-width: 0;
     margin-top: 26px;
     text-align: center;
   }
@@ -354,13 +547,14 @@
   }
 
   .visual {
-    min-height: 44vh;
+    min-height: 46vh;
     background-position: 58% center;
   }
 
-  .visual::after {
-    left: 18px;
-    bottom: 18px;
+  .laptop {
+    top: 12%;
+    left: 10%;
+    width: 80%;
   }
 }
 
