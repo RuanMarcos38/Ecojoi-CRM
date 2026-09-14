@@ -1,0 +1,281 @@
+/* Ecojoi CRM — responsive enterprise refinements.
+   Visual-only layer: no business rules, APIs, auth or database behavior. */
+
+:root {
+  --ui-radius-sm: 4px;
+  --ui-radius-md: 7px;
+  --ui-radius-lg: 10px;
+  --ui-shadow: 0 1px 2px rgba(19, 37, 30, .04), 0 5px 16px rgba(19, 37, 30, .035);
+}
+
+html,
+body {
+  font-family: "Segoe UI Variable Text", "Segoe UI", Arial, Helvetica, sans-serif;
+  font-variant-ligatures: common-ligatures;
+  letter-spacing: 0;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: "Segoe UI Variable Text", "Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+body {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+button,
+input,
+textarea,
+select {
+  letter-spacing: 0;
+}
+
+.page-title {
+  font-size: clamp(24px, 2vw, 30px);
+  font-weight: 650;
+  line-height: 1.18;
+  letter-spacing: -.018em;
+}
+
+.page-sub {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.brand-name {
+  font-weight: 700;
+  letter-spacing: -.045em;
+}
+
+.nav a {
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: 0;
+  border-radius: var(--ui-radius-md);
+}
+
+.nav-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .09em;
+}
+
+.card {
+  border-radius: var(--ui-radius-lg);
+  box-shadow: var(--ui-shadow);
+}
+
+.btn {
+  min-height: 38px;
+  border-radius: var(--ui-radius-md);
+  padding: 9px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.btn:hover:not(:disabled) {
+  transform: none;
+}
+
+.btn-primary {
+  box-shadow: none;
+}
+
+.icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: var(--ui-radius-md);
+}
+
+.input,
+.textarea,
+.select,
+.search,
+.search-results,
+.notification-popover {
+  border-radius: var(--ui-radius-md);
+}
+
+.input,
+.textarea,
+.select {
+  font-size: 13px;
+}
+
+.field label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.badge {
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .01em;
+}
+
+.stat-icon {
+  border-radius: var(--ui-radius-md);
+}
+
+.stat-value {
+  font-weight: 650;
+  letter-spacing: -.02em;
+}
+
+.table th {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .055em;
+}
+
+.table td {
+  font-size: 13px;
+}
+
+.column {
+  border-radius: var(--ui-radius-lg);
+}
+
+.column-head {
+  font-weight: 650;
+}
+
+.deal {
+  border-radius: var(--ui-radius-md);
+}
+
+.report-grid div,
+.automation-card,
+.setup-card {
+  border-radius: var(--ui-radius-lg);
+}
+
+/* Desktop / wide screens */
+@media (min-width: 1280px) {
+  .shell { grid-template-columns: 252px minmax(0, 1fr); }
+  .content { padding: 28px 30px 34px; }
+  .topbar { padding-inline: 30px; }
+  .stats-five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* Tablet landscape and compact desktops */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .shell { grid-template-columns: 208px minmax(0, 1fr); }
+  .sidebar { padding: 18px 11px; }
+  .brand { padding: 4px 7px 18px; gap: 8px; }
+  .brand-name { font-size: 23px; }
+  .brand-sub { font-size: 8px; }
+  .nav a { padding: 10px 9px; gap: 8px; font-size: 12px; }
+  .content { padding: 20px; }
+  .topbar { padding-inline: 20px; }
+  .search { min-width: 230px; }
+  .stats-five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-two { grid-template-columns: 1fr; }
+  .report-grid, .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .automation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kanban, .kanban-six { grid-auto-flow: column; grid-auto-columns: minmax(240px, 285px); grid-template-columns: none; }
+  .page-head { align-items: flex-start; }
+}
+
+/* Phones and small tablets */
+@media (max-width: 767px) {
+  html, body { overflow-x: hidden; }
+  .shell { display: block; min-width: 0; }
+
+  .sidebar {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    width: 100%;
+    height: auto;
+    padding: 7px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: #043f32;
+    box-shadow: 0 1px 0 rgba(0,0,0,.08);
+  }
+  .brand { display: none; }
+  .nav { display: flex; gap: 5px; min-width: max-content; }
+  .nav > div { display: flex; gap: 5px; }
+  .nav-title { display: none; }
+  .nav a {
+    min-height: 38px;
+    padding: 8px 10px;
+    margin: 0;
+    border-radius: 5px;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .nav svg { width: 16px; height: 16px; }
+
+  .main { min-width: 0; }
+  .topbar {
+    position: relative;
+    height: auto;
+    min-height: 58px;
+    padding: 9px 12px;
+    gap: 8px;
+  }
+  .search-wrap { flex: 1; min-width: 0; }
+  .search { width: 100%; min-width: 0; padding: 9px 10px; }
+  .top-actions { gap: 6px; }
+  .user-meta, .top-actions .avatar { display: none; }
+  .notification-popover { right: 0; width: min(280px, 90vw); }
+
+  .content { padding: 16px 12px 24px; }
+  .page-title { font-size: 23px; }
+  .page-sub { margin-bottom: 18px; font-size: 12px; }
+  .page-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .page-head > .page-actions, .page-actions { width: 100%; flex-wrap: wrap; }
+  .page-actions .btn, .page-head > .btn { flex: 1 1 auto; }
+
+  .stats, .stats-five, .dashboard-two, .report-grid, .settings-grid, .automation-grid, .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .stat { padding: 14px; }
+  .stat-value { font-size: 24px; margin-top: 12px; }
+  .section { padding: 14px; margin-top: 14px; }
+  .bars { gap: 7px; height: 155px; }
+
+  .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table { min-width: 680px; }
+
+  .kanban, .kanban-six {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(245px, 84vw);
+    grid-template-columns: none;
+    gap: 10px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
+  }
+  .column { min-height: 360px; scroll-snap-align: start; }
+
+  .login-panel { padding: 22px 16px; }
+  .login-box h1 { font-size: 27px; }
+  .setup-page { padding: 16px; }
+  .setup-card { padding: 22px 16px; }
+
+  .search-results { width: min(92vw, 430px); }
+}
+
+/* Very small devices */
+@media (max-width: 420px) {
+  .content { padding-inline: 10px; }
+  .btn { font-size: 12px; padding-inline: 10px; }
+  .top-actions .btn[aria-label="Notificações"] { display: none; }
+  .page-title { font-size: 21px; }
+  .nav a { padding-inline: 9px; }
+}
