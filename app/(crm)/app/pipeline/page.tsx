@@ -187,9 +187,9 @@ export default function Pipeline() {
     const payload = await r.json().catch(() => null);
     if (r.ok) {
       setOpen(false);
-      setSelectedDealId(payload?.data?.id ?? null);
       setNotice('Oportunidade criada. O contador da etapa começou agora.');
       await load();
+      setSelectedDealId(payload?.data?.id ?? null);
     }
     else setError('Não foi possível criar a oportunidade.');
   }
