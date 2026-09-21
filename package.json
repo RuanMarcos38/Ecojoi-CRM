@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postinstall": "node scripts/cpanel-postinstall.mjs",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
