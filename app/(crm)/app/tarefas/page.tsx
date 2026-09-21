@@ -8,7 +8,6 @@ import {
   ContactRound,
   Filter,
   ListChecks,
-  PauseCircle,
   Plus,
   Search,
   Siren,
