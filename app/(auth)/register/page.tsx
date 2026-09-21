@@ -11,7 +11,8 @@ export default function RegisterPage(){
     const fd=new FormData(e.currentTarget); const fullName=String(fd.get('full_name')??'').trim(); const email=String(fd.get('email')??'').trim(); const password=String(fd.get('password')??'');
     try{
       const supabase=createClient();
-      const {data,error}=await supabase.auth.signUp({email,password,options:{data:{full_name:fullName}}});
+      const emailRedirectTo=`${window.location.origin}/auth/confirm?next=/setup`;
+      const {data,error}=await supabase.auth.signUp({email,password,options:{data:{full_name:fullName},emailRedirectTo}});
       if(error) throw error;
       if(data.session){router.push('/setup');router.refresh();return;}
       setNotice('Conta criada. Confirme o e-mail e depois entre para concluir a configuração da empresa.');
