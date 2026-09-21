@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/ecojoi/repositories/Ecojoi-CRM/
+    - /bin/cp -R app components database lib public scripts tests "$DEPLOYPATH"
+    - /bin/cp middleware.ts next-env.d.ts next.config.ts package.json README.md SECURITY.md server.js tsconfig.json "$DEPLOYPATH"
