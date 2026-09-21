@@ -213,7 +213,7 @@
   flex-wrap: wrap;
 }
 
-.cardActions .select {
+.cardActions :global(.select) {
   min-width: 130px;
 }
 
@@ -407,11 +407,11 @@
 @media (max-width: 760px) {
   .hero { align-items: flex-start; flex-direction: column; }
   .heroActions { width: 100%; }
-  .heroActions .btn { flex: 1; }
+  .heroActions :global(.btn) { flex: 1; }
   .kpiGrid,
   .cardGrid,
   .formGrid { grid-template-columns: 1fr; }
   .formWide { grid-column: auto; }
   .formFooter { justify-content: stretch; }
-  .formFooter .btn { flex: 1; }
+  .formFooter :global(.btn) { flex: 1; }
 }
