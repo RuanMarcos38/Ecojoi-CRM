@@ -4,3 +4,7 @@ deployment:
     - export DEPLOYPATH=/home/ecojoi/repositories/Ecojoi-CRM/
     - /bin/cp -R app components database lib public scripts tests "$DEPLOYPATH"
     - /bin/cp middleware.ts next-env.d.ts next.config.ts package.json README.md SECURITY.md server.js tsconfig.json "$DEPLOYPATH"
+    - source /home/ecojoi/nodevenv/repositories/Ecojoi-CRM/22/bin/activate
+    - cd "$DEPLOYPATH"
+    - npm run build
+    - cloudlinux-selector restart --json --interpreter nodejs --user ecojoi --app-root repositories/Ecojoi-CRM
