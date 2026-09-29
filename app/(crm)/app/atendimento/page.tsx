@@ -1,9 +1,38 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  Bot, CheckCheck, Clock3, Download, FileText, Headphones, Image as ImageIcon,
-  Mic, MoreVertical, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
+  AlertTriangle,
+  BarChart3,
+  Bot,
+  CalendarClock,
+  CheckCircle2,
+  CheckSquare,
+  Circle,
+  Clock3,
+  FileText,
+  Filter,
+  Grid2X2,
+  Kanban,
+  List,
+  Megaphone,
+  MessageCircle,
+  MoreVertical,
+  Paperclip,
+  Phone,
+  Plus,
+  Search,
+  Send,
+  Settings,
+  ShieldCheck,
+  Smile,
+  Star,
+  Table2,
+  UserRound,
+  Users,
+  Video,
+  X,
+  Zap
 } from 'lucide-react';
 import styles from './attendance.module.css';
 
@@ -14,309 +43,429 @@ type Message = {
   body: string;
   status: string;
   message_type?: 'text' | 'image' | 'audio' | 'file' | 'system';
-  attachment_url?: string | null;
   attachment_name?: string | null;
-  attachment_mime?: string | null;
-  attachment_size?: number | null;
-  audio_duration_ms?: number | null;
   created_at: string;
 };
-type Contact = { id: string; name: string; email?: string; phone?: string };
+type Contact = { id: string; name: string; email?: string; phone?: string; source?: string; status?: string; created_at?: string };
 type Conversation = {
   id: string;
   status: string;
   channel: string;
   assigned_to?: string | null;
   attendance_state: AttendanceState;
-  attendance_changed_at?: string;
   updated_at?: string;
   contact: Contact;
   messages: Message[];
 };
-type Me = { features?: Record<string, boolean> };
+type Deal = {
+  id: string;
+  title: string;
+  stage: string;
+  value: number;
+  probability: number;
+  stage_changed_at: string;
+  contact?: Contact | null;
+};
+type Task = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  due_at?: string | null;
+  contact?: { id: string; name: string } | null;
+};
+type Me = { fullName?: string; companyName?: string; features?: Record<string, boolean> };
+type BoardCard = {
+  id: string;
+  title: string;
+  subtitle: string;
+  labels: string[];
+  metric: string;
+  footer: string;
+  tone: 'blue' | 'green' | 'amber' | 'rose' | 'violet';
+  conversationId?: string;
+};
 
-const QUEUES: { state: AttendanceState; label: string; Icon: typeof Clock3 }[] = [
-  { state: 'waiting', label: 'Esperando', Icon: Clock3 },
-  { state: 'in_service', label: 'Atendimento', Icon: Headphones },
-  { state: 'automatic', label: 'Automático', Icon: Bot }
+const stateLabel: Record<AttendanceState, string> = {
+  waiting: 'Aguardando atendimento',
+  in_service: 'Em atendimento',
+  automatic: 'Automação ativa'
+};
+
+const stageLabel: Record<string, string> = {
+  new: 'Lead novo',
+  qualification: 'Qualificação',
+  proposal: 'Proposta',
+  closing: 'Negociação',
+  won: 'Fechado ganho',
+  lost: 'Fechado perdido'
+};
+
+const fallbackCards: BoardCard[] = [
+  {
+    id: 'scope-1',
+    title: 'Lead novo de Google Ads',
+    subtitle: 'Capturar UTM, campanha, palavra-chave e telefone sem duplicar o cliente.',
+    labels: ['Google Ads', 'Lead'],
+    metric: 'SLA 5 min',
+    footer: 'Entrada em tempo real',
+    tone: 'blue'
+  },
+  {
+    id: 'scope-2',
+    title: 'Qualificar interesse pelo WhatsApp',
+    subtitle: 'Produto, cidade, orçamento, prazo, urgência e motivo de desqualificação.',
+    labels: ['WhatsApp', 'Score'],
+    metric: 'Quente',
+    footer: 'Próxima ação sugerida',
+    tone: 'green'
+  },
+  {
+    id: 'scope-3',
+    title: 'Follow-up automático',
+    subtitle: 'Criar tarefa, enviar template e escalar quando o SLA estiver vencido.',
+    labels: ['Automação', 'SLA'],
+    metric: '48h',
+    footer: 'Regra por campanha',
+    tone: 'amber'
+  }
 ];
-const STATE_LABEL: Record<AttendanceState, string> = { waiting: 'Esperando', in_service: 'Atendimento', automatic: 'Automático' };
-const EMOJIS = ['😀','😁','😂','😊','😍','👍','🙏','👏','🎉','✅','💚','📞','📎','🔥','😉','🤝','💬','🚀'];
 
-function initials(name = 'Contato') {
+function initials(name = 'Lead') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('');
 }
-function formatTime(value: string) {
+
+function formatTime(value?: string) {
+  if (!value) return '';
   return new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
-function formatSize(bytes?: number | null) {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+function money(value: number) {
+  return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
+function lastMessage(conversation: Conversation) {
+  return conversation.messages?.[conversation.messages.length - 1];
+}
+
+async function readApi<T>(url: string): Promise<T | null> {
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return payload?.data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export default function Atendimento() {
-  const [items, setItems] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [me, setMe] = useState<Me | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [queue, setQueue] = useState<AttendanceState>('waiting');
-  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [changingState, setChangingState] = useState(false);
-  const [sendingMedia, setSendingMedia] = useState(false);
-  const [emojiOpen, setEmojiOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [me, setMe] = useState<Me | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const mediaStream = useRef<MediaStream | null>(null);
-  const audioChunks = useRef<Blob[]>([]);
-  const recordStartedAt = useRef<number>(0);
 
   async function load() {
     setLoading(true);
-    const [cr, ct, mr] = await Promise.all([
-      fetch('/api/conversations', { cache: 'no-store' }),
-      fetch('/api/contacts', { cache: 'no-store' }),
-      fetch('/api/me', { cache: 'no-store' })
-    ]);
-    const [cd, td, md] = await Promise.all([cr.json(), ct.json(), mr.ok ? mr.json() : Promise.resolve(null)]);
-    if (cr.ok) setItems(cd.data ?? []);
-    if (ct.ok) setContacts(td.data ?? []);
-    if (mr.ok) setMe(md?.data ?? null);
-    setLoading(false);
+    try {
+      const [conversationPayload, contactPayload, dealPayload, taskPayload, mePayload] = await Promise.all([
+        readApi<Conversation[]>('/api/conversations'),
+        readApi<Contact[]>('/api/contacts'),
+        readApi<Deal[]>('/api/deals'),
+        readApi<Task[]>('/api/tasks'),
+        readApi<Me>('/api/me')
+      ]);
+      setConversations(conversationPayload ?? []);
+      setContacts(contactPayload ?? []);
+      setDeals(dealPayload ?? []);
+      setTasks(taskPayload ?? []);
+      setMe(mePayload);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { void load(); }, []);
-  useEffect(() => {
-    if (!recording) return;
-    const timer = window.setInterval(() => setRecordSeconds(Math.floor((Date.now() - recordStartedAt.current) / 1000)), 500);
-    return () => window.clearInterval(timer);
-  }, [recording]);
-  useEffect(() => () => mediaStream.current?.getTracks().forEach(track => track.stop()), []);
 
-  const queueCounts = useMemo(() => {
-    const counts: Record<AttendanceState, number> = { waiting: 0, in_service: 0, automatic: 0 };
-    for (const item of items) counts[item.attendance_state ?? 'waiting'] += 1;
-    return counts;
-  }, [items]);
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return items.filter(item => {
-      if ((item.attendance_state ?? 'waiting') !== queue) return false;
-      if (!needle) return true;
-      const last = item.messages?.[item.messages.length - 1]?.body ?? '';
-      return `${item.contact?.name ?? ''} ${item.contact?.email ?? ''} ${item.contact?.phone ?? ''} ${last}`.toLowerCase().includes(needle);
+  const filteredConversations = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return conversations;
+    return conversations.filter(item => {
+      const message = lastMessage(item)?.body ?? '';
+      return [item.contact?.name, item.contact?.phone, item.contact?.email, item.channel, message].filter(Boolean).join(' ').toLowerCase().includes(term);
     });
-  }, [items, queue, search]);
+  }, [conversations, query]);
+
   useEffect(() => {
-    if (filtered.some(item => item.id === activeId)) return;
-    setActiveId(filtered[0]?.id ?? null);
-  }, [filtered, activeId]);
+    if (activeId && conversations.some(item => item.id === activeId)) return;
+    setActiveId(filteredConversations[0]?.id ?? null);
+  }, [activeId, conversations, filteredConversations]);
 
-  const active = items.find(item => item.id === activeId) ?? null;
-  const aiAgentEnabled = me?.features?.ai_agent === true;
-
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    if (!text.trim() || !active || active.attendance_state !== 'in_service') return;
-    setError(''); setNotice('');
-    const r = await fetch(`/api/conversations/${active.id}/messages`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: text.trim() })
-    });
-    const d = await r.json();
-    if (r.ok) {
-      setText('');
-      setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
-      await load();
-      return;
-    }
-    const errors: Record<string, string> = {
-      conversation_in_automatic_mode: 'O agente de IA está responsável. Assuma o atendimento antes de responder.',
-      conversation_not_in_human_service: 'Assuma o atendimento antes de enviar uma mensagem.'
+  const active = conversations.find(item => item.id === activeId) ?? null;
+  const board = useMemo(() => {
+    const waitingCards: BoardCard[] = filteredConversations
+      .filter(item => item.attendance_state === 'waiting')
+      .slice(0, 8)
+      .map(item => ({
+        id: `conv-${item.id}`,
+        title: item.contact?.name ?? 'Lead sem nome',
+        subtitle: lastMessage(item)?.body || 'Lead novo aguardando primeiro atendimento humano.',
+        labels: [item.channel, 'novo'],
+        metric: item.updated_at ? formatTime(item.updated_at) : 'agora',
+        footer: item.contact?.phone ?? item.contact?.email ?? 'Sem telefone',
+        tone: 'rose',
+        conversationId: item.id
+      }));
+    const serviceCards: BoardCard[] = filteredConversations
+      .filter(item => item.attendance_state === 'in_service')
+      .slice(0, 8)
+      .map(item => ({
+        id: `service-${item.id}`,
+        title: item.contact?.name ?? 'Contato em atendimento',
+        subtitle: lastMessage(item)?.body || 'Conversa ativa com registro completo no CRM.',
+        labels: [item.channel, 'humano'],
+        metric: stateLabel[item.attendance_state],
+        footer: item.messages?.length ? `${item.messages.length} mensagens` : 'Sem histórico',
+        tone: 'green',
+        conversationId: item.id
+      }));
+    const dealCards: BoardCard[] = deals
+      .filter(item => !['lost'].includes(item.stage))
+      .slice(0, 8)
+      .map(item => ({
+        id: `deal-${item.id}`,
+        title: item.title,
+        subtitle: item.contact?.name ? `Contato: ${item.contact.name}` : 'Oportunidade aguardando contato vinculado.',
+        labels: [stageLabel[item.stage] ?? item.stage, `${item.probability}%`],
+        metric: money(item.value),
+        footer: item.stage_changed_at ? `${stageLabel[item.stage] ?? item.stage} desde ${new Date(item.stage_changed_at).toLocaleDateString('pt-BR')}` : 'Pipeline',
+        tone: item.stage === 'won' ? 'green' : item.stage === 'proposal' ? 'amber' : 'blue'
+      }));
+    return {
+      waiting: waitingCards.length ? waitingCards : fallbackCards.slice(0, 1),
+      progress: serviceCards.length ? serviceCards : fallbackCards.slice(1, 2),
+      complete: dealCards.length ? dealCards : fallbackCards.slice(2)
     };
-    setError(errors[d.error] ?? 'Não foi possível enviar a mensagem.');
-  }
+  }, [deals, filteredConversations]);
 
-  async function sendFile(file: File, durationMs?: number) {
-    if (!active || active.attendance_state !== 'in_service') return;
-    setSendingMedia(true); setError(''); setNotice('');
-    const form = new FormData();
-    form.append('file', file);
-    if (durationMs) form.append('duration_ms', String(durationMs));
-    try {
-      const r = await fetch(`/api/conversations/${active.id}/attachments`, { method: 'POST', body: form });
-      const d = await r.json();
-      if (!r.ok) {
-        const messages: Record<string, string> = {
-          file_too_large: 'O arquivo deve ter no máximo 25 MB.',
-          unsupported_file_type: 'Este tipo de arquivo não é permitido.',
-          conversation_not_in_human_service: 'Assuma o atendimento antes de enviar anexos.'
-        };
-        setError(messages[d.error] ?? 'Não foi possível enviar o arquivo.');
-        return;
-      }
-      setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo enviado.');
-      await load();
-    } finally {
-      setSendingMedia(false);
-      if (fileInput.current) fileInput.current.value = '';
-    }
-  }
-
-  async function onFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) await sendFile(file);
-  }
-
-  async function startRecording() {
-    if (!active || active.attendance_state !== 'in_service') return;
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setError('Seu navegador não permite gravação de áudio neste dispositivo.');
-      return;
-    }
-    try {
-      setError('');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStream.current = stream;
-      const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : undefined);
-      mediaRecorder.current = recorder;
-      audioChunks.current = [];
-      recorder.ondataavailable = event => { if (event.data.size) audioChunks.current.push(event.data); };
-      recorder.onstop = async () => {
-        const duration = Date.now() - recordStartedAt.current;
-        const mime = recorder.mimeType || 'audio/webm';
-        const blob = new Blob(audioChunks.current, { type: mime });
-        stream.getTracks().forEach(track => track.stop());
-        mediaStream.current = null;
-        setRecording(false); setRecordSeconds(0);
-        if (blob.size) await sendFile(new File([blob], `audio-${Date.now()}.webm`, { type: mime }), duration);
-      };
-      recordStartedAt.current = Date.now();
-      recorder.start(250);
-      setRecording(true); setRecordSeconds(0);
-    } catch {
-      setError('Não foi possível acessar o microfone. Verifique a permissão do navegador.');
-    }
-  }
-  function stopRecording() { mediaRecorder.current?.stop(); }
-
-  async function createConversation(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    setError('');
-    const r = await fetch('/api/conversations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contact_id: fd.get('contact_id'), channel: fd.get('channel') || 'internal' }) });
-    const d = await r.json();
-    if (r.ok) { setCreating(false); setQueue('in_service'); setActiveId(d.data.id); await load(); }
-    else setError('Você não possui permissão para iniciar este atendimento.');
-  }
+  const metrics = useMemo(() => {
+    const openDeals = deals.filter(deal => !['won', 'lost'].includes(deal.stage));
+    return {
+      leadsToday: contacts.filter(contact => {
+        if (!contact.created_at) return false;
+        return contact.created_at.slice(0, 10) === new Date().toISOString().slice(0, 10);
+      }).length,
+      waiting: conversations.filter(item => item.attendance_state === 'waiting').length,
+      service: conversations.filter(item => item.attendance_state === 'in_service').length,
+      revenue: deals.filter(deal => deal.stage === 'won').reduce((sum, deal) => sum + Number(deal.value || 0), 0),
+      openPipeline: openDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0),
+      tasks: tasks.filter(task => !['done', 'completed', 'closed'].includes(task.status)).length
+    };
+  }, [contacts, conversations, deals, tasks]);
 
   async function changeAttendance(state: AttendanceState) {
-    if (!active || changingState || active.attendance_state === state) return;
-    setChangingState(true); setError(''); setNotice('');
-    try {
-      const r = await fetch(`/api/conversations/${active.id}/attendance`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
-      const d = await r.json();
-      if (!r.ok) { setError(d.error === 'attendance_state_update_failed' ? 'Não foi possível alterar a fila.' : 'Você não possui permissão para alterar esta fila.'); return; }
-      setQueue(state); setActiveId(active.id); await load();
-    } finally { setChangingState(false); }
+    if (!active || active.attendance_state === state) return;
+    setError('');
+    setNotice('');
+    const response = await fetch(`/api/conversations/${active.id}/attendance`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state })
+    });
+    if (!response.ok) {
+      setError('Não foi possível alterar o responsável desta conversa.');
+      return;
+    }
+    setNotice(state === 'in_service' ? 'Atendimento assumido.' : 'Fila atualizada.');
+    await load();
   }
 
-  function renderMessage(message: Message) {
-    return (
-      <div key={message.id} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
-        <div className={styles.messageBubble}>
-          {message.message_type === 'image' && message.attachment_url && (
-            <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.imageMessage}><img src={message.attachment_url} alt={message.attachment_name ?? 'Imagem'} /></a>
-          )}
-          {message.message_type === 'audio' && message.attachment_url && (
-            <div className={styles.audioMessage}><Mic size={17}/><audio controls preload="metadata" src={message.attachment_url} /></div>
-          )}
-          {message.message_type === 'file' && message.attachment_url && (
-            <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.fileMessage}>
-              <span className={styles.fileIcon}><FileText size={20}/></span>
-              <span><b>{message.attachment_name ?? 'Arquivo'}</b><small>{formatSize(message.attachment_size)}</small></span>
-              <Download size={17}/>
-            </a>
-          )}
-          {message.body && message.message_type !== 'audio' && <div className={styles.messageText}>{message.body}</div>}
-          <div className={styles.messageMeta}><span>{formatTime(message.created_at)}</span>{message.direction === 'outbound' && <><span>{message.status === 'queued' ? 'na fila' : ''}</span><CheckCheck size={14}/></>}</div>
-        </div>
-      </div>
-    );
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (!active || !text.trim()) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    const response = await fetch(`/api/conversations/${active.id}/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ body: text.trim() })
+    });
+    const payload = await response.json().catch(() => null);
+    setSaving(false);
+    if (!response.ok) {
+      setError(payload?.error === 'conversation_not_in_human_service' ? 'Assuma o atendimento antes de responder.' : 'Não foi possível enviar a mensagem.');
+      return;
+    }
+    setText('');
+    setNotice(payload?.delivery === 'queued' ? 'Mensagem enfileirada para o provedor oficial.' : 'Mensagem registrada no atendimento.');
+    await load();
   }
+
+  const demoMessages: Message[] = [
+    { id: 'demo-1', direction: 'inbound', body: 'Olá, vi o anúncio e gostaria de entender as opções disponíveis.', status: 'sent', created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString() },
+    { id: 'demo-2', direction: 'outbound', body: 'Perfeito. Vou te ajudar e já registrar sua necessidade para a proposta.', status: 'sent', created_at: new Date(Date.now() - 1000 * 60 * 8).toISOString() }
+  ];
+  const activeMessages = active?.messages?.length ? active.messages : demoMessages;
+  const activeContact = active?.contact ?? contacts[0] ?? { id: 'demo', name: 'Lead Ecojoi', phone: '+55 11 90000-0000', email: 'lead@exemplo.com' };
+  const canSend = active?.attendance_state === 'in_service';
 
   return (
-    <div className={`${styles.root} ${styles.whatsappShell}`}>
-      <aside className={styles.sidebar}>
-        <div className={styles.sidebarTop}>
-          <div><strong>Atendimento</strong><span>Caixa de entrada omnichannel</span></div>
-          <button className={styles.roundButton} onClick={() => setCreating(v => !v)} aria-label="Novo atendimento">{creating ? <X size={18}/> : <Plus size={18}/>}</button>
-        </div>
-        {creating && (
-          <form className={styles.newConversation} onSubmit={createConversation}>
-            <select className="select" name="contact_id" required defaultValue=""><option value="" disabled>Selecione um contato</option>{contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select>
-            <select className="select" name="channel" defaultValue="internal"><option value="internal">Interno</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="email">E-mail</option></select>
-            <button className="btn btn-primary">Iniciar</button>
-          </form>
-        )}
-        <div className={styles.searchBox}><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar ou iniciar conversa" /></div>
-        <div className={styles.queueTabs} role="tablist">
-          {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={queue === state ? styles.queueActive : ''} onClick={() => setQueue(state)}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
-        </div>
-        <div className={styles.conversationList}>
-          {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
-            const last = conversation.messages?.[conversation.messages.length - 1];
-            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => setActiveId(conversation.id)}>
-              <span className={styles.avatar}>{initials(conversation.contact?.name)}</span>
-              <span className={styles.conversationCopy}><span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span><span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span></span>
-            </button>;
-          })}
-        </div>
+    <div className={styles.frame}>
+      <aside className={styles.rail} aria-label="Navegação principal">
+        <div className={styles.windowDots}><i/><i/><i/></div>
+        <div className={styles.logoMark}>C</div>
+        <nav className={styles.railNav}>
+          <a className={styles.activeRail} href="/app/atendimento" aria-label="Atendimento"><Grid2X2 size={18}/></a>
+          <a href="/app/pipeline" aria-label="Pipeline"><Kanban size={18}/></a>
+          <a href="/app/tarefas" aria-label="Tarefas"><CheckSquare size={18}/><b>{metrics.tasks}</b></a>
+          <a href="/app/relatorios" aria-label="Relatórios"><BarChart3 size={18}/></a>
+          <a href="/app/equipe" aria-label="Equipe"><Users size={18}/></a>
+          <a href="/app/configuracoes" aria-label="Configurações"><Settings size={18}/></a>
+        </nav>
       </aside>
 
-      <main className={styles.chatPanel}>
-        {active ? <>
-          <header className={styles.chatHeader}>
-            <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(active.contact?.name)}</span><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{active.contact?.phone ?? active.contact?.email ?? active.channel} · {STATE_LABEL[active.attendance_state]}</span></div></div>
-            <div className={styles.headerActions}>
-              {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
-              {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
-              {active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
-              <button className={styles.roundButton} aria-label="Mais opções"><MoreVertical size={18}/></button>
+      <aside className={styles.projectPane}>
+        <label className={styles.projectSearch}><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search..." /></label>
+        <section className={styles.projectGroup}>
+          <span>Favorites</span>
+          <a><Star size={13}/> Novos leads <b>{metrics.waiting}</b></a>
+          <a><Circle size={12}/> Follow-up</a>
+          <a><CheckCircle2 size={13}/> Qualificados</a>
+          <a><AlertTriangle size={13}/> SLA vencido</a>
+        </section>
+        <section className={styles.projectGroup}>
+          <span>CRM Comercial</span>
+          <a className={styles.projectActive}><MessageCircle size={13}/> Atendimento <b>{metrics.service}</b></a>
+          <a><UserRound size={13}/> Leads</a>
+          <a><Kanban size={13}/> Pipeline</a>
+          <a><CalendarClock size={13}/> Agenda</a>
+          <a><Megaphone size={13}/> Campanhas</a>
+          <a><ShieldCheck size={13}/> Equipe</a>
+        </section>
+        <section className={styles.projectGroup}>
+          <span>Operação</span>
+          <a><Zap size={13}/> Automações</a>
+          <a><Bot size={13}/> IA nos bastidores</a>
+          <a><FileText size={13}/> Relatórios</a>
+        </section>
+        <button className={styles.newProject}><Plus size={14}/> Novo lead</button>
+      </aside>
+
+      <main className={styles.boardPane}>
+        <header className={styles.boardHeader}>
+          <div>
+            <div className={styles.boardTitleRow}><CheckSquare size={18}/><h1>Ecojoi CRM</h1></div>
+            <p><span>Google Ads</span><i/> <span>Meta Ads</span><i/> <span>WhatsApp</span></p>
+          </div>
+          <div className={styles.boardActions}>
+            <Search size={18}/><Star size={18}/><MoreVertical size={18}/>
+          </div>
+        </header>
+
+        <nav className={styles.tabs} aria-label="Áreas do atendimento">
+          <a>Discussão <b>{metrics.waiting}</b></a>
+          <a className={styles.tabActive}>Tasks</a>
+          <a>Timeline</a>
+          <a>Arquivos</a>
+          <a>Overview</a>
+        </nav>
+
+        <section className={styles.viewbar}>
+          <div>
+            <button className={styles.viewActive}><Kanban size={15}/> Kanban</button>
+            <button><Table2 size={15}/> Table</button>
+            <button><List size={15}/> List View</button>
+          </div>
+          <button><Filter size={15}/> Filter</button>
+        </section>
+
+        <section className={styles.metricStrip} aria-label="Resumo operacional">
+          <article><span>Leads hoje</span><strong>{metrics.leadsToday}</strong></article>
+          <article><span>Aguardando</span><strong>{metrics.waiting}</strong></article>
+          <article><span>Em atendimento</span><strong>{metrics.service}</strong></article>
+          <article><span>Pipeline aberto</span><strong>{money(metrics.openPipeline)}</strong></article>
+          <article><span>Receita ganha</span><strong>{money(metrics.revenue)}</strong></article>
+        </section>
+
+        <section className={styles.board} aria-label="Kanban comercial">
+          {[
+            ['waiting', 'Novos Leads', board.waiting],
+            ['progress', 'Em Atendimento', board.progress],
+            ['complete', 'Pipeline e Receita', board.complete]
+          ].map(([key, title, cards]) => (
+            <div className={styles.column} key={String(key)}>
+              <div className={styles.columnHead}><span><i className={styles[String(key)]}/>{String(title)} <b>{(cards as BoardCard[]).length}</b></span><button><Plus size={16}/></button></div>
+              {(cards as BoardCard[]).map(card => (
+                <article
+                  className={`${styles.taskCard} ${card.conversationId === activeId ? styles.selectedCard : ''}`}
+                  key={card.id}
+                  onClick={() => card.conversationId && setActiveId(card.conversationId)}
+                >
+                  <div className={styles.cardTop}>
+                    <div>{card.labels.map(label => <span className={`${styles.label} ${styles[card.tone]}`} key={`${card.id}-${label}`}>{label}</span>)}</div>
+                    <MoreVertical size={16}/>
+                  </div>
+                  <h3>{card.title}</h3>
+                  <p>{card.subtitle}</p>
+                  <div className={styles.cardFooter}>
+                    <span>{card.metric}</span>
+                    <small>{card.footer}</small>
+                  </div>
+                </article>
+              ))}
             </div>
-          </header>
-
-          {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
-          {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
-
-          <div className={styles.messages}>{active.messages?.length ? active.messages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
-
-          {active.attendance_state === 'in_service' ? <>
-            {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
-            <form className={styles.composer} onSubmit={send}>
-              <div className={styles.composerTools}>
-                <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} aria-label="Emoji"><Smile size={22}/></button>
-                <button type="button" className={styles.composerIcon} onClick={() => fileInput.current?.click()} disabled={sendingMedia} aria-label="Anexar arquivo"><Paperclip size={22}/></button>
-                <input ref={fileInput} type="file" hidden onChange={onFileChange} accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
-                {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
-              </div>
-              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <input value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem" />}
-              {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} aria-label="Parar gravação"><Square size={18}/></button> : text.trim() ? <button className={styles.sendButton} type="submit" aria-label="Enviar"><Send size={19}/></button> : <button type="button" className={styles.sendButton} onClick={startRecording} disabled={sendingMedia} aria-label="Gravar áudio"><Mic size={20}/></button>}
-            </form>
-          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
-        </> : <div className={styles.chatPlaceholder}><div className={styles.placeholderIcon}><ImageIcon size={28}/></div><h3>Ecojoi Atendimento</h3><p>Selecione uma conversa para iniciar.</p></div>}
+          ))}
+        </section>
       </main>
 
-      <aside className={styles.details}>
-        {active && <><span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span><h3>{active.contact?.name}</h3><p>{active.contact?.phone}</p><p>{active.contact?.email}</p><hr/><b>Status do atendimento</b><div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div><hr/><b>Canal</b><p className={styles.channelLabel}>{active.channel}</p><hr/><small className={styles.securityText}>Arquivos e mensagens ficam isolados pelo tenant da empresa. Mensagens de canais externos aparecem como “na fila” enquanto o provedor oficial não estiver conectado.</small></>}
+      <aside className={styles.chatPane}>
+        <header className={styles.chatTop}>
+          <button aria-label="Fechar"><X size={18}/></button>
+          <div><Video size={17}/><Phone size={17}/><MoreVertical size={17}/></div>
+        </header>
+
+        <section className={styles.profile}>
+          <span className={styles.profileAvatar}>{initials(activeContact.name)}</span>
+          <h2>{activeContact.name}</h2>
+          <p>{activeContact.phone ?? activeContact.email ?? 'Contato comercial'}</p>
+          <div><span>Lead quente</span><span>{active?.channel ?? 'WhatsApp'}</span></div>
+        </section>
+
+        <section className={styles.statusPanel}>
+          <div><Clock3 size={16}/><span>{active ? stateLabel[active.attendance_state] : 'Visão demonstrativa'}</span></div>
+          {active && active.attendance_state !== 'in_service' && <button onClick={() => void changeAttendance('in_service')}>Assumir</button>}
+          {active && active.attendance_state === 'in_service' && <button onClick={() => void changeAttendance('waiting')}>Pausar</button>}
+        </section>
+
+        <section className={styles.messages}>
+          {activeMessages.map(message => (
+            <div key={message.id} className={`${styles.message} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
+              <p>{message.message_type === 'file' ? message.attachment_name ?? message.body : message.body}</p>
+              <span>{formatTime(message.created_at)} {message.direction === 'outbound' && message.status === 'queued' ? ' · fila' : ''}</span>
+            </div>
+          ))}
+          <div className={styles.meetingCard}><small>Próxima atividade</small><strong>{tasks[0]?.title ?? 'Follow-up comercial'}</strong><span>{tasks[0]?.due_at ? new Date(tasks[0].due_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Hoje, 14:20'}</span></div>
+          {(error || notice) && <div className={error ? styles.error : styles.notice}>{error || notice}</div>}
+        </section>
+
+        <form className={styles.composer} onSubmit={send}>
+          <button type="button" aria-label="Anexar"><Paperclip size={18}/></button>
+          <button type="button" aria-label="Emoji"><Smile size={18}/></button>
+          <input value={text} onChange={event => setText(event.target.value)} disabled={!canSend || saving} placeholder={canSend ? 'Write a message...' : 'Assuma o atendimento...'} />
+          <button aria-label="Enviar" disabled={!canSend || !text.trim() || saving}><Send size={17}/></button>
+        </form>
       </aside>
+
+      {loading && <div className={styles.loadingOverlay}>Carregando CRM...</div>}
     </div>
   );
 }
