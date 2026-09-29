@@ -4,8 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "postinstall": "node scripts/cpanel-postinstall.mjs",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -16,9 +15,9 @@
     "@supabase/supabase-js": "^2.49.4",
     "jspdf": "^2.5.2",
     "lucide-react": "^0.468.0",
-    "next": "15.2.4",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "next": "16.3.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
