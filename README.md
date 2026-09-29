@@ -16,7 +16,9 @@ CRM SaaS multiempresa para atendimento, relacionamento e gestão comercial, com 
 - Atendimento/inbox interno
 - Contatos e Leads
 - Pipeline comercial
+- Agenda operacional
 - Tarefas e follow-ups
+- Campanhas e atribuição comercial
 - Automações (cadastro/ativação de regras)
 - Relatórios
 - Equipe e permissões
@@ -58,6 +60,8 @@ Nunca exponha essa chave no navegador nem use prefixo `NEXT_PUBLIC_` para ela.
 Aplique em ordem:
 1. `database/migrations/001_init.sql`
 2. `database/migrations/002_security_and_modules.sql`
+3. `database/migrations/003_attendance_modes.sql`
+4. `database/migrations/004_whatsapp_media_dashboard_pipeline_automation.sql`
 
 Depois crie o primeiro usuário pelo fluxo `/register`. Ao entrar sem perfil, o sistema direciona para `/setup`, que chama a função protegida `bootstrap_tenant()` e cria a primeira empresa, o administrador e as flags padrão.
 
@@ -69,6 +73,24 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Deploy em cPanel
+A aplicação está preparada para cPanel Node.js com `server.js` como arquivo de inicialização.
+
+Configuração recomendada no cPanel:
+- Application root: `repositories/Ecojoi-CRM`
+- Application URL: domínio ou subdomínio do CRM
+- Application startup file: `server.js`
+- Node.js: versão compatível com Next.js 15
+- Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` e `NEXT_PUBLIC_APP_URL`
+
+O arquivo `.cpanel.yml` copia `app`, `components`, `database`, `lib`, `public`, `scripts`, `tests` e os arquivos de configuração para `/home/ecojoi/repositories/Ecojoi-CRM/`. Após o deploy, rode o build no ambiente da aplicação:
+```bash
+npm install
+npm run build
+```
+
+Depois, reinicie a aplicação Node.js no painel do cPanel.
 
 ## Integrações externas
 O canal `internal` do Atendimento funciona com o banco do CRM. WhatsApp, Instagram, Facebook e e-mail estão modelados como canais, porém o envio externo real exige credenciais/API oficial do respectivo provedor. Enquanto um provedor externo não estiver configurado, o backend bloqueia o envio em vez de simular sucesso.
