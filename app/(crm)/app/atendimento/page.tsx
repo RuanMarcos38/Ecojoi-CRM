@@ -93,7 +93,7 @@ const stateLabel: Record<AttendanceState, string> = {
 };
 
 const stageLabel: Record<string, string> = {
-  new: 'Lead novo',
+  new: 'Contato novo',
   qualification: 'Qualificação',
   proposal: 'Proposta',
   closing: 'Negociação',
@@ -104,9 +104,9 @@ const stageLabel: Record<string, string> = {
 const fallbackCards: BoardCard[] = [
   {
     id: 'scope-1',
-    title: 'Lead novo de Google Ads',
+    title: 'Contato novo de Google Ads',
     subtitle: 'Capturar UTM, campanha, palavra-chave e telefone sem duplicar o cliente.',
-    labels: ['Google Ads', 'Lead'],
+    labels: ['Google Ads', 'Contato'],
     metric: 'SLA 5 min',
     footer: 'Entrada em tempo real',
     tone: 'blue'
@@ -115,14 +115,14 @@ const fallbackCards: BoardCard[] = [
     id: 'scope-2',
     title: 'Qualificar interesse pelo WhatsApp',
     subtitle: 'Produto, cidade, orçamento, prazo, urgência e motivo de desqualificação.',
-    labels: ['WhatsApp', 'Score'],
+    labels: ['WhatsApp', 'Pontuação'],
     metric: 'Quente',
     footer: 'Próxima ação sugerida',
     tone: 'green'
   },
   {
     id: 'scope-3',
-    title: 'Follow-up automático',
+    title: 'Acompanhamento automático',
     subtitle: 'Criar tarefa, enviar template e escalar quando o SLA estiver vencido.',
     labels: ['Automação', 'SLA'],
     metric: '48h',
@@ -131,7 +131,7 @@ const fallbackCards: BoardCard[] = [
   }
 ];
 
-function initials(name = 'Lead') {
+function initials(name = 'Contato') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('');
 }
 
@@ -216,8 +216,8 @@ export default function Atendimento() {
       .slice(0, 8)
       .map(item => ({
         id: `conv-${item.id}`,
-        title: item.contact?.name ?? 'Lead sem nome',
-        subtitle: lastMessage(item)?.body || 'Lead novo aguardando primeiro atendimento humano.',
+        title: item.contact?.name ?? 'Contato sem nome',
+        subtitle: lastMessage(item)?.body || 'Contato novo aguardando primeiro atendimento humano.',
         labels: [item.channel, 'novo'],
         metric: item.updated_at ? formatTime(item.updated_at) : 'agora',
         footer: item.contact?.phone ?? item.contact?.email ?? 'Sem telefone',
@@ -246,7 +246,7 @@ export default function Atendimento() {
         subtitle: item.contact?.name ? `Contato: ${item.contact.name}` : 'Oportunidade aguardando contato vinculado.',
         labels: [stageLabel[item.stage] ?? item.stage, `${item.probability}%`],
         metric: money(item.value),
-        footer: item.stage_changed_at ? `${stageLabel[item.stage] ?? item.stage} desde ${new Date(item.stage_changed_at).toLocaleDateString('pt-BR')}` : 'Pipeline',
+        footer: item.stage_changed_at ? `${stageLabel[item.stage] ?? item.stage} desde ${new Date(item.stage_changed_at).toLocaleDateString('pt-BR')}` : 'Funil',
         tone: item.stage === 'won' ? 'green' : item.stage === 'proposal' ? 'amber' : 'blue'
       }));
     return {
@@ -315,7 +315,7 @@ export default function Atendimento() {
     { id: 'demo-2', direction: 'outbound', body: 'Perfeito. Vou te ajudar e já registrar sua necessidade para a proposta.', status: 'sent', created_at: new Date(Date.now() - 1000 * 60 * 8).toISOString() }
   ];
   const activeMessages = active?.messages?.length ? active.messages : demoMessages;
-  const activeContact = active?.contact ?? contacts[0] ?? { id: 'demo', name: 'Lead Ecojoi', phone: '+55 11 90000-0000', email: 'lead@exemplo.com' };
+  const activeContact = active?.contact ?? contacts[0] ?? { id: 'demo', name: 'Contato Ecojoi', phone: '+55 11 90000-0000', email: 'contato@exemplo.com' };
   const canSend = active?.attendance_state === 'in_service';
 
   return (
@@ -325,28 +325,28 @@ export default function Atendimento() {
         <div className={styles.logoMark}>C</div>
         <nav className={styles.railNav}>
           <a className={styles.activeRail} href="/app/atendimento" aria-label="Atendimento"><Grid2X2 size={18}/></a>
-          <a href="/app/pipeline" aria-label="Pipeline"><Kanban size={18}/></a>
-          <a href="/app/tarefas" aria-label="Tarefas"><CheckSquare size={18}/><b>{metrics.tasks}</b></a>
-          <a href="/app/relatorios" aria-label="Relatórios"><BarChart3 size={18}/></a>
-          <a href="/app/equipe" aria-label="Equipe"><Users size={18}/></a>
-          <a href="/app/configuracoes" aria-label="Configurações"><Settings size={18}/></a>
+          <a href="/app/atendimento" aria-label="Funil"><Kanban size={18}/></a>
+          <a href="/app/atendimento" aria-label="Tarefas"><CheckSquare size={18}/><b>{metrics.tasks}</b></a>
+          <a href="/app/atendimento" aria-label="Relatórios"><BarChart3 size={18}/></a>
+          <a href="/app/atendimento" aria-label="Equipe"><Users size={18}/></a>
+          <a href="/app/atendimento" aria-label="Configurações"><Settings size={18}/></a>
         </nav>
       </aside>
 
       <aside className={styles.projectPane}>
-        <label className={styles.projectSearch}><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search..." /></label>
+        <label className={styles.projectSearch}><Search size={15}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar..." /></label>
         <section className={styles.projectGroup}>
-          <span>Favorites</span>
-          <a><Star size={13}/> Novos leads <b>{metrics.waiting}</b></a>
-          <a><Circle size={12}/> Follow-up</a>
+          <span>Favoritos</span>
+          <a><Star size={13}/> Novos contatos <b>{metrics.waiting}</b></a>
+          <a><Circle size={12}/> Acompanhamento</a>
           <a><CheckCircle2 size={13}/> Qualificados</a>
           <a><AlertTriangle size={13}/> SLA vencido</a>
         </section>
         <section className={styles.projectGroup}>
           <span>CRM Comercial</span>
           <a className={styles.projectActive}><MessageCircle size={13}/> Atendimento <b>{metrics.service}</b></a>
-          <a><UserRound size={13}/> Leads</a>
-          <a><Kanban size={13}/> Pipeline</a>
+          <a><UserRound size={13}/> Pré-vendas</a>
+          <a><Kanban size={13}/> Funil</a>
           <a><CalendarClock size={13}/> Agenda</a>
           <a><Megaphone size={13}/> Campanhas</a>
           <a><ShieldCheck size={13}/> Equipe</a>
@@ -357,7 +357,7 @@ export default function Atendimento() {
           <a><Bot size={13}/> IA nos bastidores</a>
           <a><FileText size={13}/> Relatórios</a>
         </section>
-        <button className={styles.newProject}><Plus size={14}/> Novo lead</button>
+        <button className={styles.newProject}><Plus size={14}/> Novo contato</button>
       </aside>
 
       <main className={styles.boardPane}>
@@ -373,34 +373,34 @@ export default function Atendimento() {
 
         <nav className={styles.tabs} aria-label="Áreas do atendimento">
           <a>Discussão <b>{metrics.waiting}</b></a>
-          <a className={styles.tabActive}>Tasks</a>
-          <a>Timeline</a>
+          <a className={styles.tabActive}>Tarefas</a>
+          <a>Linha do tempo</a>
           <a>Arquivos</a>
-          <a>Overview</a>
+          <a>Visão geral</a>
         </nav>
 
         <section className={styles.viewbar}>
           <div>
-            <button className={styles.viewActive}><Kanban size={15}/> Kanban</button>
-            <button><Table2 size={15}/> Table</button>
-            <button><List size={15}/> List View</button>
+            <button className={styles.viewActive}><Kanban size={15}/> Quadro</button>
+            <button><Table2 size={15}/> Tabela</button>
+            <button><List size={15}/> Lista</button>
           </div>
-          <button><Filter size={15}/> Filter</button>
+          <button><Filter size={15}/> Filtrar</button>
         </section>
 
         <section className={styles.metricStrip} aria-label="Resumo operacional">
-          <article><span>Leads hoje</span><strong>{metrics.leadsToday}</strong></article>
+          <article><span>Contatos hoje</span><strong>{metrics.leadsToday}</strong></article>
           <article><span>Aguardando</span><strong>{metrics.waiting}</strong></article>
           <article><span>Em atendimento</span><strong>{metrics.service}</strong></article>
-          <article><span>Pipeline aberto</span><strong>{money(metrics.openPipeline)}</strong></article>
+          <article><span>Funil aberto</span><strong>{money(metrics.openPipeline)}</strong></article>
           <article><span>Receita ganha</span><strong>{money(metrics.revenue)}</strong></article>
         </section>
 
-        <section className={styles.board} aria-label="Kanban comercial">
+        <section className={styles.board} aria-label="Quadro comercial">
           {[
-            ['waiting', 'Novos Leads', board.waiting],
+            ['waiting', 'Novos contatos', board.waiting],
             ['progress', 'Em Atendimento', board.progress],
-            ['complete', 'Pipeline e Receita', board.complete]
+            ['complete', 'Funil e receita', board.complete]
           ].map(([key, title, cards]) => (
             <div className={styles.column} key={String(key)}>
               <div className={styles.columnHead}><span><i className={styles[String(key)]}/>{String(title)} <b>{(cards as BoardCard[]).length}</b></span><button><Plus size={16}/></button></div>
@@ -437,7 +437,7 @@ export default function Atendimento() {
           <span className={styles.profileAvatar}>{initials(activeContact.name)}</span>
           <h2>{activeContact.name}</h2>
           <p>{activeContact.phone ?? activeContact.email ?? 'Contato comercial'}</p>
-          <div><span>Lead quente</span><span>{active?.channel ?? 'WhatsApp'}</span></div>
+          <div><span>Contato quente</span><span>{active?.channel ?? 'WhatsApp'}</span></div>
         </section>
 
         <section className={styles.statusPanel}>
@@ -453,14 +453,14 @@ export default function Atendimento() {
               <span>{formatTime(message.created_at)} {message.direction === 'outbound' && message.status === 'queued' ? ' · fila' : ''}</span>
             </div>
           ))}
-          <div className={styles.meetingCard}><small>Próxima atividade</small><strong>{tasks[0]?.title ?? 'Follow-up comercial'}</strong><span>{tasks[0]?.due_at ? new Date(tasks[0].due_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Hoje, 14:20'}</span></div>
+          <div className={styles.meetingCard}><small>Próxima atividade</small><strong>{tasks[0]?.title ?? 'Acompanhamento comercial'}</strong><span>{tasks[0]?.due_at ? new Date(tasks[0].due_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Hoje, 14:20'}</span></div>
           {(error || notice) && <div className={error ? styles.error : styles.notice}>{error || notice}</div>}
         </section>
 
         <form className={styles.composer} onSubmit={send}>
           <button type="button" aria-label="Anexar"><Paperclip size={18}/></button>
           <button type="button" aria-label="Emoji"><Smile size={18}/></button>
-          <input value={text} onChange={event => setText(event.target.value)} disabled={!canSend || saving} placeholder={canSend ? 'Write a message...' : 'Assuma o atendimento...'} />
+          <input value={text} onChange={event => setText(event.target.value)} disabled={!canSend || saving} placeholder={canSend ? 'Escreva uma mensagem...' : 'Assuma o atendimento...'} />
           <button aria-label="Enviar" disabled={!canSend || !text.trim() || saving}><Send size={17}/></button>
         </form>
       </aside>
