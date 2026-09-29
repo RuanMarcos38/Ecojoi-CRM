@@ -3,7 +3,7 @@
 CRM SaaS multiempresa para atendimento, relacionamento e gestão comercial, com identidade visual inspirada nos materiais Ecojoi.
 
 ## Stack
-- Next.js 15 + React 19 + TypeScript
+- Next.js 16 + React 19 + TypeScript
 - Supabase Auth + PostgreSQL
 - Row Level Security (RLS)
 - RBAC no backend
@@ -81,7 +81,7 @@ Configuração recomendada no cPanel:
 - Application root: `repositories/Ecojoi-CRM`
 - Application URL: domínio ou subdomínio do CRM
 - Application startup file: `server.js`
-- Node.js: versão compatível com Next.js 15
+- Node.js: versão 20.9+ (recomendado Node.js 22 no cPanel)
 - Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` e `NEXT_PUBLIC_APP_URL`
 
 O arquivo `.cpanel.yml` copia `app`, `components`, `database`, `lib`, `public`, `scripts`, `tests` e os arquivos de configuração para `/home/ecojoi/repositories/Ecojoi-CRM/`. Após o deploy, rode o build no ambiente da aplicação:
@@ -89,6 +89,8 @@ O arquivo `.cpanel.yml` copia `app`, `components`, `database`, `lib`, `public`, 
 npm install
 npm run build
 ```
+
+O script `npm run build` usa `next build --webpack`, opção necessária para evitar falhas do motor Turbopack em hospedagens cPanel/CloudLinux com limite de processos.
 
 Depois, reinicie a aplicação Node.js no painel do cPanel.
 
