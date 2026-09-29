@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
     parallelServerCompiles: false,
     parallelServerBuildTraces: false,
     webpackMemoryOptimizations: true,
+    useWasmBinary: true,
     staticGenerationMaxConcurrency: 1,
     staticGenerationMinPagesPerWorker: 1
   },
