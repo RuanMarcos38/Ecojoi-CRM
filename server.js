@@ -5,7 +5,7 @@ const port = Number(process.env.PORT || 3000);
 const hostname = '0.0.0.0';
 const dev = process.env.NODE_ENV !== 'production';
 
-const app = next({ dev, hostname, port });
+const app = next({ dev, hostname, port, dir: __dirname });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
