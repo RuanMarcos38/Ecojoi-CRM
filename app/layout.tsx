@@ -7,6 +7,7 @@ import './sidebar-full-height.css';
 import './crm-enterprise-refinement.css';
 import type { Metadata } from 'next';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
+import { PwaRegister } from '@/components/PwaRegister';
 
 export const metadata: Metadata = {
   title: 'Ecojoi CRM',
@@ -20,5 +21,5 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   };
   const runtimeEnvScript = `window.__ECOJOI_PUBLIC_ENV__=${JSON.stringify(runtimeEnv).replace(/</g, '\\u003c')};`;
 
-  return <html lang="pt-BR"><body><script dangerouslySetInnerHTML={{ __html: runtimeEnvScript }} />{children}</body></html>;
+  return <html lang="pt-BR"><body><script dangerouslySetInnerHTML={{ __html: runtimeEnvScript }} /><PwaRegister/>{children}</body></html>;
 }

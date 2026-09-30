@@ -38,7 +38,7 @@ export async function POST(req:Request){
       .select('id,name,endpoint_url,events,active,created_at').single();
     if(error)throw error;
     await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'webhook.create',entity:'webhook_subscription',entityId:data.id});
-    return NextResponse.json({data:{...data,signing_secret:rawSecret}},{status:201});
+    return NextResponse.json({data:{...data,signing_secret:secretHash}},{status:201});
   }catch(e){
     if(e instanceof Response)return e;
     if(e instanceof z.ZodError)return NextResponse.json({error:'invalid_payload',details:e.flatten()},{status:400});
