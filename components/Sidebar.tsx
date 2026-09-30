@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, ReceiptText, SlidersHorizontal, Target, Braces } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, ReceiptText, SlidersHorizontal, Target, Braces, Workflow, ClipboardList, KeyRound } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -22,6 +22,8 @@ const groups:{title:string;items:Item[]}[]=[
   {title:'Inteligência',items:[
     {href:'/app/campanhas',label:'Campanhas',Icon:Megaphone,permission:'reports.view',feature:'relatorios'},
     {href:'/app/automacoes',label:'Automações',Icon:Bot,permission:'automations.view',feature:'automacoes'},
+    {href:'/app/cadencias',label:'Cadências',Icon:Workflow,permission:'automations.view',feature:'automacoes'},
+    {href:'/app/playbooks',label:'Playbooks',Icon:ClipboardList,permission:'contacts.view'},
     {href:'/app/integracoes',label:'Integrações',Icon:PlugZap,permission:'settings.view'},
     {href:'/app/api',label:'API Playground',Icon:Braces,permission:'settings.view'},
     {href:'/app/relatorios',label:'Relatórios',Icon:BarChart3,permission:'reports.view',feature:'relatorios'}
@@ -30,7 +32,8 @@ const groups:{title:string;items:Item[]}[]=[
     {href:'/app/equipe',label:'Equipe e Permissões',Icon:ShieldCheck,permission:'team.view'},
     {href:'/app/auditoria',label:'Auditoria',Icon:ScrollText,permission:'audit.view'},
     {href:'/app/configuracoes',label:'Configurações',Icon:Settings,permission:'settings.view'},
-    {href:'/app/recursos',label:'Recursos',Icon:SlidersHorizontal,permission:'settings.view'}
+    {href:'/app/recursos',label:'Recursos',Icon:SlidersHorizontal,permission:'settings.view'},
+    {href:'/app/seguranca',label:'Segurança',Icon:KeyRound}
   ]},
   {title:'Plataforma',items:[{href:'/app/admin/empresas',label:'Empresas SaaS',Icon:ShieldCheck,roles:['super_admin']}] }
 ];
