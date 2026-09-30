@@ -28,7 +28,42 @@ const widgetLabels:Record<string,string>={
 };
 const defaultKeys=Object.keys(widgetLabels);
 
-function money(value:number){return Number(value??0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+function num(value:unknown){const parsed=Number(value);return Number.isFinite(parsed)?parsed:0;}
+function list<T=any>(value:unknown):T[]{return Array.isArray(value)?value as T[]:[];}
+function money(value:number){return num(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}
+
+function normalizeDashboard(value:any):Dashboard{
+  const myDay=value?.myDay??{};
+  return {
+    leads:num(value?.leads),
+    hotLeads:num(value?.hotLeads),
+    openConversations:num(value?.openConversations),
+    waitingConversations:num(value?.waitingConversations),
+    slaBreached:num(value?.slaBreached),
+    conversion:num(value?.conversion),
+    openPipeline:num(value?.openPipeline),
+    weightedForecast:num(value?.weightedForecast),
+    wonRevenue:num(value?.wonRevenue),
+    averageTicket:num(value?.averageTicket),
+    openTasks:num(value?.openTasks),
+    overdueTasks:num(value?.overdueTasks),
+    stageBreakdown:list<any>(value?.stageBreakdown).map(item=>({
+      stage:String(item?.stage??''),
+      count:num(item?.count),
+      value:num(item?.value)
+    })).filter(item=>item.stage),
+    sourceBreakdown:list<any>(value?.sourceBreakdown).map(item=>({
+      source:String(item?.source??'Não informado'),
+      count:num(item?.count)
+    })),
+    myDay:{
+      tasksToday:list(myDay?.tasksToday),
+      overdueTasks:list(myDay?.overdueTasks),
+      hotLeads:list(myDay?.hotLeads),
+      waitingConversations:num(myDay?.waitingConversations)
+    }
+  };
+}
 
 export default function Dashboard(){
   const [data,setData]=useState<Dashboard|null>(null);
@@ -38,21 +73,38 @@ export default function Dashboard(){
   const [notice,setNotice]=useState('');
 
   async function load(){
-    const [dr,wr]=await Promise.all([
-      fetch('/api/dashboard',{cache:'no-store'}),
-      fetch('/api/dashboard/widgets',{cache:'no-store'})
-    ]);
-    const [dj,wj]=await Promise.all([dr.json().catch(()=>null),wr.json().catch(()=>null)]);
-    if(!dr.ok){setError('Não foi possível carregar o painel.');return;}
-    setData(dj.data);
-    if(wr.ok)setWidgets(wj.data??[]);
+    setError('');
+    try{
+      const [dr,wr]=await Promise.all([
+        fetch('/api/dashboard',{cache:'no-store'}),
+        fetch('/api/dashboard/widgets',{cache:'no-store'})
+      ]);
+
+      const [dj,wj]=await Promise.all([
+        dr.json().catch(()=>null),
+        wr.json().catch(()=>null)
+      ]);
+
+      if(!dr.ok){
+        setData(null);
+        setError('Não foi possível carregar os indicadores do painel.');
+        return;
+      }
+
+      setData(normalizeDashboard(dj?.data));
+      setWidgets(wr.ok&&Array.isArray(wj?.data)?wj.data:[]);
+    }catch{
+      setData(null);
+      setWidgets([]);
+      setError('O painel está temporariamente indisponível. Os demais módulos continuam disponíveis.');
+    }
   }
 
   useEffect(()=>{void load();},[]);
 
   const prefs=useMemo<WidgetPref[]>(()=>{
     if(!widgets.length)return defaultKeys.map((key,index)=>({widget_key:key,position:index,enabled:true}));
-    const map=new Map(widgets.map(item=>[item.widget_key,item]));
+    const map=new Map(widgets.filter(item=>item&&typeof item.widget_key==='string').map(item=>[item.widget_key,item]));
     return defaultKeys.map((key,index)=>map.get(key)??{widget_key:key,position:index,enabled:true});
   },[widgets]);
 
@@ -61,13 +113,17 @@ export default function Dashboard(){
   async function toggleWidget(key:string){
     const next=prefs.map(item=>item.widget_key===key?{...item,enabled:!item.enabled}:item);
     setWidgets(next);
-    const r=await fetch('/api/dashboard/widgets',{
-      method:'PUT',
-      headers:{'content-type':'application/json'},
-      body:JSON.stringify({widgets:next.map((item,index)=>({widget_key:item.widget_key,position:index,enabled:item.enabled,config:item.config??{}}))})
-    });
-    if(!r.ok){setError('Não foi possível salvar a personalização do painel.');await load();}
-    else setNotice('Painel personalizado.');
+    try{
+      const r=await fetch('/api/dashboard/widgets',{
+        method:'PUT',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({widgets:next.map((item,index)=>({widget_key:item.widget_key,position:index,enabled:item.enabled,config:item.config??{}}))})
+      });
+      if(!r.ok){setError('Não foi possível salvar a personalização do painel.');await load();}
+      else setNotice('Painel personalizado.');
+    }catch{
+      setError('Não foi possível salvar a personalização do painel.');
+    }
   }
 
   return <div className={`content dashboard-page ${styles.root}`}>
@@ -77,7 +133,11 @@ export default function Dashboard(){
     </div>
 
     {notice&&<div className="success">{notice}</div>}
-    {error?<div className="error">{error}</div>:!data?<div className="card empty">Carregando painel...</div>:<>
+    {error&&<div className="error" style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center'}}>
+      <span>{error}</span><button className="btn btn-secondary" type="button" onClick={()=>void load()}>Tentar novamente</button>
+    </div>}
+
+    {!data&&!error?<div className="card empty">Carregando painel...</div>:data&&<>
       {customizing&&<section className="card section" style={{marginBottom:12}}>
         <h3>Widgets do painel</h3>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:8}}>
@@ -109,10 +169,10 @@ export default function Dashboard(){
         {visible('funnel')&&<div className="approved-panel">
           <div className="approved-panel-head"><div><h3>Funil comercial</h3><p>Volume e valor por etapa.</p></div></div>
           <div style={{display:'grid',gap:8}}>
-            {data.stageBreakdown.map(s=><div key={s.stage} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,padding:'8px 0',borderBottom:'1px solid #edf0ee'}}>
+            {data.stageBreakdown.length?data.stageBreakdown.map(s=><div key={s.stage} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,padding:'8px 0',borderBottom:'1px solid #edf0ee'}}>
               <span style={{fontSize:11}}>{stageLabel[s.stage]??s.stage}</span>
               <span style={{fontSize:10,color:'#6f7a75'}}>{s.count} · {money(s.value)}</span>
-            </div>)}
+            </div>):<span className="muted">Sem negócios no período.</span>}
           </div>
         </div>}
       </section>}
@@ -121,14 +181,14 @@ export default function Dashboard(){
         {visible('hot_leads_table')&&<div className="approved-panel">
           <div className="approved-panel-head"><div><h3>Leads quentes sob sua responsabilidade</h3><p>Ordenados por score.</p></div></div>
           <div className="approved-table-wrap"><table><thead><tr><th>Lead</th><th>Origem</th><th>Score</th></tr></thead><tbody>
-            {data.myDay.hotLeads.length?data.myDay.hotLeads.map((lead:any)=><tr key={lead.id}><td><strong>{lead.name}</strong></td><td>{lead.source??'—'}</td><td>{lead.lead_score}</td></tr>):<tr><td colSpan={3}>Nenhum lead quente atribuído.</td></tr>}
+            {data.myDay.hotLeads.length?data.myDay.hotLeads.map((lead:any,index:number)=><tr key={String(lead?.id??index)}><td><strong>{String(lead?.name??'Lead')}</strong></td><td>{String(lead?.source??'—')}</td><td>{num(lead?.lead_score)}</td></tr>):<tr><td colSpan={3}>Nenhum lead quente atribuído.</td></tr>}
           </tbody></table></div>
         </div>}
 
         {visible('sources')&&<div className="approved-panel">
           <div className="approved-panel-head"><div><h3>Origem da base</h3><p>Canais com mais entradas.</p></div><Target size={16}/></div>
           <div style={{display:'grid',gap:8}}>
-            {data.sourceBreakdown.map(s=><div key={s.source} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:10}}><span>{s.source}</span><strong>{s.count}</strong></div>)}
+            {data.sourceBreakdown.length?data.sourceBreakdown.map((s,index)=><div key={`${s.source}-${index}`} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:10}}><span>{s.source}</span><strong>{s.count}</strong></div>):<span className="muted">Sem origens registradas.</span>}
           </div>
         </div>}
       </section>}

@@ -19,30 +19,52 @@ export function Topbar(){
   const searchInput=useRef<HTMLInputElement>(null);
 
   async function loadNotifications(){
-    const r=await fetch('/api/notifications',{cache:'no-store'});
-    if(!r.ok)return;
-    const d=await r.json();
-    setNotifications(d?.data??[]);
+    try{
+      const r=await fetch('/api/notifications',{cache:'no-store'});
+      if(!r.ok)return;
+      const d=await r.json().catch(()=>null);
+      setNotifications(Array.isArray(d?.data)?d.data:[]);
+    }catch{
+      setNotifications([]);
+    }
   }
 
   useEffect(()=>{
-    fetch('/api/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>setMe(d?.data??null)).catch(()=>{});
+    let active=true;
+    fetch('/api/me',{cache:'no-store'})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{if(active)setMe(d?.data??null);})
+      .catch(()=>{if(active)setMe(null);});
     void loadNotifications();
+    return()=>{active=false;};
   },[]);
 
   useEffect(()=>{
     if(!me?.tenantId)return;
-    const supabase=createClient();
-    const channel=supabase.channel(`ecojoi-notifications-${me.tenantId}`)
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`tenant_id=eq.${me.tenantId}`},()=>void loadNotifications())
-      .subscribe();
-    return()=>{void supabase.removeChannel(channel);};
+    let supabase:ReturnType<typeof createClient>|null=null;
+    let channel:ReturnType<ReturnType<typeof createClient>['channel']>|null=null;
+
+    try{
+      supabase=createClient();
+      channel=supabase.channel(`ecojoi-notifications-${me.tenantId}`)
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`tenant_id=eq.${me.tenantId}`},()=>void loadNotifications())
+        .subscribe();
+    }catch(error){
+      console.warn('[Ecojoi CRM] Realtime indisponível; notificações seguem por atualização manual.',error);
+    }
+
+    return()=>{
+      try{
+        if(supabase&&channel)void supabase.removeChannel(channel);
+      }catch{}
+    };
   },[me?.tenantId]);
 
   useEffect(()=>{
     function shortcut(event:KeyboardEvent){
       if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
-        event.preventDefault();searchInput.current?.focus();
+        event.preventDefault();
+        searchInput.current?.focus();
       }
     }
     window.addEventListener('keydown',shortcut);
@@ -51,20 +73,36 @@ export function Topbar(){
 
   useEffect(()=>{
     if(q.trim().length<2){setResults([]);return;}
-    const t=setTimeout(()=>{
+    const t=window.setTimeout(()=>{
       fetch(`/api/search?q=${encodeURIComponent(q.trim())}`,{cache:'no-store'})
         .then(r=>r.ok?r.json():null)
-        .then(d=>setResults(d?.data??[]))
+        .then(d=>setResults(Array.isArray(d?.data)?d.data:[]))
         .catch(()=>setResults([]));
     },220);
-    return()=>clearTimeout(t);
+    return()=>window.clearTimeout(t);
   },[q]);
 
-  async function logout(){await createClient().auth.signOut();router.push('/login');router.refresh();}
-  async function markRead(id?:string){await fetch('/api/notifications',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(id?{id}:{all:true})});await loadNotifications();}
+  async function logout(){
+    try{
+      await createClient().auth.signOut();
+    }catch{}
+    router.push('/login');
+    router.refresh();
+  }
+
+  async function markRead(id?:string){
+    try{
+      await fetch('/api/notifications',{
+        method:'PATCH',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify(id?{id}:{all:true})
+      });
+      await loadNotifications();
+    }catch{}
+  }
 
   const unread=useMemo(()=>notifications.filter(n=>!n.read_at).length,[notifications]);
-  const initials=(me?.fullName??'Ecojoi').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+  const initials=(me?.fullName??'Ecojoi').split(/s+/).filter(Boolean).slice(0,2).map(x=>x[0]??'').join('').toUpperCase()||'EC';
 
   return <header className="topbar">
     <div className="search-wrap">
@@ -86,7 +124,7 @@ export function Topbar(){
         {notificationsOpen&&<div className="notification-popover" style={{width:340,maxHeight:430,overflow:'auto'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><strong>Notificações</strong>{unread>0&&<button className="btn btn-secondary" style={{minHeight:28,padding:'5px 7px',fontSize:10}} onClick={()=>void markRead()}><CheckCheck size={13}/>Marcar lidas</button>}</div>
           <div style={{display:'grid',gap:3,marginTop:8}}>{notifications.length?notifications.map(n=><button type="button" key={n.id} onClick={()=>void markRead(n.id)} style={{display:'grid',gap:2,textAlign:'left',border:0,borderBottom:'1px solid #edf0ee',background:n.read_at?'transparent':'#f2f8f5',padding:'9px 7px',cursor:'pointer',borderRadius:4}}>
-            <strong style={{fontSize:11}}>{n.title}</strong>{n.body&&<span style={{fontSize:10,color:'#6f7a75',lineHeight:1.35}}>{n.body}</span>}<small style={{fontSize:9,color:'#8a948f'}}>{new Date(n.created_at).toLocaleString('pt-BR')}</small>
+            <strong style={{fontSize:11}}>{n.title}</strong>{n.body&&<span style={{fontSize:10,color:'#6f7a75',lineHeight:1.35}}>{n.body}</span>}<small style={{fontSize:9,color:'#8a948f'}}>{Number.isNaN(new Date(n.created_at).getTime())?'':new Date(n.created_at).toLocaleString('pt-BR')}</small>
           </button>):<span>Nenhuma nova notificação.</span>}</div>
         </div>}
       </div>
