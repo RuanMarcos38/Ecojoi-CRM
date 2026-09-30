@@ -5,13 +5,15 @@ import { requirePermission } from '@/lib/auth/context';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { hashApiKey } from '@/lib/server/public-api';
 
+const allowedScopes = ['leads:read','leads:write','contacts:read','contacts:write','conversations:read','messages:write','deals:read','deals:write','tasks:read','tasks:write','reports:read','*'] as const;
+
 const createSchema = z.object({
-  name: z.string().trim().min(2).max(80)
+  name: z.string().trim().min(2).max(80),
+  scopes: z.array(z.enum(allowedScopes)).min(1).max(20).default(['leads:read','leads:write']),
+  rate_limit_per_minute: z.coerce.number().int().min(1).max(10000).default(120)
 });
 
-const deleteSchema = z.object({
-  id: z.string().uuid()
-});
+const deleteSchema = z.object({ id: z.string().uuid() });
 
 export async function GET() {
   try {
@@ -19,7 +21,7 @@ export async function GET() {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from('api_keys')
-      .select('id,name,key_prefix,active,last_used_at,expires_at,created_at')
+      .select('id,name,key_prefix,active,last_used_at,expires_at,scopes,rate_limit_per_minute,created_at')
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
 
@@ -46,10 +48,12 @@ export async function POST(request: Request) {
         name: body.name,
         key_prefix: prefix,
         key_hash: hashApiKey(rawKey),
+        scopes: body.scopes,
+        rate_limit_per_minute: body.rate_limit_per_minute,
         created_by: ctx.userId,
         active: true
       })
-      .select('id,name,key_prefix,active,created_at')
+      .select('id,name,key_prefix,active,scopes,rate_limit_per_minute,created_at')
       .single();
 
     if (error) throw error;

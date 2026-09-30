@@ -17,7 +17,7 @@ const schema = z.object({
 
 export async function GET(request: Request) {
   try {
-    const auth = await authenticatePublicApi(request);
+    const auth = await authenticatePublicApi(request, 'leads:read');
     const admin = createAdminClient();
     const url = new URL(request.url);
     const limitRaw = Number(url.searchParams.get('limit') ?? 50);
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await authenticatePublicApi(request);
+    const auth = await authenticatePublicApi(request, 'leads:write');
     const body = schema.parse(await request.json());
     const result = await ingestLead({
       tenantId: auth.tenantId,

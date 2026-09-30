@@ -23,7 +23,10 @@ const schema = z.object({
   phone: z.string().max(40).optional().nullable(),
   source: z.string().max(80).optional().nullable(),
   status: z.enum(['lead', 'active', 'inactive']).default('lead'),
-  attribution: attributionSchema.optional().nullable()
+  attribution: attributionSchema.optional().nullable(),
+  organization_id: z.string().uuid().optional().nullable(),
+  custom_fields: z.record(z.unknown()).optional(),
+  consent_status: z.enum(['unknown','opt_in','opt_out']).optional()
 });
 
 type Attribution = z.infer<typeof attributionSchema>;
@@ -61,7 +64,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from('contacts')
-      .select('id,name,email,phone,source,status,owner_id,attribution,created_at,owner:profiles!contacts_owner_id_fkey(id,full_name)')
+      .select('id,name,email,phone,source,status,owner_id,attribution,lead_score,lead_temperature,custom_fields,consent_status,consent_at,organization_id,created_at,owner:profiles!contacts_owner_id_fkey(id,full_name),organization:organizations!contacts_organization_id_fkey(id,name,document,segment),contact_tags(tag:tags(id,name,color))')
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
 

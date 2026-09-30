@@ -38,6 +38,8 @@ type Lead = {
   owner_id?: string | null;
   owner?: { id: string; full_name: string } | null;
   attribution?: Attribution | null;
+  lead_score?: number;
+  lead_temperature?: 'cold' | 'warm' | 'hot';
   status: 'lead' | 'active' | 'inactive';
   created_at: string;
 };
@@ -105,6 +107,7 @@ export default function Leads() {
 
   const recentCount = useMemo(() => rows.filter(row => Date.now() - new Date(row.created_at).getTime() <= 7 * 86400000).length, [rows]);
   const noPhoneCount = useMemo(() => rows.filter(row => !row.phone).length, [rows]);
+  const hotCount = useMemo(() => rows.filter(row => row.lead_temperature === 'hot').length, [rows]);
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -226,7 +229,7 @@ export default function Leads() {
               <span className={styles.avatar}>{row.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
               <div className={styles.identityCopy}><strong>{row.name}</strong><span>{row.source || 'Sem origem'} · {ageLabel(row.created_at)}</span><span>{row.owner?.full_name ? `Responsável: ${row.owner.full_name}` : 'Aguardando responsável'}</span></div>
             </div>
-            <span className={`${styles.statusBadge} ${styles.statusLead}`}>Lead</span>
+            <span className={`${styles.statusBadge} ${row.lead_temperature === 'hot' ? styles.priorityHigh : row.lead_temperature === 'warm' ? styles.priorityMedium : styles.priorityLow}`}>{row.lead_temperature === 'hot' ? 'Quente' : row.lead_temperature === 'warm' ? 'Morno' : 'Frio'} · {row.lead_score ?? 0}</span>
           </div>
           <div className={styles.metaList}>
             <div className={styles.metaLine}><Mail size={15}/><span>{row.email || 'E-mail não informado'}</span></div>

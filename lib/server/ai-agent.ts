@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { recordN8nExecution } from '@/lib/server/n8n';
 
 type AgentEvent = {
   tenantId: string;
@@ -11,11 +12,11 @@ type AgentEvent = {
 };
 
 async function resolveBridge(tenantId: string) {
+  const admin = createAdminClient();
   try {
-    const admin = createAdminClient();
     const { data } = await admin
       .from('tenant_settings')
-      .select('n8n_ai_enabled,n8n_webhook_url')
+      .select('n8n_ai_enabled,n8n_webhook_url,n8n_workflow_id,ai_agent_config')
       .eq('tenant_id', tenantId)
       .maybeSingle();
 
@@ -23,29 +24,67 @@ async function resolveBridge(tenantId: string) {
       return {
         endpoint: data.n8n_webhook_url.trim(),
         token: process.env.N8N_WEBHOOK_TOKEN?.trim() || process.env.AI_AGENT_WEBHOOK_TOKEN?.trim() || '',
-        source: 'n8n'
+        source: 'n8n',
+        workflowId: data.n8n_workflow_id?.trim() || null,
+        config: data.ai_agent_config ?? {}
       };
     }
-  } catch {
-    // Preserve the existing AI bridge when tenant-specific n8n settings are unavailable.
-  }
 
-  return {
-    endpoint: process.env.AI_AGENT_WEBHOOK_URL?.trim() || '',
-    token: process.env.AI_AGENT_WEBHOOK_TOKEN?.trim() || '',
-    source: 'default'
-  };
+    return {
+      endpoint: process.env.AI_AGENT_WEBHOOK_URL?.trim() || '',
+      token: process.env.AI_AGENT_WEBHOOK_TOKEN?.trim() || '',
+      source: 'default',
+      workflowId: null,
+      config: data?.ai_agent_config ?? {}
+    };
+  } catch {
+    return {
+      endpoint: process.env.AI_AGENT_WEBHOOK_URL?.trim() || '',
+      token: process.env.AI_AGENT_WEBHOOK_TOKEN?.trim() || '',
+      source: 'default',
+      workflowId: null,
+      config: {}
+    };
+  }
+}
+
+async function knowledgeForTenant(tenantId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('ai_knowledge_documents')
+    .select('name,extracted_text')
+    .eq('tenant_id', tenantId)
+    .eq('active', true)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  return (data ?? [])
+    .filter(item => item.extracted_text)
+    .map(item => ({ name: item.name, text: String(item.extracted_text).slice(0, 12000) }));
 }
 
 export async function notifyAiAgent(event: AgentEvent) {
   const bridge = await resolveBridge(event.tenantId);
   if (!bridge.endpoint) return { configured: false, delivered: false, source: bridge.source };
 
+  const eventName = event.eventName ?? (event.state === 'automatic' ? 'ecojoi.crm.ai.assigned' : 'ecojoi.crm.ai.released');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()?.replace(/\/$/, '');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
+  const started = Date.now();
+
+  if (bridge.source === 'n8n') {
+    await recordN8nExecution({
+      tenantId: event.tenantId,
+      workflowId: bridge.workflowId,
+      conversationId: event.conversationId,
+      eventType: eventName,
+      status: 'started'
+    }).catch(() => {});
+  }
 
   try {
+    const knowledge = await knowledgeForTenant(event.tenantId);
     const response = await fetch(bridge.endpoint, {
       method: 'POST',
       headers: {
@@ -53,21 +92,46 @@ export async function notifyAiAgent(event: AgentEvent) {
         ...(bridge.token ? { authorization: 'Bearer ' + bridge.token } : {})
       },
       body: JSON.stringify({
-        event: event.eventName ?? (event.state === 'automatic' ? 'ecojoi.crm.ai.assigned' : 'ecojoi.crm.ai.released'),
+        event: eventName,
         tenant_id: event.tenantId,
         conversation_id: event.conversationId,
         attendance_state: event.state,
         channel: event.channel ?? null,
         contact: event.contact ?? null,
         messages: event.messages ?? [],
+        agent_config: bridge.config,
+        knowledge,
         reply_url: appUrl ? appUrl + '/api/ai-agent/reply' : null
       }),
       cache: 'no-store',
       signal: controller.signal
     });
 
+    if (bridge.source === 'n8n') {
+      await recordN8nExecution({
+        tenantId: event.tenantId,
+        workflowId: bridge.workflowId,
+        conversationId: event.conversationId,
+        eventType: eventName,
+        status: response.ok ? 'success' : 'failed',
+        durationMs: Date.now() - started,
+        error: response.ok ? null : `HTTP ${response.status}`
+      }).catch(() => {});
+    }
+
     return { configured: true, delivered: response.ok, source: bridge.source };
-  } catch {
+  } catch (error) {
+    if (bridge.source === 'n8n') {
+      await recordN8nExecution({
+        tenantId: event.tenantId,
+        workflowId: bridge.workflowId,
+        conversationId: event.conversationId,
+        eventType: eventName,
+        status: 'failed',
+        durationMs: Date.now() - started,
+        error: error instanceof Error ? error.message : 'n8n_webhook_failed'
+      }).catch(() => {});
+    }
     return { configured: true, delivered: false, source: bridge.source };
   } finally {
     clearTimeout(timeout);

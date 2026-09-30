@@ -116,6 +116,23 @@ async function phoneNumberIdForTenant(tenantId: string) {
   return data?.meta_phone_number_id?.trim() || null;
 }
 
+async function wabaIdForTenant(tenantId: string) {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('tenant_settings')
+    .select('meta_waba_id')
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  return data?.meta_waba_id?.trim() || null;
+}
+
+export function isWhatsAppWindowOpen(lastInboundAt?: string | null) {
+  if (!lastInboundAt) return true;
+  const ts = new Date(lastInboundAt).getTime();
+  if (!Number.isFinite(ts)) return true;
+  return Date.now() - ts <= 24 * 60 * 60 * 1000;
+}
+
 export async function sendWhatsAppText(tenantId: string, to: string | null | undefined, body: string) {
   const phoneNumberId = await phoneNumberIdForTenant(tenantId);
   const recipient = digits(to);
@@ -177,6 +194,67 @@ export async function sendWhatsAppMedia(
   } catch (error) {
     return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_media_send_failed' };
   }
+}
+
+
+export async function sendWhatsAppTemplate(
+  tenantId: string,
+  to: string | null | undefined,
+  name: string,
+  language = 'pt_BR',
+  components: unknown[] = []
+) {
+  const phoneNumberId = await phoneNumberIdForTenant(tenantId);
+  const recipient = digits(to);
+  if (!phoneNumberId || !recipient || !accessToken()) return { delivered: false as const, reason: 'not_configured' };
+
+  try {
+    const data = await graphRequest(`${phoneNumberId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: recipient,
+        type: 'template',
+        template: {
+          name,
+          language: { code: language },
+          ...(components.length ? { components } : {})
+        }
+      })
+    });
+    return { delivered: true as const, providerMessageId: data?.messages?.[0]?.id ?? null };
+  } catch (error) {
+    return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_template_send_failed' };
+  }
+}
+
+export async function syncWhatsAppTemplates(tenantId: string) {
+  const wabaId = await wabaIdForTenant(tenantId);
+  if (!wabaId || !accessToken()) return { configured: false, count: 0 };
+
+  const data = await graphRequest(`${wabaId}/message_templates?limit=250&fields=id,name,language,category,status,components`);
+  const templates = Array.isArray(data?.data) ? data.data : [];
+  const admin = createAdminClient();
+
+  for (const template of templates) {
+    const { error } = await admin
+      .from('whatsapp_templates')
+      .upsert({
+        tenant_id: tenantId,
+        meta_template_id: template.id ? String(template.id) : null,
+        name: String(template.name ?? ''),
+        language: String(template.language ?? 'pt_BR'),
+        category: template.category ? String(template.category) : null,
+        status: template.status ? String(template.status) : null,
+        components: Array.isArray(template.components) ? template.components : [],
+        last_synced_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'tenant_id,name,language' });
+    if (error) throw error;
+  }
+
+  return { configured: true, count: templates.length };
 }
 
 async function downloadMetaMedia(mediaId: string) {
