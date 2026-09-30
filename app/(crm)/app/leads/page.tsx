@@ -10,7 +10,7 @@ import {
   Phone,
   Plus,
   Search,
-  Sparkles,
+  CalendarDays,
   Target,
   UserPlus,
   X
@@ -193,7 +193,7 @@ export default function Leads() {
 
     <section className={styles.kpiGrid} aria-label="Resumo de leads">
       <article className={styles.kpi}><span className={styles.kpiIcon}><UserPlus size={18}/></span><span>Leads abertos</span><strong>{rows.length}</strong><small>aguardando qualificação</small></article>
-      <article className={styles.kpi}><span className={`${styles.kpiIcon} ${styles.kpiIconBlue}`}><Sparkles size={18}/></span><span>Novos em 7 dias</span><strong>{recentCount}</strong><small>entradas recentes</small></article>
+      <article className={styles.kpi}><span className={`${styles.kpiIcon} ${styles.kpiIconBlue}`}><CalendarDays size={18}/></span><span>Novos em 7 dias</span><strong>{recentCount}</strong><small>entradas recentes</small></article>
       <article className={styles.kpi}><span className={`${styles.kpiIcon} ${styles.kpiIconAmber}`}><Phone size={18}/></span><span>Sem telefone</span><strong>{noPhoneCount}</strong><small>precisam de contato melhor</small></article>
       <article className={styles.kpi}><span className={`${styles.kpiIcon} ${styles.kpiIconRose}`}><Target size={18}/></span><span>Origens</span><strong>{sources.length}</strong><small>canais identificados</small></article>
     </section>
@@ -233,8 +233,7 @@ export default function Leads() {
             <div className={styles.metaLine}><Phone size={15}/><span>{row.phone || 'Telefone não informado'}</span></div>
           </div>
           {attributionLabel(row) && <p className={styles.recordNote}>{attributionLabel(row)}</p>}
-          <p className={styles.recordNote}>Próximo passo sugerido: validar perfil, necessidade, orçamento e prazo antes de gerar proposta.</p>
-          <div className={styles.cardActions}>
+                    <div className={styles.cardActions}>
             <button type="button" className="btn btn-secondary" onClick={() => void createTask(row)}><ClipboardCheck size={15}/>Tarefa</button>
             <button type="button" className="btn btn-secondary" onClick={() => void createDeal(row)}><BriefcaseBusiness size={15}/>Oportunidade</button>
             <button type="button" className="btn btn-primary" onClick={() => void qualify(row)}><CheckCircle2 size={15}/>Qualificar</button>
@@ -244,8 +243,7 @@ export default function Leads() {
 
       <aside className={styles.sidePanel}>
         <h3>Origem dos leads</h3>
-        <p className={styles.sideHint}>Use esse painel para entender quais canais trazem mais entrada comercial.</p>
-        <div className={styles.sourceList}>
+                <div className={styles.sourceList}>
           {sourceSummary.length ? sourceSummary.map(([source, count]) => <div className={styles.sourceItem} key={source}>
             <div className={styles.sourceItemTop}><strong>{source}</strong><span>{count}</span></div>
             <div className={styles.progressTrack}><i style={{ width: `${Math.max(8, (count / Math.max(1, rows.length)) * 100)}%` }}/></div>

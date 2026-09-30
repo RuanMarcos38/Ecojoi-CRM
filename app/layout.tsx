@@ -4,6 +4,7 @@ import './responsive-enterprise.css';
 import './corporate-design.css';
 import './approved-layout.css';
 import './sidebar-full-height.css';
+import './crm-enterprise-refinement.css';
 import type { Metadata } from 'next';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
 

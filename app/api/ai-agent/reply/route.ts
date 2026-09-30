@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { sendWhatsAppText } from '@/lib/server/meta';
 
 const schema = z.object({
   tenant_id: z.string().uuid(),
@@ -10,7 +11,7 @@ const schema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const expected = process.env.AI_AGENT_WEBHOOK_TOKEN?.trim();
+    const expected = process.env.N8N_WEBHOOK_TOKEN?.trim() || process.env.AI_AGENT_WEBHOOK_TOKEN?.trim();
     if (!expected) {
       return NextResponse.json({ error: 'ai_agent_not_configured' }, { status: 503 });
     }
@@ -25,20 +26,18 @@ export async function POST(req: Request) {
 
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state')
+      .select('id,channel,attendance_state,contact:contacts(phone)')
       .eq('id', input.conversation_id)
       .eq('tenant_id', input.tenant_id)
       .maybeSingle();
 
     if (conversationError) throw conversationError;
-    if (!conversation) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 });
-    }
+    if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     if (conversation.attendance_state !== 'automatic') {
       return NextResponse.json({ error: 'conversation_not_in_automatic_mode' }, { status: 409 });
     }
 
-    const status = conversation.channel === 'internal' ? 'sent' : 'queued';
+    const initialStatus = conversation.channel === 'internal' ? 'sent' : 'queued';
     const { data, error } = await supabase
       .from('messages')
       .insert({
@@ -46,7 +45,7 @@ export async function POST(req: Request) {
         conversation_id: input.conversation_id,
         direction: 'outbound',
         body: input.body,
-        status,
+        status: initialStatus,
         message_type: 'text'
       })
       .select()
@@ -54,13 +53,33 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
+    let delivery = initialStatus;
+    let providerMessageId: string | null = null;
+
+    if (conversation.channel === 'whatsapp') {
+      const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
+      const sent = await sendWhatsAppText(input.tenant_id, contact?.phone, input.body);
+      if (sent.delivered) {
+        delivery = 'sent';
+        providerMessageId = sent.providerMessageId ?? null;
+        await supabase
+          .from('messages')
+          .update({ status: delivery, provider_message_id: providerMessageId })
+          .eq('tenant_id', input.tenant_id)
+          .eq('id', data.id);
+      }
+    }
+
     await supabase
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', input.conversation_id)
       .eq('tenant_id', input.tenant_id);
 
-    return NextResponse.json({ data, delivery: status }, { status: 201 });
+    return NextResponse.json({
+      data: { ...data, status: delivery, provider_message_id: providerMessageId },
+      delivery
+    }, { status: 201 });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
