@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -15,6 +15,7 @@ const groups:{title:string;items:Item[]}[]=[
     {href:'/app/leads',label:'Pré-vendas',Icon:UserPlus,permission:'contacts.view'},
     {href:'/app/pipeline',label:'Funil',Icon:Kanban,permission:'deals.view'},
     {href:'/app/vendas',label:'Operações Comerciais',Icon:FileText,permission:'deals.view'},
+    {href:'/app/relacionamento',label:'Relacionamento',Icon:HeartHandshake,permission:'deals.view'},
     {href:'/app/agenda',label:'Agenda',Icon:CalendarClock,permission:'tasks.view'},
     {href:'/app/tarefas',label:'Tarefas',Icon:CheckSquare,permission:'tasks.view'}
   ]},
