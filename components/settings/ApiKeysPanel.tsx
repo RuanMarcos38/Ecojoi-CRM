@@ -11,7 +11,8 @@ type ApiKey={
 const presets:Record<string,string[]>={
   leads:['leads:read','leads:write'],
   crm:['leads:read','leads:write','contacts:read','contacts:write','conversations:read','messages:write','deals:read','deals:write','tasks:read','tasks:write','reports:read'],
-  read:['leads:read','contacts:read','conversations:read','deals:read','tasks:read','reports:read'],
+  productivity:['contacts:read','contacts:write','emails:read','emails:write','calendar:read','calendar:write','transcripts:read','transcripts:write'],
+  read:['leads:read','contacts:read','conversations:read','deals:read','tasks:read','reports:read','emails:read','calendar:read','transcripts:read'],
   full:['*']
 };
 
@@ -69,7 +70,7 @@ export function ApiKeysPanel({enabled}:{enabled:boolean}){
 
     <form onSubmit={createKey} className="form-grid settings-form">
       <div className="field"><label>Nome da integração</label><input className="input" name="name" placeholder="Ex.: Site institucional" required/></div>
-      <div className="field"><label>Permissão</label><select className="select" name="scope_mode" defaultValue="leads"><option value="leads">Somente leads</option><option value="read">CRM somente leitura</option><option value="crm">CRM leitura e escrita</option><option value="full">Acesso total da API</option></select></div>
+      <div className="field"><label>Permissão</label><select className="select" name="scope_mode" defaultValue="leads"><option value="leads">Somente leads</option><option value="read">CRM somente leitura</option><option value="crm">CRM leitura e escrita</option><option value="productivity">E-mail, calendário e transcrições</option><option value="full">Acesso total da API</option></select></div>
       <div className="field"><label>Limite por minuto</label><input className="input" name="rate_limit_per_minute" type="number" min={1} max={10000} defaultValue={120}/></div>
       <div className="field" style={{justifyContent:'flex-end'}}><label>&nbsp;</label><button className="btn btn-primary" type="submit"><Plus size={16}/>Gerar chave</button></div>
     </form>

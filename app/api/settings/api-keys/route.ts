@@ -5,7 +5,7 @@ import { requirePermission } from '@/lib/auth/context';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { hashApiKey } from '@/lib/server/public-api';
 
-const allowedScopes = ['leads:read','leads:write','contacts:read','contacts:write','conversations:read','messages:write','deals:read','deals:write','tasks:read','tasks:write','reports:read','*'] as const;
+const allowedScopes = ['leads:read','leads:write','contacts:read','contacts:write','conversations:read','messages:write','deals:read','deals:write','tasks:read','tasks:write','reports:read','emails:read','emails:write','calendar:read','calendar:write','transcripts:read','transcripts:write','*'] as const;
 
 const createSchema = z.object({
   name: z.string().trim().min(2).max(80),

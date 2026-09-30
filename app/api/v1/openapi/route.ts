@@ -8,7 +8,7 @@ export async function GET(request:Request){
     openapi:'3.1.0',
     info:{
       title:'Ecojoi CRM API',
-      version:'2.0.0',
+      version:'2.1.0',
       description:'API multiempresa do Ecojoi CRM com autenticação Bearer, escopos e rate limit por chave.'
     },
     servers:[{url:base}],
@@ -56,6 +56,18 @@ export async function GET(request:Request){
       },
       '/api/v1/reports':{
         get:{summary:'Resumo de indicadores comerciais',security,responses:{'200':{description:'OK'}}}
+      },
+      '/api/v1/emails':{
+        get:{summary:'Listar e-mails sincronizados',security,responses:{'200':{description:'OK'}}},
+        post:{summary:'Sincronizar e-mail externo',security,responses:{'201':{description:'Criado'}}}
+      },
+      '/api/v1/calendar-events':{
+        get:{summary:'Listar eventos de calendário',security,responses:{'200':{description:'OK'}}},
+        post:{summary:'Sincronizar evento de calendário',security,responses:{'201':{description:'Criado'}}}
+      },
+      '/api/v1/transcripts':{
+        get:{summary:'Listar resumos/transcrições',security,responses:{'200':{description:'OK'}}},
+        post:{summary:'Registrar transcrição e próximos passos',security,responses:{'201':{description:'Criado'}}}
       }
     }
   });
