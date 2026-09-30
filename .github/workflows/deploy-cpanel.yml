@@ -31,7 +31,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
@@ -39,44 +39,29 @@ jobs:
       - name: Build Next.js
         run: pnpm run build
 
-      - name: Prepare deployment tree
+      - name: Prepare standalone deployment tree
         shell: bash
         run: |
           set -euo pipefail
+          test -f .next/standalone/server.js
           rm -rf deploy
-          mkdir -p deploy
-          items=(
-            .cpanel.yml
-            app
-            components
-            database
-            lib
-            public
-            scripts
-            tests
-            .next
-            middleware.ts
-            next-env.d.ts
-            next.config.ts
-            package.json
-            pnpm-lock.yaml
-            pnpm-workspace.yaml
-            README.md
-            SECURITY.md
-            server.js
-            tsconfig.json
-          )
-          for item in "${items[@]}"; do
+          mkdir -p deploy/.next deploy/tmp
+
+          # Next standalone carries the exact runtime dependencies used by this build.
+          rsync -a .next/standalone/ deploy/
+          rsync -a .next/static/ deploy/.next/static/
+          if [ -d public ]; then
+            rsync -a public/ deploy/public/
+          fi
+
+          # Operational/support files do not participate in runtime resolution.
+          for item in .cpanel.yml database README.md SECURITY.md; do
             if [ -e "$item" ]; then
-              rsync -a \
-                --exclude='.next/cache' \
-                --exclude='.next/diagnostics' \
-                --exclude='node_modules' \
-                "$item" deploy/
+              rsync -a "$item" deploy/
             fi
           done
+
           printf '%s\n' "$GITHUB_SHA" > deploy/DEPLOY_SOURCE_SHA
-          mkdir -p deploy/tmp
           printf '%s\n' "$GITHUB_SHA" > deploy/tmp/restart.txt
           touch deploy/.nojekyll
 

@@ -84,15 +84,15 @@ Configuração recomendada no cPanel:
 - Node.js: versão 20.9+ (recomendado Node.js 22 no cPanel)
 - Variáveis: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` e `NEXT_PUBLIC_APP_URL`
 
-O arquivo `.cpanel.yml` copia `app`, `components`, `database`, `lib`, `public`, `scripts`, `tests` e os arquivos de configuração para `/home/ecojoi/repositories/Ecojoi-CRM/`. Após o deploy, rode o build no ambiente da aplicação:
-```bash
-npm install
-npm run build
-```
+O deploy de produção é gerado pelo GitHub Actions em modo **Next.js standalone** e publicado na branch `cpanel-deploy`. O pacote inclui o `server.js`, a pasta `.next`, os assets públicos e as dependências de runtime usadas pelo próprio build, evitando divergência entre o `node_modules` do cPanel e o build.
 
-O script `npm run build` usa `next build --webpack`, opção necessária para evitar falhas do motor Turbopack em hospedagens cPanel/CloudLinux com limite de processos.
+O cPanel deve apontar a aplicação para:
+- Application root: `repositories/Ecojoi-CRM`
+- Startup file: `server.js`
+- Node.js: **20.9 ou superior**
+- Branch de deploy: `cpanel-deploy`
 
-Depois, reinicie a aplicação Node.js no painel do cPanel.
+O arquivo `.cpanel.yml` apenas toca `tmp/restart.txt` após o checkout para solicitar reinício do Passenger/Node. Não é necessário rodar `npm install` nem recompilar no cPanel quando a branch `cpanel-deploy` estiver sendo usada.
 
 ## Integrações externas
 O canal `internal` do Atendimento funciona com o banco do CRM. WhatsApp, Instagram, Facebook e e-mail estão modelados como canais, porém o envio externo real exige credenciais/API oficial do respectivo provedor. Enquanto um provedor externo não estiver configurado, o backend bloqueia o envio em vez de simular sucesso.
