@@ -19,7 +19,7 @@ export async function GET(){
     const ctx=await requirePermission('deals.view');
     const supabase=await createClient();
     const {data,error}=await supabase.from('products')
-      .select('id,sku,name,description,unit,price,cost,active,created_at,updated_at')
+      .select('id,sku,name,description,unit,price,cost,active,custom_fields,created_at,updated_at')
       .eq('tenant_id',ctx.tenantId).order('name');
     if(error)throw error;
     return NextResponse.json({data:data??[]});
@@ -34,9 +34,17 @@ export async function POST(req:Request){
     const ctx=await requirePermission('deals.update');
     const input=schema.parse(await req.json());
     const supabase=await createClient();
-    const {data,error}=await supabase.from('products')
-      .insert({...input,tenant_id:ctx.tenantId,updated_at:new Date().toISOString()})
-      .select().single();
+    const {data,error}=await supabase.from('products').insert({
+      tenant_id:ctx.tenantId,
+      sku:input.sku??null,
+      name:input.name,
+      description:input.description??null,
+      unit:input.unit||'un',
+      price:input.price,
+      cost:input.cost??0,
+      active:input.active,
+      custom_fields:{}
+    }).select().single();
     if(error)throw error;
     await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'product.create',entity:'product',entityId:data.id});
     return NextResponse.json({data},{status:201});

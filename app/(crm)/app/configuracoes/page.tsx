@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import type { Permission } from '@/lib/auth/permissions';
 import { ApiKeysPanel } from '@/components/settings/ApiKeysPanel';
+import { MfaPanel } from '@/components/settings/MfaPanel';
+import { SessionSecurityPanel } from '@/components/settings/SessionSecurityPanel';
 
 type Flag = { feature_name: string; enabled: boolean };
 type Me = { companyName: string; companySlug: string; permissions: Permission[] };
@@ -185,6 +187,8 @@ export default function Config() {
           ))}
         </section>
 
+        <MfaPanel/>
+        <SessionSecurityPanel/>
         <ApiKeysPanel enabled={canSettings}/>
       </div>
     </div>

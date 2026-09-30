@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Bell, LogOut, CheckCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,7 @@ export function Topbar(){
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [notifications,setNotifications]=useState<Notification[]>([]);
   const router=useRouter();
+  const searchInput=useRef<HTMLInputElement>(null);
 
   async function loadNotifications(){
     const r=await fetch('/api/notifications',{cache:'no-store'});
@@ -39,6 +40,16 @@ export function Topbar(){
   },[me?.tenantId]);
 
   useEffect(()=>{
+    function shortcut(event:KeyboardEvent){
+      if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){
+        event.preventDefault();searchInput.current?.focus();
+      }
+    }
+    window.addEventListener('keydown',shortcut);
+    return()=>window.removeEventListener('keydown',shortcut);
+  },[]);
+
+  useEffect(()=>{
     if(q.trim().length<2){setResults([]);return;}
     const t=setTimeout(()=>{
       fetch(`/api/search?q=${encodeURIComponent(q.trim())}`,{cache:'no-store'})
@@ -57,7 +68,7 @@ export function Topbar(){
 
   return <header className="topbar">
     <div className="search-wrap">
-      <div className="search"><Search size={17}/><input aria-label="Busca global" placeholder="Buscar no CRM..." value={q} onChange={e=>setQ(e.target.value)}/></div>
+      <div className="search"><Search size={17}/><input ref={searchInput} aria-label="Busca global" placeholder="Buscar no CRM...  Ctrl+K" value={q} onChange={e=>setQ(e.target.value)}/></div>
       {q.trim().length>=2&&<div className="search-results">
         {results.length?results.map(r=><button type="button" className="search-result" key={`${r.type}-${r.id}`} onClick={()=>{setQ('');setResults([]);router.push(r.href);}}>
           <strong>{r.title}</strong><span>{r.subtitle??r.type}</span>

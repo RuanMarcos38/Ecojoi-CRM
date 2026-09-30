@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect,useState } from 'react';
+import { GoalsPanel } from '@/components/reports/GoalsPanel';
 
 type Source={source:string;contacts:number;won:number;revenue:number;conversion:number};
 type Report={
@@ -58,6 +59,8 @@ export default function Relatorios(){
           </table>
         </div>
       </section>
+
+      <GoalsPanel/>
 
       {d.overdue>0&&<div className="error">{d.overdue} tarefa(s) vencida(s) precisam de atenção.</div>}
     </>}

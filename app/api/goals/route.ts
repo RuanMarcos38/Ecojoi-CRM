@@ -1,0 +1,51 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { requirePermission } from '@/lib/auth/context';
+import { createClient } from '@/lib/supabase/server';
+import { audit } from '@/lib/server/audit';
+
+const schema=z.object({
+  user_id:z.string().uuid().optional().nullable(),
+  period_start:z.string().date(),
+  period_end:z.string().date(),
+  revenue_target:z.coerce.number().min(0).max(999999999999),
+  deals_target:z.coerce.number().int().min(0).max(1000000),
+  leads_target:z.coerce.number().int().min(0).max(1000000)
+}).refine(v=>v.period_end>=v.period_start,{message:'invalid_period'});
+
+export async function GET(){
+  try{
+    const ctx=await requirePermission('reports.view');
+    const supabase=await createClient();
+    const {data,error}=await supabase.from('sales_goals')
+      .select('id,user_id,period_start,period_end,revenue_target,deals_target,leads_target,created_at,user:profiles!sales_goals_user_id_fkey(id,full_name)')
+      .eq('tenant_id',ctx.tenantId).order('period_start',{ascending:false}).limit(100);
+    if(error)throw error;
+    return NextResponse.json({data:data??[]});
+  }catch(e){
+    if(e instanceof Response)return e;
+    return NextResponse.json({error:'goals_fetch_failed'},{status:500});
+  }
+}
+
+export async function POST(req:Request){
+  try{
+    const ctx=await requirePermission('reports.view');
+    const input=schema.parse(await req.json());
+    const supabase=await createClient();
+    if(input.user_id){
+      const {data:user}=await supabase.from('profiles').select('id').eq('tenant_id',ctx.tenantId).eq('id',input.user_id).eq('active',true).maybeSingle();
+      if(!user)return NextResponse.json({error:'user_not_found'},{status:404});
+    }
+    const {data,error}=await supabase.from('sales_goals').insert({
+      tenant_id:ctx.tenantId,...input
+    }).select().single();
+    if(error)throw error;
+    await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'sales_goal.create',entity:'sales_goal',entityId:data.id});
+    return NextResponse.json({data},{status:201});
+  }catch(e){
+    if(e instanceof Response)return e;
+    if(e instanceof z.ZodError)return NextResponse.json({error:'invalid_payload',details:e.flatten()},{status:400});
+    return NextResponse.json({error:'goal_create_failed'},{status:500});
+  }
+}
