@@ -2,18 +2,17 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, MessagesSquare, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
 type Me={permissions:Permission[];features:Record<string,boolean>;role:Role};
 const groups:{title:string;items:Item[]}[]=[
-  {title:'Visão geral',items:[{href:'/app',label:'Dashboard',Icon:LayoutDashboard}]},
+  {title:'Visão geral',items:[{href:'/app',label:'Painel',Icon:LayoutDashboard}]},
   {title:'Comercial',items:[
-    {href:'/app/atendimento',label:'Atendimento',Icon:MessagesSquare,permission:'conversations.view',feature:'atendimento'},
     {href:'/app/contatos',label:'Contatos',Icon:Users,permission:'contacts.view'},
-    {href:'/app/leads',label:'Leads',Icon:UserPlus,permission:'contacts.view'},
-    {href:'/app/pipeline',label:'Pipeline',Icon:Kanban,permission:'deals.view'},
+    {href:'/app/leads',label:'Pré-vendas',Icon:UserPlus,permission:'contacts.view'},
+    {href:'/app/pipeline',label:'Funil',Icon:Kanban,permission:'deals.view'},
     {href:'/app/agenda',label:'Agenda',Icon:CalendarClock,permission:'tasks.view'},
     {href:'/app/tarefas',label:'Tarefas',Icon:CheckSquare,permission:'tasks.view'}
   ]},
