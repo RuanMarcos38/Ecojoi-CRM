@@ -1,0 +1,7 @@
+packages: []
+
+allowBuilds:
+  core-js: false
+  esbuild: false
+
+minimumReleaseAge: 0
