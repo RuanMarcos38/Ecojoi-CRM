@@ -3,6 +3,89 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
 import { audit } from '@/lib/server/audit';
-const patch=z.object({name:z.string().trim().min(2).max(140).optional(),legal_name:z.string().trim().max(180).nullable().optional(),document:z.string().trim().max(40).nullable().optional(),phone:z.string().trim().max(40).nullable().optional(),email:z.string().email().nullable().optional(),timezone:z.string().trim().min(2).max(80).optional(),locale:z.string().trim().min(2).max(20).optional()});
-export async function GET(){try{const ctx=await requirePermission('settings.view');const supabase=await createClient();const [{data:tenant,error:tErr},{data:settings,error:sErr}]=await Promise.all([supabase.from('tenants').select('id,name,slug,active').eq('id',ctx.tenantId).single(),supabase.from('tenant_settings').select('legal_name,document,phone,email,timezone,locale').eq('tenant_id',ctx.tenantId).maybeSingle()]);if(tErr||sErr)throw tErr??sErr;return NextResponse.json({data:{...tenant,...(settings??{})}})}catch(e){if(e instanceof Response)return e;return NextResponse.json({error:'company_settings_fetch_failed'},{status:500})}}
-export async function PATCH(req:Request){try{const ctx=await requirePermission('settings.manage');const body=patch.parse(await req.json());const supabase=await createClient();const {name,...settings}=body;if(name){const {error}=await supabase.from('tenants').update({name,updated_at:new Date().toISOString()}).eq('id',ctx.tenantId);if(error)throw error}if(Object.keys(settings).length){const {error}=await supabase.from('tenant_settings').upsert({tenant_id:ctx.tenantId,...settings,updated_at:new Date().toISOString()},{onConflict:'tenant_id'});if(error)throw error}await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'settings.update',entity:'tenant',entityId:ctx.tenantId,metadata:{fields:Object.keys(body)}});return NextResponse.json({ok:true})}catch(e){if(e instanceof Response)return e;if(e instanceof z.ZodError)return NextResponse.json({error:'invalid_payload',details:e.flatten()},{status:400});return NextResponse.json({error:'company_settings_update_failed'},{status:500})}}
+
+const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+const patch = z.object({
+  name: z.string().trim().min(2).max(140).optional(),
+  legal_name: optionalText(180),
+  document: optionalText(40),
+  phone: optionalText(40),
+  email: z.string().email().nullable().optional(),
+  timezone: z.string().trim().min(2).max(80).optional(),
+  locale: z.string().trim().min(2).max(20).optional(),
+  meta_pixel_id: z.union([
+    z.string().trim().regex(/^\d{5,30}$/),
+    z.literal(''),
+    z.null()
+  ]).optional().transform(value => value === '' ? null : value),
+  google_analytics_id: z.union([
+    z.string().trim().regex(/^(G-[A-Z0-9]+|UA-\d+-\d+)$/i),
+    z.literal(''),
+    z.null()
+  ]).optional().transform(value => value === '' ? null : value)
+});
+
+export async function GET() {
+  try {
+    const ctx = await requirePermission('settings.view');
+    const supabase = await createClient();
+    const [{ data: tenant, error: tenantError }, { data: settings, error: settingsError }] = await Promise.all([
+      supabase.from('tenants').select('id,name,slug,active').eq('id', ctx.tenantId).single(),
+      supabase
+        .from('tenant_settings')
+        .select('legal_name,document,phone,email,timezone,locale,meta_pixel_id,google_analytics_id')
+        .eq('tenant_id', ctx.tenantId)
+        .maybeSingle()
+    ]);
+
+    if (tenantError || settingsError) throw tenantError ?? settingsError;
+    return NextResponse.json({ data: { ...tenant, ...(settings ?? {}) } });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return NextResponse.json({ error: 'company_settings_fetch_failed' }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const ctx = await requirePermission('settings.manage');
+    const body = patch.parse(await req.json());
+    const supabase = await createClient();
+    const { name, ...settings } = body;
+
+    if (name) {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq('id', ctx.tenantId);
+      if (error) throw error;
+    }
+
+    if (Object.keys(settings).length) {
+      const { error } = await supabase
+        .from('tenant_settings')
+        .upsert(
+          { tenant_id: ctx.tenantId, ...settings, updated_at: new Date().toISOString() },
+          { onConflict: 'tenant_id' }
+        );
+      if (error) throw error;
+    }
+
+    await audit({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: 'settings.update',
+      entity: 'tenant',
+      entityId: ctx.tenantId,
+      metadata: { fields: Object.keys(body) }
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: 'invalid_payload', details: error.flatten() }, { status: 400 });
+    }
+    return NextResponse.json({ error: 'company_settings_update_failed' }, { status: 500 });
+  }
+}

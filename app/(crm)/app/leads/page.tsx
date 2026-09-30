@@ -17,12 +17,25 @@ import {
 } from 'lucide-react';
 import styles from '../commercial.module.css';
 
+type Attribution = {
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
+  landing_page?: string | null;
+  referrer?: string | null;
+  gclid?: string | null;
+  fbclid?: string | null;
+};
+
 type Lead = {
   id: string;
   name: string;
   email?: string | null;
   phone?: string | null;
   source?: string | null;
+  attribution?: Attribution | null;
   status: 'lead' | 'active' | 'inactive';
   created_at: string;
 };
@@ -34,6 +47,18 @@ function ageLabel(value: string) {
   if (days === 0) return 'hoje';
   if (days === 1) return 'há 1 dia';
   return `há ${days} dias`;
+}
+
+function attributionLabel(lead: Lead) {
+  const attribution = lead.attribution;
+  if (!attribution) return '';
+  const parts = [
+    attribution.utm_campaign ? `Campanha: ${attribution.utm_campaign}` : '',
+    attribution.utm_medium ? `Mídia: ${attribution.utm_medium}` : '',
+    attribution.gclid ? 'Google Ads identificado' : '',
+    attribution.fbclid ? 'Meta Ads identificado' : ''
+  ].filter(Boolean);
+  return parts.join(' · ');
 }
 
 export default function Leads() {
@@ -205,6 +230,7 @@ export default function Leads() {
             <div className={styles.metaLine}><Mail size={15}/><span>{row.email || 'E-mail não informado'}</span></div>
             <div className={styles.metaLine}><Phone size={15}/><span>{row.phone || 'Telefone não informado'}</span></div>
           </div>
+          {attributionLabel(row) && <p className={styles.recordNote}>{attributionLabel(row)}</p>}
           <p className={styles.recordNote}>Próximo passo sugerido: validar perfil, necessidade, orçamento e prazo antes de gerar proposta.</p>
           <div className={styles.cardActions}>
             <button type="button" className="btn btn-secondary" onClick={() => void createTask(row)}><ClipboardCheck size={15}/>Tarefa</button>
