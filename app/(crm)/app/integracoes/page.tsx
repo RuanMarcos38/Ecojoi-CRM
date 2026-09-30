@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import {
-  Activity, Bot, CheckCircle2, CloudCog, Database, FileText, MessageCircle,
+  Activity, Bot, CheckCircle2, CloudCog, Database, Download, FileText, MessageCircle,
   RefreshCw, RotateCcw, ServerCog, ShieldCheck, TriangleAlert, UploadCloud, Workflow
 } from 'lucide-react';
 
@@ -21,6 +21,13 @@ type Log = { id:string; event_type:string; status:string; duration_ms?:number|nu
 type Knowledge = { id:string; name:string; active:boolean; created_at:string };
 type AiUsage = { days:number; requests:number; input_tokens:number; output_tokens:number; total_tokens:number; estimated_cost:number; by_model?:Array<{name:string;requests:number;tokens:number;cost:number}> };
 type Retention = { attachment_retention_days:number };
+type ExternalStatus = {
+  connections:Array<{
+    id:string;provider:string;account_email?:string|null;display_name?:string|null;status:string;
+    sync_email:boolean;sync_calendar:boolean;last_mail_sync_at?:string|null;last_calendar_sync_at?:string|null;last_error?:string|null;
+  }>;
+  counts:{emails:number;calendar:number;transcripts:number};
+};
 
 function statusLabel(ok?: boolean) { return ok ? 'Operacional' : 'Pendente'; }
 
@@ -33,23 +40,25 @@ export default function Integracoes() {
   const [agent,setAgent]=useState<any>({});
   const [aiUsage,setAiUsage]=useState<AiUsage>({days:30,requests:0,input_tokens:0,output_tokens:0,total_tokens:0,estimated_cost:0});
   const [retention,setRetention]=useState<Retention>({attachment_retention_days:365});
+  const [external,setExternal]=useState<ExternalStatus>({connections:[],counts:{emails:0,calendar:0,transcripts:0}});
   const [notice,setNotice]=useState('');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState('');
 
   async function load() {
-    const [hr,tr,nr,ar,kr,ur,rr]=await Promise.all([
+    const [hr,tr,nr,ar,kr,ur,rr,er]=await Promise.all([
       fetch('/api/integrations/health',{cache:'no-store'}),
       fetch('/api/integrations/meta/templates',{cache:'no-store'}),
       fetch('/api/integrations/n8n/operations',{cache:'no-store'}),
       fetch('/api/integrations/ai/settings',{cache:'no-store'}),
       fetch('/api/integrations/ai/knowledge',{cache:'no-store'}),
       fetch('/api/integrations/ai/usage?days=30',{cache:'no-store'}),
-      fetch('/api/integrations/storage/retention',{cache:'no-store'})
+      fetch('/api/integrations/storage/retention',{cache:'no-store'}),
+      fetch('/api/integrations/external/status',{cache:'no-store'})
     ]);
-    const [hd,td,nd,ad,kd,ud,rd]=await Promise.all([
+    const [hd,td,nd,ad,kd,ud,rd,ed]=await Promise.all([
       hr.json().catch(()=>null),tr.json().catch(()=>null),nr.json().catch(()=>null),ar.json().catch(()=>null),kr.json().catch(()=>null),
-      ur.json().catch(()=>null),rr.json().catch(()=>null)
+      ur.json().catch(()=>null),rr.json().catch(()=>null),er.json().catch(()=>null)
     ]);
     if(hr.ok) setHealth(hd?.data??{});
     if(tr.ok) setTemplates(td?.data??[]);
@@ -58,6 +67,7 @@ export default function Integracoes() {
     if(kr.ok) setKnowledge(kd?.data??[]);
     if(ur.ok) setAiUsage(ud?.data??aiUsage);
     if(rr.ok) setRetention(rd?.data??retention);
+    if(er.ok) setExternal(ed?.data??external);
   }
 
   useEffect(()=>{void load(); const timer=window.setInterval(()=>void load(),30000); return()=>window.clearInterval(timer);},[]);
@@ -240,6 +250,33 @@ export default function Integracoes() {
             {aiUsage.by_model.map(row=><tr key={row.name}><td>{row.name}</td><td>{row.requests}</td><td>{row.tokens.toLocaleString('pt-BR')}</td><td>{Number(row.cost||0).toLocaleString('pt-BR',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:4})}</td></tr>)}
           </tbody></table>
         </div>}
+      </section>
+
+      <section className="card section">
+        <div className="automation-top">
+          <div><h3>E-mail, calendário e reuniões</h3><p className="muted">Sincronização por API/n8n sem expor credenciais no CRM.</p></div>
+          <Database size={20}/>
+        </div>
+        <div className="report-grid" style={{marginTop:10}}>
+          <div><span>E-mails sincronizados</span><strong>{external.counts.emails}</strong><small className="muted">Gmail, Outlook ou conector externo</small></div>
+          <div><span>Eventos de agenda</span><strong>{external.counts.calendar}</strong><small className="muted">Google Calendar / Outlook</small></div>
+          <div><span>Transcrições</span><strong>{external.counts.transcripts}</strong><small className="muted">Reuniões e chamadas</small></div>
+          <div><span>Conexões</span><strong>{external.connections.length}</strong><small className="muted">contas registradas</small></div>
+        </div>
+        <div className="table-wrap" style={{marginTop:12,maxHeight:220}}>
+          <table className="table"><thead><tr><th>Provedor</th><th>Conta</th><th>Status</th><th>Última sincronização</th></tr></thead><tbody>
+            {external.connections.length?external.connections.map(row=><tr key={row.id}><td>{row.provider}</td><td>{row.account_email??row.display_name??'—'}</td><td>{row.status}</td><td>{row.last_mail_sync_at||row.last_calendar_sync_at?new Date(row.last_mail_sync_at??row.last_calendar_sync_at??'').toLocaleString('pt-BR'):'—'}</td></tr>):<tr><td colSpan={4}>Nenhuma conexão externa registrada ainda.</td></tr>}
+          </tbody></table>
+        </div>
+        <p className="muted" style={{fontSize:11}}>Use uma chave de API com o perfil “E-mail, calendário e transcrições” no n8n para sincronizar dados sem armazenar OAuth de terceiros no frontend.</p>
+      </section>
+
+      <section className="card section">
+        <div className="automation-top">
+          <div><h3>Exportação de segurança</h3><p className="muted">Snapshot JSON dos dados operacionais do tenant para conferência e contingência.</p></div>
+          <ShieldCheck size={20}/>
+        </div>
+        <a className="btn btn-secondary" href="/api/settings/export"><Download size={14}/>Baixar exportação completa</a>
       </section>
 
       <section className="card section">
