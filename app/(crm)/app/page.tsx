@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function AppIndex() {
-  redirect('/app/atendimento');
+  redirect('/app/leads');
 }
