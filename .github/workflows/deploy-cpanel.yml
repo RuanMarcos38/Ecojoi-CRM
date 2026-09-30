@@ -79,16 +79,18 @@ jobs:
 
       - name: Publish cpanel-deploy branch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           rm -rf deploy-branch
           mkdir deploy-branch
+          rsync -a --delete deploy/ deploy-branch/
           cd deploy-branch
           git init
           git checkout -b cpanel-deploy
-          rsync -a --delete ../deploy/ ./
           git add -A
           git commit -m "Deploy ${GITHUB_SHA}" || true
           git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" cpanel-deploy
