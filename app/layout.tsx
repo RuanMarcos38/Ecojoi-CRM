@@ -5,6 +5,7 @@ import './corporate-design.css';
 import './approved-layout.css';
 import './sidebar-full-height.css';
 import type { Metadata } from 'next';
+import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
 
 export const metadata: Metadata = {
   title: 'Ecojoi CRM',
@@ -12,5 +13,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body>{children}</body></html>;
+  const runtimeEnv = {
+    supabaseUrl: getSupabaseUrl(),
+    supabaseAnonKey: getSupabaseAnonKey()
+  };
+  const runtimeEnvScript = `window.__ECOJOI_PUBLIC_ENV__=${JSON.stringify(runtimeEnv).replace(/</g, '\\u003c')};`;
+
+  return <html lang="pt-BR"><body><script dangerouslySetInnerHTML={{ __html: runtimeEnvScript }} />{children}</body></html>;
 }
