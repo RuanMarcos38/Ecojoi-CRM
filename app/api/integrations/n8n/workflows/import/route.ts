@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       userId: ctx.userId,
       action: 'n8n.workflow.import',
       entity: 'n8n_workflow',
-      entityId: data.id,
+      entityId: data.id ?? undefined,
       metadata: { name: data.name, active: data.active }
     });
 
