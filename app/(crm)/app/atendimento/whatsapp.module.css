@@ -18,7 +18,7 @@
   height: calc(100dvh - 88px);
   min-height: 560px;
   display: grid;
-  grid-template-columns: 360px minmax(430px, 1fr) 320px;
+  grid-template-columns: 320px minmax(430px, 1fr) 280px;
   background: var(--wa-panel);
   overflow: hidden;
   border-top: 1px solid var(--wa-line);
@@ -165,7 +165,7 @@
 
 .conversation {
   width: 100%;
-  min-height: 82px;
+  min-height: 70px;
   border: 0;
   border-bottom: 1px solid #eef0f1;
   background: #fff;
@@ -173,7 +173,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 13px;
+  padding: 8px 11px;
   cursor: pointer;
 }
 
@@ -192,8 +192,8 @@
   letter-spacing: -.2px;
 }
 
-.avatar { width: 44px; height: 44px; font-size: 13px; }
-.bigAvatar { width: 82px; height: 82px; font-size: 22px; margin: 8px auto 12px; }
+.avatar { width: 40px; height: 40px; font-size: 12px; }
+.bigAvatar { width: 68px; height: 68px; font-size: 18px; margin: 6px auto 10px; }
 
 .conversationCopy {
   min-width: 0;
@@ -450,8 +450,8 @@
 .fileMessage small { color: var(--wa-muted); font-size: 9px; }
 
 .composer {
-  min-height: 64px;
-  padding: 8px 12px;
+  min-height: 56px;
+  padding: 7px 10px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -570,7 +570,7 @@
 .details {
   border-left: 1px solid var(--wa-line);
   background: #fff;
-  padding: 22px 20px;
+  padding: 16px;
   overflow: auto;
   text-align: center;
 }
@@ -688,4 +688,38 @@
   .headerActions :global(.btn) { font-size: 0; width: 36px; padding: 0; display: grid; place-items: center; }
   .headerActions :global(.btn) svg { width: 17px; height: 17px; }
   .audioMessage { min-width: 220px; }
+}
+
+.sidebar,
+.chatPanel,
+.details,
+.conversationList,
+.messages {
+  min-height: 0;
+}
+
+.sidebar,
+.chatPanel,
+.details {
+  overflow: hidden;
+}
+
+.details,
+.conversationList,
+.messages {
+  overflow-y: auto;
+}
+
+.queueTabs button span,
+.conversationMeta span,
+.contactIdentity span,
+.ownerCard strong,
+.ownerCard span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.details {
+  overflow-y: auto;
 }

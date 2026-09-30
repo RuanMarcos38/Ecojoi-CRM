@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
+import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
 
 const BUCKET = 'ecojoi-message-attachments';
 
@@ -219,6 +220,30 @@ function whatsappText(message: any) {
   return '';
 }
 
+async function notifyAutomaticConversation(tenantId: string, conversationId?: string | null) {
+  if (!conversationId) return;
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from('conversations')
+    .select('id,channel,attendance_state,contact:contacts(id,name,email,phone),messages(id,direction,body,message_type,created_at)')
+    .eq('tenant_id', tenantId)
+    .eq('id', conversationId)
+    .maybeSingle();
+
+  if (!data || data.attendance_state !== 'automatic') return;
+  const recentMessages = [...(data.messages ?? [])]
+    .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)))
+    .slice(-30);
+
+  await notifyAiAgentMessage({
+    tenantId,
+    conversationId,
+    channel: data.channel,
+    contact: data.contact,
+    messages: recentMessages
+  });
+}
+
 async function processWhatsAppValue(value: any) {
   const phoneNumberId = value?.metadata?.phone_number_id;
   const tenantId = await tenantByAsset('meta_phone_number_id', phoneNumberId);
@@ -271,7 +296,7 @@ async function processWhatsAppValue(value: any) {
       }
     }
 
-    await ingestLead({
+    const received = await ingestLead({
       tenantId,
       channel: 'whatsapp',
       externalId: message.from,
@@ -285,6 +310,8 @@ async function processWhatsAppValue(value: any) {
       attachment,
       createConversation: true
     });
+
+    await notifyAutomaticConversation(tenantId, received.conversationId);
   }
 }
 
@@ -354,7 +381,7 @@ async function processMessagingEntry(object: string, entry: any) {
     if (!fresh) continue;
 
     const name = await fetchMetaPersonName(senderId);
-    await ingestLead({
+    const received = await ingestLead({
       tenantId,
       name,
       source: isInstagram ? 'Instagram' : 'Facebook',
@@ -366,6 +393,8 @@ async function processMessagingEntry(object: string, entry: any) {
       messageType: 'text',
       createConversation: true
     });
+
+    await notifyAutomaticConversation(tenantId, received.conversationId);
   }
 }
 
