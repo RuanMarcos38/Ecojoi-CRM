@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Boxes, ClipboardList, FileText, Plus, RefreshCw, Send, Star } from 'lucide-react';
 
 type Product={id:string;sku?:string|null;name:string;description?:string|null;unit?:string|null;price:number;cost?:number|null;active:boolean};
-type Proposal={id:string;title:string;status:string;subtotal:number;discount:number;total:number;valid_until?:string|null;contact?:any;proposal_items?:Array<any>};
+type Proposal={id:string;proposal_number?:string|null;public_token?:string|null;title:string;status:string;subtotal:number;discount_percent?:number;discount_value?:number;total:number;valid_until?:string|null;contact?:any;proposal_items?:Array<any>};
 type Sequence={id:string;name:string;description?:string|null;active:boolean;sales_sequence_steps?:Array<any>};
 type Survey={id:string;name:string;survey_type:'nps'|'csat';question:string;active:boolean;customer_survey_responses?:Array<{score:number}>};
 type Contact={id:string;name:string};
@@ -80,6 +80,26 @@ export default function Vendas(){
     })});
     if(r.ok){e.currentTarget.reset();setNotice('Proposta criada.');await load();}
     else setError('Não foi possível criar a proposta.');
+  }
+
+  async function proposalAction(proposal:Proposal,action:'submit_approval'|'approve'|'send'|'reject'){
+    setError('');setNotice('');
+    const r=await fetch(`/api/proposals/${proposal.id}`,{
+      method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({action})
+    });
+    const d=await r.json().catch(()=>null);
+    if(!r.ok){
+      const messages:Record<string,string>={
+        approval_requires_manager:'Somente gestor ou administrador pode aprovar propostas.',
+        discounted_proposal_requires_approval:'Propostas com desconto precisam de aprovação antes do envio.',
+        invalid_status_transition:'Esta mudança de status não é válida.'
+      };
+      setError(messages[d?.error]??'Não foi possível atualizar a proposta.');
+      return;
+    }
+    if(action==='send'&&d?.data?.public_url)setNotice(`Proposta pronta para envio: ${d.data.public_url}`);
+    else setNotice('Proposta atualizada.');
+    await load();
   }
 
   async function createSequence(e:FormEvent<HTMLFormElement>){
@@ -175,8 +195,19 @@ export default function Vendas(){
       <section className="card section">
         <div className="automation-top"><h3>Propostas</h3><strong>{money(proposalTotal)}</strong></div>
         <div className="table-wrap" style={{maxHeight:430}}>
-          <table className="table"><thead><tr><th>Proposta</th><th>Cliente</th><th>Status</th><th>Total</th></tr></thead><tbody>
-            {proposals.length?proposals.map(p=><tr key={p.id}><td>{p.title}</td><td>{Array.isArray(p.contact)?p.contact[0]?.name:p.contact?.name||'—'}</td><td>{p.status}</td><td>{money(p.total)}</td></tr>):<tr><td colSpan={4}>Nenhuma proposta criada.</td></tr>}
+          <table className="table"><thead><tr><th>Proposta</th><th>Cliente</th><th>Status</th><th>Total</th><th>Ações</th></tr></thead><tbody>
+            {proposals.length?proposals.map(p=><tr key={p.id}>
+              <td><strong>{p.title}</strong><small className="muted" style={{display:'block'}}>{p.proposal_number||'—'}</small></td>
+              <td>{Array.isArray(p.contact)?p.contact[0]?.name:p.contact?.name||'—'}</td>
+              <td>{p.status}</td>
+              <td>{money(p.total)}</td>
+              <td><div className="inlineActions">
+                {p.status==='draft'&&<button type="button" className="btn btn-secondary" onClick={()=>void proposalAction(p,'submit_approval')}>Solicitar aprovação</button>}
+                {['draft','pending_approval'].includes(p.status)&&<button type="button" className="btn btn-secondary" onClick={()=>void proposalAction(p,'approve')}>Aprovar</button>}
+                {['draft','approved'].includes(p.status)&&<button type="button" className="btn btn-primary" onClick={()=>void proposalAction(p,'send')}>Preparar envio</button>}
+                {['sent','accepted','rejected','expired'].includes(p.status)&&p.public_token&&<a className="btn btn-secondary" target="_blank" rel="noreferrer" href={`/proposal/${p.public_token}`}>Abrir</a>}
+              </div></td>
+            </tr>):<tr><td colSpan={5}>Nenhuma proposta criada.</td></tr>}
           </tbody></table>
         </div>
       </section>
