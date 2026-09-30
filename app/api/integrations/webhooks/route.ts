@@ -1,8 +1,9 @@
-import { randomBytes,createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { audit } from '@/lib/server/audit';
 
 const schema=z.object({
@@ -30,15 +31,24 @@ export async function POST(req:Request){
   try{
     const ctx=await requirePermission('settings.manage');
     const input=schema.parse(await req.json());
-    const rawSecret=randomBytes(24).toString('base64url');
-    const secretHash=createHash('sha256').update(rawSecret).digest('hex');
+    const signingSecret=randomBytes(32).toString('base64url');
     const supabase=await createClient();
     const {data,error}=await supabase.from('webhook_subscriptions')
-      .insert({tenant_id:ctx.tenantId,name:input.name,endpoint_url:input.endpoint_url,events:input.events,secret_hash:secretHash,active:true})
+      .insert({tenant_id:ctx.tenantId,name:input.name,endpoint_url:input.endpoint_url,events:input.events,active:true})
       .select('id,name,endpoint_url,events,active,created_at').single();
     if(error)throw error;
+
+    const admin=createAdminClient();
+    const {error:secretError}=await admin.from('webhook_secrets').insert({
+      subscription_id:data.id,tenant_id:ctx.tenantId,signing_key:signingSecret
+    });
+    if(secretError){
+      await supabase.from('webhook_subscriptions').delete().eq('tenant_id',ctx.tenantId).eq('id',data.id);
+      throw secretError;
+    }
+
     await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'webhook.create',entity:'webhook_subscription',entityId:data.id});
-    return NextResponse.json({data:{...data,signing_secret:secretHash}},{status:201});
+    return NextResponse.json({data:{...data,signing_secret:signingSecret}},{status:201});
   }catch(e){
     if(e instanceof Response)return e;
     if(e instanceof z.ZodError)return NextResponse.json({error:'invalid_payload',details:e.flatten()},{status:400});
