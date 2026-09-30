@@ -1,4 +1,4 @@
-name: Deploy Ecojoi CRM to cPanel
+name: Build cPanel Deploy Branch
 
 on:
   push:
@@ -7,45 +7,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: ecojoi-crm-production
+  group: ecojoi-crm-cpanel-deploy
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    name: Build and deploy
+  build:
+    name: Build and publish deploy branch
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       NEXT_PUBLIC_APP_URL: https://crm.ecojoi.com.br
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-      CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
-      CPANEL_PORT: ${{ secrets.CPANEL_PORT }}
-      CPANEL_USER: ${{ secrets.CPANEL_USER }}
-      CPANEL_SSH_KEY: ${{ secrets.CPANEL_SSH_KEY }}
-      CPANEL_APP_PATH: ${{ secrets.CPANEL_APP_PATH }}
 
     steps:
-      - name: Check required secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          missing=0
-          for name in CPANEL_HOST CPANEL_USER CPANEL_SSH_KEY NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::Missing GitHub secret: ${name}"
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
-          echo "CPANEL_PORT=${CPANEL_PORT:-22}" >> "$GITHUB_ENV"
-          echo "CPANEL_APP_PATH=${CPANEL_APP_PATH:-/home/ecojoi/repositories/Ecojoi-CRM}" >> "$GITHUB_ENV"
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -64,7 +40,7 @@ jobs:
       - name: Build Next.js
         run: pnpm run build
 
-      - name: Package deployment
+      - name: Prepare deployment tree
         shell: bash
         run: |
           set -euo pipefail
@@ -99,42 +75,21 @@ jobs:
                 "$item" deploy/
             fi
           done
-          tar -czf ecojoi-crm-deploy.tar.gz -C deploy .
+          printf '%s\n' "$GITHUB_SHA" > deploy/DEPLOY_SOURCE_SHA
+          touch deploy/.nojekyll
 
-      - name: Upload and restart cPanel app
+      - name: Publish cpanel-deploy branch
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$HOME/.ssh"
-          key_file="$HOME/.ssh/cpanel_deploy_key"
-          printf '%s\n' "$CPANEL_SSH_KEY" > "$key_file"
-          chmod 600 "$key_file"
-
-          ssh-keyscan -p "$CPANEL_PORT" "$CPANEL_HOST" >> "$HOME/.ssh/known_hosts"
-          ssh_opts=(-i "$key_file" -p "$CPANEL_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes)
-
-          ssh "${ssh_opts[@]}" "$CPANEL_USER@$CPANEL_HOST" "mkdir -p ~/deploy"
-          scp -i "$key_file" -P "$CPANEL_PORT" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
-            ecojoi-crm-deploy.tar.gz "$CPANEL_USER@$CPANEL_HOST:~/deploy/ecojoi-crm-deploy.tar.gz"
-
-          printf -v quoted_app_path '%q' "$CPANEL_APP_PATH"
-          ssh "${ssh_opts[@]}" "$CPANEL_USER@$CPANEL_HOST" "APP_PATH=$quoted_app_path bash -s" <<'REMOTE'
-          set -euo pipefail
-          mkdir -p "$APP_PATH"
-          tar -xzf "$HOME/deploy/ecojoi-crm-deploy.tar.gz" -C "$APP_PATH"
-          rm -f "$HOME/deploy/ecojoi-crm-deploy.tar.gz"
-
-          if command -v pkill >/dev/null 2>&1; then
-            pkill -u "$(whoami)" -f "lsnode:${APP_PATH}/" || true
-            pkill -u "$(whoami)" -f "${APP_PATH}/server.js" || true
-          fi
-
-          if command -v cloudlinux-selector >/dev/null 2>&1; then
-            cloudlinux-selector restart --json --interpreter nodejs --app-root "$APP_PATH" >/dev/null 2>&1 || true
-          fi
-
-          echo "Deploy finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          REMOTE
-
-      - name: Check public app responds
-        run: curl --fail --location --retry 5 --retry-delay 5 --max-time 20 https://crm.ecojoi.com.br/login > /dev/null
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf deploy-branch
+          mkdir deploy-branch
+          cd deploy-branch
+          git init
+          git checkout -b cpanel-deploy
+          rsync -a --delete ../deploy/ ./
+          git add -A
+          git commit -m "Deploy ${GITHUB_SHA}" || true
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" cpanel-deploy
