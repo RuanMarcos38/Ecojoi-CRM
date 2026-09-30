@@ -80,7 +80,9 @@ export default function Integracoes() {
       objective:String(fd.get('objective')??''),
       rules:String(fd.get('rules')??''),
       human_handoff_keywords:String(fd.get('handoff')??'').split(',').map(v=>v.trim()).filter(Boolean),
-      confidence_handoff:Number(fd.get('confidence')??0.65)
+      confidence_handoff:Number(fd.get('confidence')??0.65),
+      ai_daily_message_limit:Number(fd.get('daily_limit')??1000),
+      attachment_retention_days:Number(fd.get('retention_days')??365)
     };
     const r=await fetch('/api/integrations/ai/settings',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     setBusy('');
@@ -159,6 +161,10 @@ export default function Integracoes() {
           <div className="form-grid">
             <div className="field"><label>Transferir ao humano quando mencionar</label><input className="input" name="handoff" defaultValue={(agent.human_handoff_keywords??[]).join(', ')} placeholder="atendente, reclamação, orçamento"/></div>
             <div className="field"><label>Confiança mínima da IA</label><input className="input" name="confidence" type="number" step="0.05" min="0" max="1" defaultValue={agent.confidence_handoff??0.65}/></div>
+          </div>
+          <div className="form-grid">
+            <div className="field"><label>Limite diário de mensagens IA</label><input className="input" name="daily_limit" type="number" min="0" max="1000000" defaultValue={agent.ai_daily_message_limit??1000}/><small className="muted">{agent.usage_today??0} usadas hoje · {agent.usage_remaining??0} restantes</small></div>
+            <div className="field"><label>Retenção de anexos (dias)</label><input className="input" name="retention_days" type="number" min="1" max="3650" defaultValue={agent.attachment_retention_days??365}/></div>
           </div>
           <button className="btn btn-primary" disabled={busy==='agent'}><CheckCircle2 size={14}/>Salvar agente</button>
         </form>

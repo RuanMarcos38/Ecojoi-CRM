@@ -1,0 +1,4 @@
+import { NextResponse } from 'next/server';
+import { authenticatePublicApi } from '@/lib/server/public-api';
+import { createAdminClient } from '@/lib/supabase/admin';
+export async function GET(req:Request){try{const auth=await authenticatePublicApi(req,'conversations:read');const admin=createAdminClient();const {data,error}=await admin.from('conversations').select('id,status,channel,assigned_to,attendance_state,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,updated_at,contact:contacts(id,name,email,phone),messages(id,direction,body,status,message_type,created_at)').eq('tenant_id',auth.tenantId).order('updated_at',{ascending:false}).limit(100);if(error)throw error;return NextResponse.json({data:data??[]});}catch(e){if(e instanceof Response)return e;return NextResponse.json({error:'conversations_fetch_failed'},{status:500});}}

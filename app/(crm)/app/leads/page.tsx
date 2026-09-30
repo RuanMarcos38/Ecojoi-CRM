@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
+  BookmarkPlus,
   BriefcaseBusiness,
   CheckCircle2,
   ClipboardCheck,
@@ -28,6 +29,9 @@ type Attribution = {
   gclid?: string | null;
   fbclid?: string | null;
 };
+
+type CustomField = { id:string; field_key:string; label:string; field_type:string; required:boolean; entity_type:string };
+type SavedView = { id:string; name:string; filters:Record<string,unknown>; is_default:boolean };
 
 type Lead = {
   id: string;
@@ -73,12 +77,23 @@ export default function Leads() {
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [selectedView, setSelectedView] = useState('');
 
   async function load() {
-    const response = await fetch('/api/contacts?status=lead', { cache: 'no-store' });
-    const payload = await response.json();
+    const [response, fieldsResponse, viewsResponse] = await Promise.all([
+      fetch('/api/contacts?status=lead', { cache: 'no-store' }),
+      fetch('/api/custom-fields', { cache: 'no-store' }),
+      fetch('/api/saved-views?entity_type=leads', { cache: 'no-store' })
+    ]);
+    const [payload, fieldsPayload, viewsPayload] = await Promise.all([
+      response.json(), fieldsResponse.ok ? fieldsResponse.json() : Promise.resolve(null), viewsResponse.ok ? viewsResponse.json() : Promise.resolve(null)
+    ]);
     if (response.ok) setRows(payload.data ?? []);
     else setError('Não foi possível carregar leads.');
+    if (fieldsResponse.ok) setCustomFields((fieldsPayload?.data ?? []).filter((field:CustomField)=>field.entity_type==='contact'));
+    if (viewsResponse.ok) setSavedViews(viewsPayload?.data ?? []);
   }
 
   useEffect(() => { void load(); }, []);
@@ -115,12 +130,19 @@ export default function Leads() {
     setError('');
     setNotice('');
     const form = new FormData(event.currentTarget);
+    const custom_fields: Record<string, unknown> = {};
+    for (const field of customFields) {
+      const raw = String(form.get(`custom_${field.field_key}`) ?? '').trim();
+      if (!raw) continue;
+      custom_fields[field.field_key] = field.field_type === 'number' ? Number(raw) : field.field_type === 'boolean' ? raw === 'true' : raw;
+    }
     const body = {
       name: String(form.get('name') ?? ''),
       email: String(form.get('email') ?? '').trim() || null,
       phone: String(form.get('phone') ?? '').trim() || null,
       source: String(form.get('source') ?? '').trim() || null,
-      status: 'lead'
+      status: 'lead',
+      custom_fields
     };
     const response = await fetch('/api/contacts', {
       method: 'POST',
@@ -135,6 +157,27 @@ export default function Leads() {
     } else {
       setError('Não foi possível criar o lead.');
     }
+  }
+
+  async function saveCurrentView() {
+    const name = window.prompt('Nome desta visualização:');
+    if (!name?.trim()) return;
+    const response = await fetch('/api/saved-views', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({entity_type:'leads',name:name.trim(),filters:{query,sourceFilter},columns:[],sort:{},is_default:false})
+    });
+    if (response.ok) { setNotice('Visualização salva.'); await load(); }
+    else setError('Não foi possível salvar a visualização.');
+  }
+
+  function applyView(id:string) {
+    setSelectedView(id);
+    const view=savedViews.find(item=>item.id===id);
+    if(!view)return;
+    const filters=view.filters??{};
+    setQuery(typeof filters.query==='string'?filters.query:'');
+    setSourceFilter(typeof filters.sourceFilter==='string'?filters.sourceFilter:'all');
   }
 
   async function qualify(lead: Lead) {
@@ -204,7 +247,8 @@ export default function Leads() {
     <section className={styles.toolbar} aria-label="Filtros de leads">
       <label className={styles.searchField}><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar lead, e-mail, telefone ou origem"/></label>
       <label className={styles.selectField}><Filter size={16}/><select value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">Todas as origens</option>{sources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
-      <label className={styles.selectField}><ClipboardCheck size={16}/><select value="qualification" onChange={() => undefined} aria-label="Modo"><option value="qualification">Qualificação comercial</option></select></label>
+      <label className={styles.selectField}><ClipboardCheck size={16}/><select value={selectedView} onChange={event=>applyView(event.target.value)} aria-label="Visualização salva"><option value="">Visualização atual</option>{savedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}</select></label>
+      <button type="button" className="btn btn-secondary" onClick={()=>void saveCurrentView()}><BookmarkPlus size={15}/>Salvar view</button>
     </section>
 
     {error && <div className="error">{error}</div>}
@@ -217,6 +261,7 @@ export default function Leads() {
         <div className="field"><label>E-mail</label><input className="input" type="email" name="email"/></div>
         <div className="field"><label>Telefone</label><input className="input" name="phone"/></div>
         <div className="field"><label>Origem</label><input className="input" name="source" placeholder="Instagram, formulário, indicação..."/></div>
+        {customFields.map(field=><div className="field" key={field.id}><label>{field.label}</label>{field.field_type==='boolean'?<select className="select" name={`custom_${field.field_key}`} defaultValue=""><option value="">Não informado</option><option value="true">Sim</option><option value="false">Não</option></select>:<input className="input" name={`custom_${field.field_key}`} type={field.field_type==='number'?'number':field.field_type==='date'?'date':'text'} required={field.required}/>}</div>)}
       </div>
       <div className={styles.formFooter}><button className="btn btn-primary" disabled={saving}>{saving ? 'Salvando...' : 'Salvar lead'}</button></div>
     </form>}

@@ -34,7 +34,12 @@ type Deal = {
   created_at?: string;
   updated_at?: string;
   contact?: { id: string; name: string; phone?: string; email?: string } | null;
+  pipeline_id?: string | null;
+  pipeline_stage_id?: string | null;
+  lost_reason_id?: string | null;
 };
+type Pipeline = { id:string; name:string; is_default:boolean; stages:Array<{id:string;name:string;stage_key:string;sort_order:number;probability:number;is_won:boolean;is_lost:boolean}> };
+type LossReason = { id:string; name:string };
 type Contact = { id: string; name: string; phone?: string; email?: string };
 type Rule = {
   id: string;
@@ -94,6 +99,9 @@ export default function Pipeline() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [lossReasons, setLossReasons] = useState<LossReason[]>([]);
+  const [selectedPipelineId, setSelectedPipelineId] = useState('');
   const [open, setOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [newRuleOpen, setNewRuleOpen] = useState(false);
@@ -106,16 +114,23 @@ export default function Pipeline() {
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
 
   async function load() {
-    const [dr, cr, rr] = await Promise.all([
+    const [dr, cr, rr, pr] = await Promise.all([
       fetch('/api/deals', { cache: 'no-store' }),
       fetch('/api/contacts', { cache: 'no-store' }),
-      fetch('/api/pipeline-rules', { cache: 'no-store' })
+      fetch('/api/pipeline-rules', { cache: 'no-store' }),
+      fetch('/api/pipelines', { cache: 'no-store' })
     ]);
-    const [dd, cd, rd] = await Promise.all([dr.json(), cr.json(), rr.json()]);
+    const [dd, cd, rd, pd] = await Promise.all([dr.json(), cr.json(), rr.json(), pr.json()]);
     if (dr.ok) setDeals(dd.data ?? []); else setError('Não foi possível carregar o pipeline.');
     if (cr.ok) setContacts(cd.data ?? []);
     if (rr.ok) { setRules(rd.data ?? []); setRulesAllowed(true); }
     else if (rr.status === 403) { setRulesAllowed(false); setRules([]); }
+    if (pr.ok) {
+      const loaded = pd?.data?.pipelines ?? [];
+      setPipelines(loaded);
+      setLossReasons(pd?.data?.loss_reasons ?? []);
+      setSelectedPipelineId(current => current || loaded.find((p:Pipeline)=>p.is_default)?.id || loaded[0]?.id || '');
+    }
   }
   useEffect(() => { void load(); }, []);
 
@@ -123,6 +138,9 @@ export default function Pipeline() {
     if (selectedDealId && deals.some(deal => deal.id === selectedDealId)) return;
     setSelectedDealId(deals[0]?.id ?? null);
   }, [deals, selectedDealId]);
+
+  const selectedPipeline = useMemo(() => pipelines.find(p => p.id === selectedPipelineId) ?? pipelines[0] ?? null, [pipelines, selectedPipelineId]);
+  const visibleDeals = useMemo(() => selectedPipelineId ? deals.filter(deal => deal.pipeline_id === selectedPipelineId) : deals, [deals, selectedPipelineId]);
 
   const enabledByStage = useMemo(() => {
     const map: Record<string, Rule[]> = {};
@@ -132,7 +150,7 @@ export default function Pipeline() {
   }, [rules]);
 
   const summary = useMemo(() => {
-    const activeDeals = deals.filter(deal => openStages.has(deal.stage));
+    const activeDeals = visibleDeals.filter(deal => openStages.has(deal.stage));
     const activeValue = activeDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0);
     const weightedValue = activeDeals.reduce((sum, deal) => sum + (Number(deal.value || 0) * Number(deal.probability || 0)) / 100, 0);
     const averageProbability = activeDeals.length
@@ -146,11 +164,11 @@ export default function Pipeline() {
       stalledCount: activeDeals.filter(isStalled).length,
       withoutContact: activeDeals.filter(deal => !deal.contact_id).length
     };
-  }, [deals]);
+  }, [visibleDeals]);
 
   const filteredDeals = useMemo(() => {
     const term = query.trim().toLowerCase();
-    return deals.filter(deal => {
+    return visibleDeals.filter(deal => {
       const searchable = [deal.title, deal.contact?.name, deal.contact?.phone, deal.contact?.email]
         .filter(Boolean)
         .join(' ')
@@ -163,7 +181,7 @@ export default function Pipeline() {
         || (focusFilter === 'automation' && (enabledByStage[deal.stage]?.length ?? 0) > 0);
       return matchesQuery && matchesStage && matchesFocus;
     });
-  }, [deals, enabledByStage, focusFilter, query, stageFilter]);
+  }, [visibleDeals, enabledByStage, focusFilter, query, stageFilter]);
 
   const groupedDeals = useMemo(() => {
     const map = Object.fromEntries(stages.map(([stage]) => [stage, [] as Deal[]])) as Record<string, Deal[]>;
@@ -183,6 +201,7 @@ export default function Pipeline() {
     const fd = new FormData(e.currentTarget);
     const body: Record<string, FormDataEntryValue> = Object.fromEntries(fd.entries());
     if (!body.contact_id) delete body.contact_id;
+    if (!body.pipeline_id) delete body.pipeline_id;
     const r = await fetch('/api/deals', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const payload = await r.json().catch(() => null);
     if (r.ok) {
@@ -196,7 +215,22 @@ export default function Pipeline() {
 
   async function move(id: string, stage: string) {
     setError(''); setNotice('');
-    const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stage }) });
+    const payload: Record<string, unknown> = { stage };
+    if (stage === 'lost') {
+      const options = lossReasons.map(reason => reason.name).join(', ');
+      const typed = window.prompt(`Informe o motivo da perda${options ? ` (${options})` : ''}:`);
+      if (!typed?.trim()) return;
+      let reason = lossReasons.find(item => item.name.toLowerCase() === typed.trim().toLowerCase());
+      if (!reason) {
+        const created = await fetch('/api/pipelines', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ type:'loss_reason', name:typed.trim() }) });
+        const createdData = await created.json().catch(()=>null);
+        if (!created.ok || !createdData?.data?.id) { setError('Não foi possível registrar o motivo da perda.'); return; }
+        reason = createdData.data;
+        setLossReasons(current => [...current, reason!]);
+      }
+      payload.lost_reason_id = reason.id;
+    }
+    const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
     if (!r.ok) setError('Sem permissão para alterar esta oportunidade.');
     else setNotice(`Oportunidade movida para ${stageLabel[stage]}. O tempo da nova etapa foi reiniciado.`);
     await load();
@@ -286,6 +320,12 @@ export default function Pipeline() {
         <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar oportunidade, contato, telefone ou e-mail" />
       </label>
       <label className="pipeline-filter-field">
+        <Settings2 size={16}/>
+        <select value={selectedPipelineId} onChange={event => setSelectedPipelineId(event.target.value)} aria-label="Selecionar funil">
+          {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </label>
+      <label className="pipeline-filter-field">
         <Filter size={16}/>
         <select value={stageFilter} onChange={event => setStageFilter(event.target.value)} aria-label="Filtrar por etapa">
           <option value="all">Todas as etapas</option>
@@ -311,6 +351,7 @@ export default function Pipeline() {
       <div className="form-grid pipeline-form-grid">
         <div className="field"><label>Título</label><input className="input" name="title" required placeholder="Ex.: Proposta Ecojoi"/></div>
         <div className="field"><label>Contato</label><select className="select" name="contact_id" defaultValue=""><option value="">Sem contato vinculado</option>{contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select></div>
+        <div className="field"><label>Funil</label><select className="select" name="pipeline_id" value={selectedPipelineId} onChange={e=>setSelectedPipelineId(e.target.value)}>{pipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
         <div className="field"><label>Valor</label><input className="input" name="value" type="number" min="0" step="0.01" defaultValue="0"/></div>
         <div className="field"><label>Etapa</label><select className="select" name="stage">{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
         <div className="field"><label>Probabilidade (%)</label><input className="input" name="probability" type="number" min="0" max="100" defaultValue="10"/></div>

@@ -829,3 +829,41 @@
 .templateList > button > span { display: grid; gap: 2px; min-width: 0; }
 .templateList b { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
 .templateList small { font-size: 9px; color: #78837d; }
+
+
+.notesList {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+  max-height: 210px;
+  overflow-y: auto;
+  text-align: left;
+}
+.noteCard {
+  border: 1px solid #e5e9e7;
+  border-radius: 7px;
+  background: #f8faf9;
+  padding: 8px;
+  display: grid;
+  gap: 3px;
+}
+.noteCard strong { font-size: 10px; color: #34454c; }
+.noteCard p { margin: 0; font-size: 11px; line-height: 1.35; color: #34454c; white-space: pre-wrap; }
+.noteCard small { font-size: 9px; color: #89958f; }
+.noteForm {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.noteForm textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 62px;
+  border: 1px solid #dfe5e1;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+}
+.noteForm textarea:focus { border-color: #8ea79a; box-shadow: 0 0 0 3px rgba(10,104,77,.08); }

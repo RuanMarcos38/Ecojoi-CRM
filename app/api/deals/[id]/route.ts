@@ -3,12 +3,16 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { audit } from '@/lib/server/audit';
+import { emitWebhookEvent } from '@/lib/server/webhook-dispatch';
 
 const patch = z.object({
   title: z.string().min(2).max(180).optional(),
   stage: z.enum(['new','qualification','proposal','closing','won','lost']).optional(),
   value: z.coerce.number().min(0).optional(),
-  probability: z.coerce.number().int().min(0).max(100).optional()
+  probability: z.coerce.number().int().min(0).max(100).optional(),
+  pipeline_id: z.string().uuid().optional().nullable(),
+  pipeline_stage_id: z.string().uuid().optional().nullable(),
+  lost_reason_id: z.string().uuid().optional().nullable()
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -17,17 +21,43 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const body = patch.parse(await req.json());
     const supabase = await createClient();
-    const { data: current } = await supabase.from('deals').select('id,stage').eq('id', id).eq('tenant_id', ctx.tenantId).maybeSingle();
+    const { data: current } = await supabase.from('deals').select('id,stage,title,value,contact_id,pipeline_id').eq('id', id).eq('tenant_id', ctx.tenantId).maybeSingle();
     if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+    if (body.stage === 'lost' && !body.lost_reason_id) {
+      return NextResponse.json({ error: 'lost_reason_required' }, { status: 400 });
+    }
 
     const now = new Date().toISOString();
     const changes: Record<string, unknown> = { ...body, updated_at: now };
-    if (body.stage && body.stage !== current.stage) changes.stage_changed_at = now;
+    if (body.stage && body.stage !== current.stage) {
+      changes.stage_changed_at = now;
+      const pipelineId = body.pipeline_id ?? current.pipeline_id;
+      if (pipelineId) {
+        const { data: stageRow } = await supabase.from('pipeline_stages_v2')
+          .select('id,probability')
+          .eq('tenant_id',ctx.tenantId)
+          .eq('pipeline_id',pipelineId)
+          .eq('stage_key',body.stage)
+          .limit(1)
+          .maybeSingle();
+        if (stageRow?.id) changes.pipeline_stage_id = stageRow.id;
+        if (stageRow?.probability != null && body.probability == null) changes.probability = stageRow.probability;
+      }
+    }
+    if (body.stage === 'won' || body.stage === 'lost') changes.closed_at = now;
+    if (body.stage === 'won') changes.probability = 100;
 
     const { data, error } = await supabase.from('deals').update(changes).eq('id', id).eq('tenant_id', ctx.tenantId).select().maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'deal.update', entity: 'deal', entityId: id, metadata: { previous_stage: current.stage, stage: body.stage ?? current.stage } });
+    if (body.stage === 'won' && current.stage !== 'won') {
+      await emitWebhookEvent(ctx.tenantId,'deal.won',id,{deal_id:id,title:data.title,value:data.value,contact_id:data.contact_id,pipeline_id:data.pipeline_id});
+    }
+    if (body.stage === 'lost' && current.stage !== 'lost') {
+      await emitWebhookEvent(ctx.tenantId,'deal.lost',id,{deal_id:id,title:data.title,value:data.value,contact_id:data.contact_id,lost_reason_id:data.lost_reason_id,pipeline_id:data.pipeline_id});
+    }
     return NextResponse.json({ data });
   } catch (e) {
     if (e instanceof Response) return e;

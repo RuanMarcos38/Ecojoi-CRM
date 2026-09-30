@@ -3,11 +3,17 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isWhatsAppWindowOpen, sendWhatsAppText } from '@/lib/server/meta';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
+import { recordAiUsage } from '@/lib/server/ai-usage';
 
 const schema = z.object({
   tenant_id: z.string().uuid(),
   conversation_id: z.string().uuid(),
-  body: z.string().trim().min(1).max(4000)
+  body: z.string().trim().min(1).max(4000),
+  model: z.string().trim().max(120).optional().nullable(),
+  input_tokens: z.coerce.number().int().min(0).optional().default(0),
+  output_tokens: z.coerce.number().int().min(0).optional().default(0),
+  estimated_cost: z.coerce.number().min(0).optional().default(0),
+  latency_ms: z.coerce.number().int().min(0).optional().nullable()
 });
 
 export async function POST(req: Request) {
@@ -91,6 +97,20 @@ export async function POST(req: Request) {
       })
       .eq('id', input.conversation_id)
       .eq('tenant_id', input.tenant_id);
+
+    await recordAiUsage({
+      tenantId: input.tenant_id,
+      conversationId: input.conversation_id,
+      provider: 'n8n',
+      model: input.model,
+      eventType: 'ai.reply',
+      inputTokens: input.input_tokens,
+      outputTokens: input.output_tokens,
+      estimatedCost: input.estimated_cost,
+      latencyMs: input.latency_ms,
+      success: true,
+      metadata: { delivery, queue_id: queueId }
+    }).catch(() => {});
 
     return NextResponse.json({
       data: { ...data, status: delivery, provider_message_id: providerMessageId },

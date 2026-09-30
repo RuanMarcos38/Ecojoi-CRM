@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, ReceiptText, SlidersHorizontal, Target, Braces } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -14,19 +14,23 @@ const groups:{title:string;items:Item[]}[]=[
     {href:'/app/contatos',label:'Contatos',Icon:Users,permission:'contacts.view'},
     {href:'/app/leads',label:'Pré-vendas',Icon:UserPlus,permission:'contacts.view'},
     {href:'/app/pipeline',label:'Funil',Icon:Kanban,permission:'deals.view'},
+    {href:'/app/propostas',label:'Propostas',Icon:ReceiptText,permission:'deals.view'},
     {href:'/app/agenda',label:'Agenda',Icon:CalendarClock,permission:'tasks.view'},
-    {href:'/app/tarefas',label:'Tarefas',Icon:CheckSquare,permission:'tasks.view'}
+    {href:'/app/tarefas',label:'Tarefas',Icon:CheckSquare,permission:'tasks.view'},
+    {href:'/app/metas',label:'Metas',Icon:Target,permission:'reports.view'}
   ]},
   {title:'Inteligência',items:[
     {href:'/app/campanhas',label:'Campanhas',Icon:Megaphone,permission:'reports.view',feature:'relatorios'},
     {href:'/app/automacoes',label:'Automações',Icon:Bot,permission:'automations.view',feature:'automacoes'},
     {href:'/app/integracoes',label:'Integrações',Icon:PlugZap,permission:'settings.view'},
+    {href:'/app/api',label:'API Playground',Icon:Braces,permission:'settings.view'},
     {href:'/app/relatorios',label:'Relatórios',Icon:BarChart3,permission:'reports.view',feature:'relatorios'}
   ]},
   {title:'Administração',items:[
     {href:'/app/equipe',label:'Equipe e Permissões',Icon:ShieldCheck,permission:'team.view'},
     {href:'/app/auditoria',label:'Auditoria',Icon:ScrollText,permission:'audit.view'},
-    {href:'/app/configuracoes',label:'Configurações',Icon:Settings,permission:'settings.view'}
+    {href:'/app/configuracoes',label:'Configurações',Icon:Settings,permission:'settings.view'},
+    {href:'/app/recursos',label:'Recursos',Icon:SlidersHorizontal,permission:'settings.view'}
   ]},
   {title:'Plataforma',items:[{href:'/app/admin/empresas',label:'Empresas SaaS',Icon:ShieldCheck,roles:['super_admin']}] }
 ];

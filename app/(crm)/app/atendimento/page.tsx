@@ -52,6 +52,7 @@ type Conversation = {
 type Me = { features?: Record<string, boolean>; tenantId?: string; userId?: string };
 type QuickReply = { id:string; shortcut:string; title:string; body:string };
 type WhatsAppTemplate = { id:string; name:string; language:string; category?:string|null; status?:string|null };
+type InternalNote = { id:string; body:string; created_at:string; author?: { id:string; full_name:string } | null };
 
 const QUEUES: { state: AttendanceState; label: string; Icon: typeof Clock3 }[] = [
   { state: 'waiting', label: 'Esperando', Icon: Clock3 },
@@ -94,6 +95,8 @@ export default function Atendimento() {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [notes, setNotes] = useState<InternalNote[]>([]);
+  const [noteText, setNoteText] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mediaStream = useRef<MediaStream | null>(null);
@@ -152,6 +155,14 @@ export default function Atendimento() {
     return () => window.clearInterval(timer);
   }, [recording]);
   useEffect(() => () => mediaStream.current?.getTracks().forEach(track => track.stop()), []);
+
+  useEffect(() => {
+    if (!activeId) { setNotes([]); return; }
+    fetch(`/api/conversations/${activeId}/notes`, { cache: 'no-store' })
+      .then(async response => response.ok ? response.json() : null)
+      .then(payload => setNotes(payload?.data ?? []))
+      .catch(() => setNotes([]));
+  }, [activeId]);
 
   const queueCounts = useMemo(() => {
     const counts: Record<AttendanceState, number> = { waiting: 0, in_service: 0, automatic: 0 };
@@ -318,6 +329,20 @@ export default function Atendimento() {
     setText(reply.body);
   }
 
+  async function addInternalNote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active || !noteText.trim()) return;
+    const response = await fetch(`/api/conversations/${active.id}/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ body: noteText.trim(), mentions: [] })
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) { setError('Não foi possível salvar a nota interna.'); return; }
+    setNoteText('');
+    setNotes(current => [...current, payload.data]);
+  }
+
   function renderMessage(message: Message) {
     return (
       <div key={message.id} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
@@ -411,7 +436,7 @@ export default function Atendimento() {
       </main>
 
       <aside className={styles.details}>
-        {active && <><span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span><h3>{active.contact?.name}</h3><p>{active.contact?.phone || 'Telefone não informado'}</p><p>{active.contact?.email || 'E-mail não informado'}</p><hr/><b>Responsável</b><div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div><hr/><b>Status do atendimento</b><div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div><hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p><hr/><b>Origem</b><p className={styles.channelLabel}>{active.contact?.source || 'Não identificada'}</p></>}
+        {active && <><span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span><h3>{active.contact?.name}</h3><p>{active.contact?.phone || 'Telefone não informado'}</p><p>{active.contact?.email || 'E-mail não informado'}</p><hr/><b>Responsável</b><div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div><hr/><b>Status do atendimento</b><div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div><hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p><hr/><b>Origem</b><p className={styles.channelLabel}>{active.contact?.source || 'Não identificada'}</p><hr/><b>Notas internas</b><div className={styles.notesList}>{notes.length?notes.map(note=><div className={styles.noteCard} key={note.id}><strong>{note.author?.full_name || 'Equipe'}</strong><p>{note.body}</p><small>{new Date(note.created_at).toLocaleString('pt-BR')}</small></div>):<p className={styles.channelLabel}>Nenhuma nota interna.</p>}</div><form className={styles.noteForm} onSubmit={addInternalNote}><textarea value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Adicionar nota interna..." rows={3}/><button className="btn btn-secondary" disabled={!noteText.trim()}>Salvar nota</button></form></>}
       </aside>
     </div>
   );

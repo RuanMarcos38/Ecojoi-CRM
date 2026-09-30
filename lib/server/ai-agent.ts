@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { recordN8nExecution } from '@/lib/server/n8n';
+import { getAiUsageStatus, recordAiUsage } from '@/lib/server/ai-usage';
 
 type AgentEvent = {
   tenantId: string;
@@ -67,6 +68,20 @@ export async function notifyAiAgent(event: AgentEvent) {
   const bridge = await resolveBridge(event.tenantId);
   if (!bridge.endpoint) return { configured: false, delivered: false, source: bridge.source };
 
+  const usage = await getAiUsageStatus(event.tenantId).catch(() => ({ limit: 1000, used: 0, remaining: 1000, allowed: true }));
+  if (!usage.allowed) {
+    await recordAiUsage({
+      tenantId: event.tenantId,
+      conversationId: event.conversationId,
+      provider: bridge.source,
+      eventType: 'quota_blocked',
+      success: false,
+      error: 'daily_ai_limit_reached',
+      metadata: { limit: usage.limit, used: usage.used }
+    }).catch(() => {});
+    return { configured: true, delivered: false, source: bridge.source, quotaExceeded: true };
+  }
+
   const eventName = event.eventName ?? (event.state === 'automatic' ? 'ecojoi.crm.ai.assigned' : 'ecojoi.crm.ai.released');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim()?.replace(/\/$/, '');
   const controller = new AbortController();
@@ -119,7 +134,18 @@ export async function notifyAiAgent(event: AgentEvent) {
       }).catch(() => {});
     }
 
-    return { configured: true, delivered: response.ok, source: bridge.source };
+    await recordAiUsage({
+      tenantId: event.tenantId,
+      conversationId: event.conversationId,
+      provider: bridge.source,
+      eventType: eventName,
+      latencyMs: Date.now() - started,
+      success: response.ok,
+      error: response.ok ? null : `HTTP ${response.status}`,
+      metadata: { workflow_id: bridge.workflowId, channel: event.channel ?? null }
+    }).catch(() => {});
+
+    return { configured: true, delivered: response.ok, source: bridge.source, quotaExceeded: false };
   } catch (error) {
     if (bridge.source === 'n8n') {
       await recordN8nExecution({
@@ -132,7 +158,17 @@ export async function notifyAiAgent(event: AgentEvent) {
         error: error instanceof Error ? error.message : 'n8n_webhook_failed'
       }).catch(() => {});
     }
-    return { configured: true, delivered: false, source: bridge.source };
+    await recordAiUsage({
+      tenantId: event.tenantId,
+      conversationId: event.conversationId,
+      provider: bridge.source,
+      eventType: eventName,
+      latencyMs: Date.now() - started,
+      success: false,
+      error: error instanceof Error ? error.message : 'ai_bridge_failed',
+      metadata: { workflow_id: bridge.workflowId, channel: event.channel ?? null }
+    }).catch(() => {});
+    return { configured: true, delivered: false, source: bridge.source, quotaExceeded: false };
   } finally {
     clearTimeout(timeout);
   }

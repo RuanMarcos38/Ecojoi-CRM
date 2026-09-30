@@ -1,0 +1,9 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { authenticatePublicApi } from '@/lib/server/public-api';
+import { createAdminClient } from '@/lib/supabase/admin';
+
+const schema=z.object({name:z.string().trim().min(2).max(140),email:z.string().email().optional().nullable(),phone:z.string().max(40).optional().nullable(),source:z.string().max(80).optional().nullable(),status:z.enum(['lead','active','inactive']).default('lead'),custom_fields:z.record(z.unknown()).optional().default({}),consent_status:z.enum(['unknown','opt_in','opt_out']).optional().default('unknown')});
+
+export async function GET(req:Request){try{const auth=await authenticatePublicApi(req,'contacts:read');const admin=createAdminClient();const url=new URL(req.url);const limit=Math.min(200,Math.max(1,Number(url.searchParams.get('limit')||50)));const {data,error}=await admin.from('contacts').select('id,name,email,phone,source,status,owner_id,lead_score,lead_temperature,custom_fields,consent_status,organization_id,created_at,updated_at').eq('tenant_id',auth.tenantId).order('created_at',{ascending:false}).limit(limit);if(error)throw error;return NextResponse.json({data:data??[]});}catch(e){if(e instanceof Response)return e;return NextResponse.json({error:'contacts_fetch_failed'},{status:500});}}
+export async function POST(req:Request){try{const auth=await authenticatePublicApi(req,'contacts:write');const body=schema.parse(await req.json());const admin=createAdminClient();const {data,error}=await admin.from('contacts').insert({tenant_id:auth.tenantId,...body,attribution:{}}).select().single();if(error)throw error;return NextResponse.json({data},{status:201});}catch(e){if(e instanceof Response)return e;if(e instanceof z.ZodError)return NextResponse.json({error:'invalid_payload',details:e.flatten()},{status:400});return NextResponse.json({error:'contact_create_failed'},{status:500});}}

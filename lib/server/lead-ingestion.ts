@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { emitWebhookEvent } from '@/lib/server/webhook-dispatch';
 
 export type InboundChannel = 'internal' | 'whatsapp' | 'instagram' | 'facebook' | 'email' | 'external';
 
@@ -336,6 +337,11 @@ export async function ingestLead(input: IngestLeadInput) {
         entity_id: contactId,
         priority: computedTemperature === 'hot' ? 'high' : 'normal'
       });
+    await emitWebhookEvent(input.tenantId,'lead.created',contactId,{contact_id:contactId,name,email,phone,source,owner_id:ownerId,lead_score:computedScore,lead_temperature:computedTemperature});
+  }
+
+  if (conversationId && (input.message || input.providerMessageId)) {
+    await emitWebhookEvent(input.tenantId,'message.received',conversationId,{conversation_id:conversationId,contact_id:contactId,channel,body:clean(input.message),message_type:input.messageType??'text',provider_message_id:input.providerMessageId??null});
   }
 
   const { data: contact } = await admin
