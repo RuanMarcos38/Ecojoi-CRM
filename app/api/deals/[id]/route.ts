@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const body = patch.parse(await req.json());
     const supabase = await createClient();
-    const { data: current } = await supabase.from('deals').select('id,stage').eq('id', id).eq('tenant_id', ctx.tenantId).maybeSingle();
+    const { data: current } = await supabase.from('deals').select('id,title,stage,contact_id,owner_id').eq('id', id).eq('tenant_id', ctx.tenantId).maybeSingle();
     if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
     const now = new Date().toISOString();
@@ -27,6 +27,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data, error } = await supabase.from('deals').update(changes).eq('id', id).eq('tenant_id', ctx.tenantId).select().maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if(body.stage==='won'&&current.stage!=='won'){
+      try{
+        const {data:existing}=await supabase.from('customer_success_cases')
+          .select('id').eq('tenant_id',ctx.tenantId).eq('deal_id',id).limit(1).maybeSingle();
+        if(!existing){
+          const nowDate=new Date();
+          const nextAction=new Date(nowDate.getTime()+24*60*60*1000).toISOString();
+          const dueAt=new Date(nowDate.getTime()+7*24*60*60*1000).toISOString();
+          await supabase.from('customer_success_cases').insert({
+            tenant_id:ctx.tenantId,
+            deal_id:id,
+            contact_id:data.contact_id??current.contact_id??null,
+            owner_id:data.owner_id??current.owner_id??ctx.userId,
+            title:`Pós-venda - ${data.title??current.title}`,
+            status:'onboarding',
+            case_type:'post_sale',
+            health_score:80,
+            next_action_at:nextAction,
+            due_at:dueAt,
+            notes:'Caso criado automaticamente após oportunidade marcada como ganha.'
+          });
+        }
+      }catch{
+        // A vitória do negócio não deve ser revertida por uma falha secundária do módulo de pós-venda.
+      }
+    }
+
     await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'deal.update', entity: 'deal', entityId: id, metadata: { previous_stage: current.stage, stage: body.stage ?? current.stage } });
     return NextResponse.json({ data });
   } catch (e) {
