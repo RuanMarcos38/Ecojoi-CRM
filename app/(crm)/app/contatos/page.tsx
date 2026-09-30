@@ -16,6 +16,16 @@ type Contact={
   organization?:Organization|null;contact_tags?:Array<{tag:TagItem}>;created_at?:string;
 };
 type DuplicateGroup={key:string;items:Array<{id:string;name:string;email?:string|null;phone?:string|null;created_at:string}>};
+type CustomFieldDef={
+  id:string;
+  field_key:string;
+  label:string;
+  field_type:'text'|'textarea'|'number'|'date'|'boolean'|'select'|'email'|'phone'|'url';
+  options?:string[];
+  required:boolean;
+  active:boolean;
+  sort_order:number;
+};
 
 const statusLabel:Record<ContactStatus,string>={lead:'Lead',active:'Cliente ativo',inactive:'Inativo'};
 const statusClass:Record<ContactStatus,string>={lead:styles.statusLead,active:styles.statusActive,inactive:styles.statusInactive};
@@ -28,7 +38,9 @@ export default function Contatos(){
   const [organizations,setOrganizations]=useState<Organization[]>([]);
   const [tags,setTags]=useState<TagItem[]>([]);
   const [duplicates,setDuplicates]=useState<DuplicateGroup[]>([]);
+  const [customFields,setCustomFields]=useState<CustomFieldDef[]>([]);
   const [open,setOpen]=useState(false);
+  const [openOrg,setOpenOrg]=useState(false);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
@@ -37,17 +49,19 @@ export default function Contatos(){
   const importRef=useRef<HTMLInputElement>(null);
 
   async function load(){
-    const [cr,or,tr,dr]=await Promise.all([
+    const [cr,or,tr,dr,cfr]=await Promise.all([
       fetch('/api/contacts',{cache:'no-store'}),
       fetch('/api/organizations',{cache:'no-store'}),
       fetch('/api/tags',{cache:'no-store'}),
-      fetch('/api/contacts/duplicates',{cache:'no-store'})
+      fetch('/api/contacts/duplicates',{cache:'no-store'}),
+      fetch('/api/custom-fields?entity=contacts',{cache:'no-store'})
     ]);
-    const [cd,od,td,dd]=await Promise.all([cr.json(),or.json(),tr.json(),dr.json()]);
+    const [cd,od,td,dd,cfd]=await Promise.all([cr.json(),or.json(),tr.json(),dr.json(),cfr.json().catch(()=>null)]);
     if(cr.ok)setRows(cd.data??[]);else setError('Não foi possível carregar contatos.');
     if(or.ok)setOrganizations(od.data??[]);
     if(tr.ok)setTags(td.data??[]);
     if(dr.ok)setDuplicates(dd.data??[]);
+    if(cfr.ok)setCustomFields((cfd?.data??[]).filter((field:CustomFieldDef)=>field.active));
   }
 
   useEffect(()=>{void load();},[]);
@@ -78,13 +92,22 @@ export default function Contatos(){
     event.preventDefault();setSaving(true);setError('');setNotice('');
     const form=new FormData(event.currentTarget);
     const tagId=String(form.get('tag_id')??'').trim();
+    const custom_fields=Object.fromEntries(
+      customFields.map(field=>{
+        const raw=form.get('custom__'+field.field_key);
+        if(field.field_type==='boolean') return [field.field_key,raw==='on'];
+        if(field.field_type==='number') return [field.field_key,String(raw??'').trim()?Number(raw):null];
+        return [field.field_key,String(raw??'').trim()||null];
+      }).filter(([,value])=>value!==null&&value!=='')
+    );
     const body={
       name:String(form.get('name')??''),
       email:String(form.get('email')??'').trim()||null,
       phone:String(form.get('phone')??'').trim()||null,
       source:String(form.get('source')??'').trim()||null,
       organization_id:String(form.get('organization_id')??'').trim()||null,
-      status:form.get('status')
+      status:form.get('status'),
+      custom_fields
     };
     const response=await fetch('/api/contacts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     const payload=await response.json().catch(()=>null);
@@ -93,6 +116,32 @@ export default function Contatos(){
       if(tagId&&payload?.data?.id)await fetch(`/api/contacts/${payload.data.id}/tags`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({tag_id:tagId})});
       setOpen(false);setNotice('Contato criado e distribuído conforme as regras da equipe.');await load();
     }else setError('Não foi possível salvar o contato.');
+  }
+
+  async function createOrganization(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();setError('');setNotice('');
+    const form=new FormData(event.currentTarget);
+    const response=await fetch('/api/organizations',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        name:String(form.get('name')??'').trim(),
+        legal_name:String(form.get('legal_name')??'').trim()||null,
+        document:String(form.get('document')??'').trim()||null,
+        website:String(form.get('website')??'').trim()||null,
+        phone:String(form.get('phone')??'').trim()||null,
+        email:String(form.get('email')??'').trim()||null,
+        segment:String(form.get('segment')??'').trim()||null,
+        size:String(form.get('size')??'').trim()||null,
+        custom_fields:{}
+      })
+    });
+    if(response.ok){
+      event.currentTarget.reset();
+      setOpenOrg(false);
+      setNotice('Empresa cadastrada e disponível para vincular aos contatos.');
+      await load();
+    }else setError('Não foi possível cadastrar a empresa.');
   }
 
   async function status(id:string,value:ContactStatus){
@@ -151,6 +200,7 @@ export default function Contatos(){
         <input ref={importRef} type="file" hidden accept=".xlsx,.xls,.csv" onChange={importContacts}/>
         <button type="button" className="btn btn-secondary" onClick={()=>importRef.current?.click()}><Upload size={15}/>Importar</button>
         <button type="button" className="btn btn-secondary" onClick={()=>{window.location.href='/api/contacts/export';}}><Download size={15}/>Exportar</button>
+        <button type="button" className="btn btn-secondary" onClick={()=>setOpenOrg(value=>!value)}><Building2 size={15}/>{openOrg?'Fechar empresa':'Nova empresa'}</button>
         <button type="button" className="btn btn-primary" onClick={()=>setOpen(value=>!value)}>{open?<X size={17}/>:<Plus size={17}/>} {open?'Fechar':'Novo contato'}</button>
       </div>
     </div>
@@ -171,6 +221,21 @@ export default function Contatos(){
     {error&&<div className="error">{error}</div>}
     {notice&&<div className="success">{notice}</div>}
 
+    {openOrg&&<form className={styles.formPanel} onSubmit={createOrganization}>
+      <div><h3>Nova empresa</h3><p className={styles.sideHint}>Cadastre a organização uma vez e vincule vários contatos ao mesmo CNPJ.</p></div>
+      <div className={styles.formGrid}>
+        <div className="field"><label>Nome fantasia</label><input className="input" name="name" required/></div>
+        <div className="field"><label>Razão social</label><input className="input" name="legal_name"/></div>
+        <div className="field"><label>CNPJ / documento</label><input className="input" name="document"/></div>
+        <div className="field"><label>Segmento</label><input className="input" name="segment"/></div>
+        <div className="field"><label>Porte</label><input className="input" name="size"/></div>
+        <div className="field"><label>Site</label><input className="input" type="url" name="website"/></div>
+        <div className="field"><label>Telefone</label><input className="input" name="phone"/></div>
+        <div className="field"><label>E-mail</label><input className="input" type="email" name="email"/></div>
+      </div>
+      <div className={styles.formFooter}><button className="btn btn-primary"><Building2 size={14}/>Salvar empresa</button></div>
+    </form>}
+
     {open&&<form className={styles.formPanel} onSubmit={submit}>
       <div><h3>Novo contato</h3></div>
       <div className={styles.formGrid}>
@@ -181,6 +246,14 @@ export default function Contatos(){
         <div className="field"><label>Empresa</label><select className="select" name="organization_id" defaultValue=""><option value="">Sem empresa</option>{organizations.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
         <div className="field"><label>Tag inicial</label><select className="select" name="tag_id" defaultValue=""><option value="">Sem tag</option>{tags.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
         <div className="field"><label>Status</label><select className="select" name="status" defaultValue="lead"><option value="lead">Lead</option><option value="active">Cliente ativo</option><option value="inactive">Inativo</option></select></div>
+        {customFields.map(field=><div className="field" key={field.id}>
+          <label>{field.label}{field.required?' *':''}</label>
+          {field.field_type==='textarea'?<textarea className="textarea" name={'custom__'+field.field_key} rows={3} required={field.required}/>:
+           field.field_type==='select'?<select className="select" name={'custom__'+field.field_key} required={field.required} defaultValue=""><option value="">Selecione</option>{(field.options??[]).map(option=><option key={option} value={option}>{option}</option>)}</select>:
+           field.field_type==='boolean'?<input type="checkbox" name={'custom__'+field.field_key}/>:
+           <input className="input" name={'custom__'+field.field_key} required={field.required}
+             type={field.field_type==='number'?'number':field.field_type==='date'?'date':field.field_type==='email'?'email':field.field_type==='url'?'url':'text'}/>}
+        </div>)}
       </div>
       <div className={styles.formFooter}><button className="btn btn-primary" disabled={saving}>{saving?'Salvando...':'Salvar contato'}</button></div>
     </form>}

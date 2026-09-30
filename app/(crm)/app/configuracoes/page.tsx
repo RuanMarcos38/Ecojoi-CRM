@@ -5,6 +5,8 @@ import type { Permission } from '@/lib/auth/permissions';
 import { ApiKeysPanel } from '@/components/settings/ApiKeysPanel';
 import { MfaPanel } from '@/components/settings/MfaPanel';
 import { SessionSecurityPanel } from '@/components/settings/SessionSecurityPanel';
+import { CustomFieldsPanel } from '@/components/settings/CustomFieldsPanel';
+import { QuickRepliesPanel } from '@/components/settings/QuickRepliesPanel';
 
 type Flag = { feature_name: string; enabled: boolean };
 type Me = { companyName: string; companySlug: string; permissions: Permission[] };
@@ -187,6 +189,8 @@ export default function Config() {
           ))}
         </section>
 
+        <CustomFieldsPanel enabled={canSettings}/>
+        <QuickRepliesPanel enabled={canSettings}/>
         <MfaPanel/>
         <SessionSecurityPanel/>
         <ApiKeysPanel enabled={canSettings}/>
