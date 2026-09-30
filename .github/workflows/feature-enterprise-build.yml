@@ -1,0 +1,25 @@
+name: Enterprise Feature Build
+
+on:
+  push:
+    branches:
+      - feature/enterprise-crm-upgrade-20260930
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_APP_URL: https://crm.ecojoi.com.br
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm run build
