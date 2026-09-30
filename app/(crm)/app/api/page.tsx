@@ -7,10 +7,7 @@ export default function ApiPlayground(){
   const [key,setKey]=useState('');
   const [method,setMethod]=useState('GET');
   const [path,setPath]=useState('/api/v1/leads?limit=10');
-  const [body,setBody]=useState('{
-  "name": "Lead de teste",
-  "source": "Playground"
-}');
+  const [body,setBody]=useState(JSON.stringify({ name: 'Lead de teste', source: 'Playground' }, null, 2));
   const [result,setResult]=useState('');
   const [status,setStatus]=useState('');
 
