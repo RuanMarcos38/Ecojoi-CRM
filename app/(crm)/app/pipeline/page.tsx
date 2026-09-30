@@ -220,15 +220,16 @@ export default function Pipeline() {
       const options = lossReasons.map(reason => reason.name).join(', ');
       const typed = window.prompt(`Informe o motivo da perda${options ? ` (${options})` : ''}:`);
       if (!typed?.trim()) return;
-      let reason = lossReasons.find(item => item.name.toLowerCase() === typed.trim().toLowerCase());
-      if (!reason) {
+      const existingReason = lossReasons.find(item => item.name.toLowerCase() === typed.trim().toLowerCase());
+      let reasonId = existingReason?.id ?? '';
+      if (!reasonId) {
         const created = await fetch('/api/pipelines', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ type:'loss_reason', name:typed.trim() }) });
         const createdData = await created.json().catch(()=>null);
         if (!created.ok || !createdData?.data?.id) { setError('Não foi possível registrar o motivo da perda.'); return; }
-        reason = createdData.data;
-        setLossReasons(current => [...current, reason!]);
+        reasonId = String(createdData.data.id);
+        setLossReasons(current => [...current, { id: reasonId, name: typed.trim() }]);
       }
-      payload.lost_reason_id = reason.id;
+      payload.lost_reason_id = reasonId;
     }
     const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
     if (!r.ok) setError('Sem permissão para alterar esta oportunidade.');
