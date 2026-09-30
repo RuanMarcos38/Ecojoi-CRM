@@ -46,6 +46,7 @@ jobs:
           rm -rf deploy
           mkdir -p deploy
           items=(
+            .cpanel.yml
             app
             components
             database
@@ -75,6 +76,8 @@ jobs:
             fi
           done
           printf '%s\n' "$GITHUB_SHA" > deploy/DEPLOY_SOURCE_SHA
+          mkdir -p deploy/tmp
+          printf '%s\n' "$GITHUB_SHA" > deploy/tmp/restart.txt
           touch deploy/.nojekyll
 
       - name: Publish cpanel-deploy branch
