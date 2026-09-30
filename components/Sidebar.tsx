@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -20,6 +20,7 @@ const groups:{title:string;items:Item[]}[]=[
   ]},
   {title:'Inteligência',items:[
     {href:'/app/campanhas',label:'Campanhas',Icon:Megaphone,permission:'reports.view',feature:'relatorios'},
+    {href:'/app/captura',label:'Captura & Web',Icon:FormInput,permission:'settings.view'},
     {href:'/app/automacoes',label:'Automações',Icon:Bot,permission:'automations.view',feature:'automacoes'},
     {href:'/app/integracoes',label:'Integrações',Icon:PlugZap,permission:'settings.view'},
     {href:'/app/relatorios',label:'Relatórios',Icon:BarChart3,permission:'reports.view',feature:'relatorios'}
