@@ -17,7 +17,7 @@ export async function GET() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('conversations')
-      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution),messages(id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
+      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution,lead_score,lead_temperature),messages(id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
       .eq('tenant_id', ctx.tenantId)
       .order('updated_at', { ascending: false })
       .limit(100);

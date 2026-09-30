@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'invalid_workflow_json' }, { status: 400 });
     }
 
-    const data = await importN8nWorkflow(ctx.tenantId, workflow as Record<string, unknown>);
+    const data = await importN8nWorkflow(ctx.tenantId, workflow as Record<string, unknown>, ctx.userId);
 
     await audit({
       tenantId: ctx.tenantId,
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       action: 'n8n.workflow.import',
       entity: 'n8n_workflow',
       entityId: data.id ?? undefined,
-      metadata: { name: data.name, active: data.active }
+      metadata: { name: data.name, active: data.active, version: data.version }
     });
 
     return NextResponse.json({ data }, { status: 201 });

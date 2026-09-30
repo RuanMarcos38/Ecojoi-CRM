@@ -39,11 +39,21 @@ export async function getTenantN8nSettings(tenantId: string) {
 
 export async function getN8nStatus(tenantId: string) {
   const tenant = await getTenantN8nSettings(tenantId);
+  const admin = createAdminClient();
+  const { data: lastExecution } = await admin
+    .from('n8n_execution_logs')
+    .select('status,event_type,duration_ms,error,created_at')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   return {
     importConfigured: n8nImportRuntimeConfigured(),
     aiEnabled: tenant.aiEnabled,
     webhookConfigured: Boolean(tenant.webhookUrl),
-    workflowId: tenant.workflowId
+    workflowId: tenant.workflowId,
+    lastExecution: lastExecution ?? null
   };
 }
 
@@ -65,7 +75,7 @@ function cleanWorkflow(input: WorkflowJson) {
   };
 }
 
-export async function importN8nWorkflow(tenantId: string, input: WorkflowJson) {
+export async function importN8nWorkflow(tenantId: string, input: WorkflowJson, importedBy?: string | null) {
   const instance = baseUrl();
   const key = apiKey();
   if (!instance || !key) throw new Error('n8n_api_not_configured');
@@ -92,8 +102,32 @@ export async function importN8nWorkflow(tenantId: string, input: WorkflowJson) {
   }
 
   const workflowId = payload?.id ? String(payload.id) : null;
+  const admin = createAdminClient();
+
+  const { data: lastVersion } = await admin
+    .from('n8n_workflow_versions')
+    .select('version_number')
+    .eq('tenant_id', tenantId)
+    .eq('workflow_name', workflow.name)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const versionNumber = Number(lastVersion?.version_number ?? 0) + 1;
+
+  const { error: versionError } = await admin
+    .from('n8n_workflow_versions')
+    .insert({
+      tenant_id: tenantId,
+      workflow_id: workflowId,
+      workflow_name: workflow.name,
+      version_number: versionNumber,
+      workflow_json: workflow,
+      imported_by: importedBy ?? null
+    });
+  if (versionError) throw versionError;
+
   if (workflowId) {
-    const admin = createAdminClient();
     const { error } = await admin
       .from('tenant_settings')
       .upsert(
@@ -110,6 +144,30 @@ export async function importN8nWorkflow(tenantId: string, input: WorkflowJson) {
   return {
     id: workflowId,
     name: payload?.name ?? workflow.name,
-    active: payload?.active === true
+    active: payload?.active === true,
+    version: versionNumber
   };
+}
+
+export async function recordN8nExecution(input: {
+  tenantId: string;
+  workflowId?: string | null;
+  conversationId?: string | null;
+  eventType: string;
+  status: 'started' | 'success' | 'failed';
+  durationMs?: number | null;
+  error?: string | null;
+  metadata?: Record<string, unknown>;
+}) {
+  const admin = createAdminClient();
+  await admin.from('n8n_execution_logs').insert({
+    tenant_id: input.tenantId,
+    workflow_id: input.workflowId ?? null,
+    conversation_id: input.conversationId ?? null,
+    event_type: input.eventType,
+    status: input.status,
+    duration_ms: input.durationMs ?? null,
+    error: input.error?.slice(0, 2000) ?? null,
+    metadata: input.metadata ?? {}
+  });
 }

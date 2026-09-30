@@ -44,6 +44,29 @@ function genericName(channel: InboundChannel, externalId?: string | null) {
   return 'Novo contato';
 }
 
+function leadScore(input: {
+  phone?: string | null;
+  email?: string | null;
+  source?: string | null;
+  channel: InboundChannel;
+  message?: string | null;
+  attribution?: Attribution | null;
+}) {
+  let score = 10;
+  if (input.phone) score += 20;
+  if (input.email) score += 15;
+  if (input.message?.trim()) score += 15;
+  if (['whatsapp','instagram','facebook'].includes(input.channel)) score += 15;
+  if (/meta|google|ads/i.test(input.source ?? '')) score += 10;
+  const attribution = input.attribution ?? {};
+  if (attribution.utm_campaign || attribution.gclid || attribution.fbclid) score += 10;
+  return Math.min(100, score);
+}
+
+function leadTemperature(score: number) {
+  return score >= 70 ? 'hot' : score >= 40 ? 'warm' : 'cold';
+}
+
 async function nextAssignee(admin: ReturnType<typeof createAdminClient>, tenantId: string) {
   const { data, error } = await admin.rpc('next_lead_assignee', { p_tenant_id: tenantId });
   if (error) return null;
@@ -120,11 +143,14 @@ export async function ingestLead(input: IngestLeadInput) {
   if (!contactId) contactId = await findContactByPhoneOrEmail(admin, input.tenantId, phone, email);
 
   let ownerId: string | null = null;
+  const computedScore = leadScore({ phone, email, source, channel, message: input.message, attribution: input.attribution });
+  const computedTemperature = leadTemperature(computedScore);
+  let isNewContact = false;
 
   if (contactId) {
     const { data: current, error: currentError } = await admin
       .from('contacts')
-      .select('id,name,email,phone,source,attribution,owner_id')
+      .select('id,name,email,phone,source,attribution,owner_id,lead_score')
       .eq('tenant_id', input.tenantId)
       .eq('id', contactId)
       .single();
@@ -147,12 +173,15 @@ export async function ingestLead(input: IngestLeadInput) {
         source: current.source || source,
         attribution: mergedAttribution,
         owner_id: ownerId,
+        lead_score: Math.max(Number(current.lead_score ?? 0), computedScore),
+        lead_temperature: leadTemperature(Math.max(Number(current.lead_score ?? 0), computedScore)),
         updated_at: new Date().toISOString()
       })
       .eq('tenant_id', input.tenantId)
       .eq('id', contactId);
     if (updateError) throw updateError;
   } else {
+    isNewContact = true;
     ownerId = await nextAssignee(admin, input.tenantId);
     const { data: created, error: createError } = await admin
       .from('contacts')
@@ -164,7 +193,9 @@ export async function ingestLead(input: IngestLeadInput) {
         source,
         status: 'lead',
         attribution: input.attribution ?? {},
-        owner_id: ownerId
+        owner_id: ownerId,
+        lead_score: computedScore,
+        lead_temperature: computedTemperature
       })
       .select('id')
       .single();
@@ -281,16 +312,35 @@ export async function ingestLead(input: IngestLeadInput) {
   }
 
   if (conversationId) {
+    const now = new Date().toISOString();
     await admin
       .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
+      .update({
+        updated_at: now,
+        ...(input.message || input.providerMessageId ? { last_inbound_at: now } : {})
+      })
       .eq('tenant_id', input.tenantId)
       .eq('id', conversationId);
   }
 
+  if (isNewContact) {
+    await admin
+      .from('notifications')
+      .insert({
+        tenant_id: input.tenantId,
+        user_id: ownerId,
+        type: 'lead_created',
+        title: 'Novo lead recebido',
+        body: `${name} entrou por ${source}.`,
+        entity_type: 'contact',
+        entity_id: contactId,
+        priority: computedTemperature === 'hot' ? 'high' : 'normal'
+      });
+  }
+
   const { data: contact } = await admin
     .from('contacts')
-    .select('id,name,email,phone,source,status,owner_id,attribution,created_at')
+    .select('id,name,email,phone,source,status,owner_id,attribution,lead_score,lead_temperature,created_at')
     .eq('tenant_id', input.tenantId)
     .eq('id', contactId)
     .single();

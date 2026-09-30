@@ -6,6 +6,7 @@ import {
   Mic, MoreVertical, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
+import { createClient } from '@/lib/supabase/client';
 
 type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = {
@@ -40,11 +41,17 @@ type Conversation = {
   attendance_state: AttendanceState;
   attendance_changed_at?: string;
   updated_at?: string;
+  last_inbound_at?: string | null;
+  last_outbound_at?: string | null;
+  first_response_at?: string | null;
+  sla_due_at?: string | null;
   contact: Contact;
   assignee?: Assignee | null;
   messages: Message[];
 };
-type Me = { features?: Record<string, boolean> };
+type Me = { features?: Record<string, boolean>; tenantId?: string; userId?: string };
+type QuickReply = { id:string; shortcut:string; title:string; body:string };
+type WhatsAppTemplate = { id:string; name:string; language:string; category?:string|null; status?:string|null };
 
 const QUEUES: { state: AttendanceState; label: string; Icon: typeof Clock3 }[] = [
   { state: 'waiting', label: 'Esperando', Icon: Clock3 },
@@ -84,6 +91,9 @@ export default function Atendimento() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [me, setMe] = useState<Me | null>(null);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mediaStream = useRef<MediaStream | null>(null);
@@ -92,23 +102,50 @@ export default function Atendimento() {
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
-    const [cr, ct, mr] = await Promise.all([
+    const [cr, ct, mr, qr, tr] = await Promise.all([
       fetch('/api/conversations', { cache: 'no-store' }),
       fetch('/api/contacts', { cache: 'no-store' }),
-      fetch('/api/me', { cache: 'no-store' })
+      fetch('/api/me', { cache: 'no-store' }),
+      fetch('/api/quick-replies', { cache: 'no-store' }),
+      fetch('/api/integrations/meta/templates', { cache: 'no-store' })
     ]);
-    const [cd, td, md] = await Promise.all([cr.json(), ct.json(), mr.ok ? mr.json() : Promise.resolve(null)]);
+    const [cd, td, md, qd, templatesData] = await Promise.all([
+      cr.json(), ct.json(), mr.ok ? mr.json() : Promise.resolve(null),
+      qr.ok ? qr.json() : Promise.resolve(null),
+      tr.ok ? tr.json() : Promise.resolve(null)
+    ]);
     if (cr.ok) setItems(cd.data ?? []);
     if (ct.ok) setContacts(td.data ?? []);
     if (mr.ok) setMe(md?.data ?? null);
+    if (qr.ok) setQuickReplies(qd?.data ?? []);
+    if (tr.ok) setTemplates(templatesData?.data ?? []);
     if (!silent) setLoading(false);
   }
 
+  useEffect(() => { void load(); }, []);
+
   useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(true), 5000);
-    return () => window.clearInterval(timer);
-  }, []);
+    if (!me?.tenantId) return;
+    const supabase = createClient();
+    let refreshTimer: number | null = null;
+    const refresh = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void load(true), 180);
+    };
+
+    const channel = supabase
+      .channel(`ecojoi-attendance-${me.tenantId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `tenant_id=eq.${me.tenantId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${me.tenantId}` }, refresh)
+      .subscribe();
+
+    const fallback = window.setInterval(() => void load(true), 30000);
+    return () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      window.clearInterval(fallback);
+      void supabase.removeChannel(channel);
+    };
+  }, [me?.tenantId]);
   useEffect(() => {
     if (!recording) return;
     const timer = window.setInterval(() => setRecordSeconds(Math.floor((Date.now() - recordStartedAt.current) / 1000)), 500);
@@ -137,6 +174,11 @@ export default function Atendimento() {
 
   const active = items.find(item => item.id === activeId) ?? null;
   const aiAgentEnabled = me?.features?.ai_agent === true;
+  const quickMatches = useMemo(() => {
+    if (!text.startsWith('/')) return [];
+    const needle = text.slice(1).toLowerCase();
+    return quickReplies.filter(reply => !needle || reply.shortcut.toLowerCase().includes(needle) || reply.title.toLowerCase().includes(needle)).slice(0, 8);
+  }, [text, quickReplies]);
   const channelName = (channel: string) => ({
     whatsapp: 'WhatsApp',
     instagram: 'Instagram',
@@ -161,8 +203,10 @@ export default function Atendimento() {
     }
     const errors: Record<string, string> = {
       conversation_in_automatic_mode: 'O agente de IA está responsável. Assuma o atendimento antes de responder.',
-      conversation_not_in_human_service: 'Assuma o atendimento antes de enviar uma mensagem.'
+      conversation_not_in_human_service: 'Assuma o atendimento antes de enviar uma mensagem.',
+      whatsapp_window_closed: 'A janela de 24 horas do WhatsApp terminou. Use um template aprovado para reabrir a conversa.'
     };
+    if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
     setError(errors[d.error] ?? 'Não foi possível enviar a mensagem.');
   }
 
@@ -179,8 +223,10 @@ export default function Atendimento() {
         const messages: Record<string, string> = {
           file_too_large: 'O arquivo deve ter no máximo 25 MB.',
           unsupported_file_type: 'Este tipo de arquivo não é permitido.',
-          conversation_not_in_human_service: 'Assuma o atendimento antes de enviar anexos.'
+          conversation_not_in_human_service: 'Assuma o atendimento antes de enviar anexos.',
+          whatsapp_window_closed: 'A janela de 24 horas terminou. Envie um template aprovado antes de anexar arquivos.'
         };
+        if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
         setError(messages[d.error] ?? 'Não foi possível enviar o arquivo.');
         return;
       }
@@ -250,6 +296,28 @@ export default function Atendimento() {
     } finally { setChangingState(false); }
   }
 
+  async function sendTemplate(template: WhatsAppTemplate) {
+    if (!active) return;
+    setError(''); setNotice('');
+    const r = await fetch(`/api/conversations/${active.id}/template`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: template.name, language: template.language, components: [] })
+    });
+    const d = await r.json().catch(() => null);
+    if (r.ok) {
+      setTemplateOpen(false);
+      setNotice(d?.data?.delivery === 'sent' ? 'Template enviado.' : 'Template enfileirado para retentativa.');
+      await load(true);
+    } else {
+      setError('Não foi possível enviar o template do WhatsApp.');
+    }
+  }
+
+  function applyQuickReply(reply: QuickReply) {
+    setText(reply.body);
+  }
+
   function renderMessage(message: Message) {
     return (
       <div key={message.id} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
@@ -315,10 +383,12 @@ export default function Atendimento() {
               {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
               {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
               {active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
+              {active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
               <button className={styles.roundButton} aria-label="Mais opções"><MoreVertical size={18}/></button>
             </div>
           </header>
 
+          {templateOpen && active.channel === 'whatsapp' && <div className={styles.templatePanel}><div className={styles.templateHeader}><strong>Templates aprovados</strong><button type="button" className={styles.roundButton} onClick={() => setTemplateOpen(false)}><X size={16}/></button></div><div className={styles.templateList}>{templates.filter(t => !t.status || t.status === 'APPROVED').map(t => <button key={t.id} type="button" onClick={() => void sendTemplate(t)}><span><b>{t.name}</b><small>{t.language} · {t.category ?? 'WhatsApp'}</small></span><Send size={14}/></button>)}</div></div>}
           {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
           {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
 
@@ -333,7 +403,7 @@ export default function Atendimento() {
                 <input ref={fileInput} type="file" hidden onChange={onFileChange} accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
               </div>
-              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <input value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem" />}
+              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<input value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem ou /atalho" /></div>}
               {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} aria-label="Parar gravação"><Square size={18}/></button> : text.trim() ? <button className={styles.sendButton} type="submit" aria-label="Enviar"><Send size={19}/></button> : <button type="button" className={styles.sendButton} onClick={startRecording} disabled={sendingMedia} aria-label="Gravar áudio"><Mic size={20}/></button>}
             </form>
           </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}

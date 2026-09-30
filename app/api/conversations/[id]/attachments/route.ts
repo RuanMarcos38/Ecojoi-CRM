@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
-import { sendWhatsAppMedia } from '@/lib/server/meta';
+import { isWhatsAppWindowOpen, sendWhatsAppMedia } from '@/lib/server/meta';
+import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
 const BUCKET = 'ecojoi-message-attachments';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -45,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const supabase = await createClient();
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state,contact:contacts(phone)')
+      .select('id,channel,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
@@ -54,6 +55,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     if (conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'conversation_not_in_human_service' }, { status: 409 });
+    }
+    if (conversation.channel === 'whatsapp' && !isWhatsAppWindowOpen(conversation.last_inbound_at)) {
+      return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
     }
 
     const path = `${ctx.tenantId}/${id}/${crypto.randomUUID()}-${safeName(file.name)}`;
@@ -88,6 +92,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     let delivery = initialStatus;
     let providerMessageId: string | null = null;
+    let queueId: string | null = null;
 
     if (conversation.channel === 'whatsapp') {
       const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
@@ -100,22 +105,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .update({ status: delivery, provider_message_id: providerMessageId })
           .eq('tenant_id', ctx.tenantId)
           .eq('id', data.id);
+      } else {
+        queueId = await enqueueOutbound({
+          tenantId: ctx.tenantId,
+          conversationId: id,
+          messageId: data.id,
+          channel: 'whatsapp',
+          payload: {
+            kind: 'media',
+            to: contact?.phone ?? '',
+            storagePath: path,
+            fileName: file.name,
+            mime: file.type,
+            caption: caption || null
+          },
+          error: sent.reason ?? null
+        });
       }
     }
 
-    await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', id).eq('tenant_id', ctx.tenantId);
+    const now = new Date().toISOString();
+    await supabase.from('conversations').update({
+      updated_at: now,
+      last_outbound_at: now,
+      first_response_at: conversation.first_response_at ?? now
+    }).eq('id', id).eq('tenant_id', ctx.tenantId);
+
     await audit({
       tenantId: ctx.tenantId,
       userId: ctx.userId,
       action: 'message.attachment_send',
       entity: 'conversation',
       entityId: id,
-      metadata: { type, status: delivery, channel: conversation.channel }
+      metadata: { type, status: delivery, channel: conversation.channel, queue_id: queueId }
     });
 
     return NextResponse.json({
       data: { ...data, status: delivery, provider_message_id: providerMessageId },
-      delivery
+      delivery,
+      queue_id: queueId
     }, { status: 201 });
   } catch (e) {
     if (e instanceof Response) return e;
