@@ -50,7 +50,7 @@ export default function Dashboard(){
 
   useEffect(()=>{void load();},[]);
 
-  const prefs=useMemo(()=>{
+  const prefs=useMemo<WidgetPref[]>(()=>{
     if(!widgets.length)return defaultKeys.map((key,index)=>({widget_key:key,position:index,enabled:true}));
     const map=new Map(widgets.map(item=>[item.widget_key,item]));
     return defaultKeys.map((key,index)=>map.get(key)??{widget_key:key,position:index,enabled:true});
