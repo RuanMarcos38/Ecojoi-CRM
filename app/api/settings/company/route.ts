@@ -3,8 +3,13 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
 import { audit } from '@/lib/server/audit';
+import { metaRuntimeConfigured } from '@/lib/server/meta';
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
+const optionalId = (max = 120) => z.union([z.string().trim().max(max), z.literal(''), z.null()])
+  .optional()
+  .transform(value => value === '' ? null : value);
+
 const patch = z.object({
   name: z.string().trim().min(2).max(140).optional(),
   legal_name: optionalText(180),
@@ -13,17 +18,23 @@ const patch = z.object({
   email: z.string().email().nullable().optional(),
   timezone: z.string().trim().min(2).max(80).optional(),
   locale: z.string().trim().min(2).max(20).optional(),
-  meta_pixel_id: z.union([
-    z.string().trim().regex(/^\d{5,30}$/),
-    z.literal(''),
-    z.null()
-  ]).optional().transform(value => value === '' ? null : value),
-  google_analytics_id: z.union([
-    z.string().trim().regex(/^(G-[A-Z0-9]+|UA-\d+-\d+)$/i),
-    z.literal(''),
-    z.null()
-  ]).optional().transform(value => value === '' ? null : value)
+  meta_pixel_id: z.union([z.string().trim().regex(/^\d{5,30}$/), z.literal(''), z.null()])
+    .optional().transform(value => value === '' ? null : value),
+  google_analytics_id: z.union([z.string().trim().regex(/^(G-[A-Z0-9]+|UA-\d+-\d+)$/i), z.literal(''), z.null()])
+    .optional().transform(value => value === '' ? null : value),
+  auto_assign_leads: z.boolean().optional(),
+  meta_business_id: optionalId(),
+  meta_waba_id: optionalId(),
+  meta_phone_number_id: optionalId(),
+  meta_page_id: optionalId(),
+  meta_instagram_account_id: optionalId()
 });
+
+const SETTINGS_COLUMNS = [
+  'legal_name','document','phone','email','timezone','locale',
+  'meta_pixel_id','google_analytics_id','auto_assign_leads',
+  'meta_business_id','meta_waba_id','meta_phone_number_id','meta_page_id','meta_instagram_account_id'
+].join(',');
 
 export async function GET() {
   try {
@@ -31,15 +42,21 @@ export async function GET() {
     const supabase = await createClient();
     const [{ data: tenant, error: tenantError }, { data: settings, error: settingsError }] = await Promise.all([
       supabase.from('tenants').select('id,name,slug,active').eq('id', ctx.tenantId).single(),
-      supabase
-        .from('tenant_settings')
-        .select('legal_name,document,phone,email,timezone,locale,meta_pixel_id,google_analytics_id')
-        .eq('tenant_id', ctx.tenantId)
-        .maybeSingle()
+      supabase.from('tenant_settings').select(SETTINGS_COLUMNS).eq('tenant_id', ctx.tenantId).maybeSingle()
     ]);
 
     if (tenantError || settingsError) throw tenantError ?? settingsError;
-    return NextResponse.json({ data: { ...tenant, ...(settings ?? {}) } });
+    const metaIdsReady = Boolean(
+      settings?.meta_phone_number_id || settings?.meta_page_id || settings?.meta_instagram_account_id
+    );
+
+    return NextResponse.json({
+      data: {
+        ...tenant,
+        ...(settings ?? {}),
+        meta_connector_ready: metaRuntimeConfigured() && metaIdsReady
+      }
+    });
   } catch (error) {
     if (error instanceof Response) return error;
     return NextResponse.json({ error: 'company_settings_fetch_failed' }, { status: 500 });
