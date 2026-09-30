@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
+import { sendWhatsAppText } from '@/lib/server/meta';
 
 const schema = z.object({ body: z.string().min(1).max(4000) });
 
@@ -17,7 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: conversation } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state')
+      .select('id,channel,attendance_state,contact:contacts(phone)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
@@ -30,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'conversation_not_in_human_service' }, { status: 409 });
     }
 
-    const status = conversation.channel === 'internal' ? 'sent' : 'queued';
+    const initialStatus = conversation.channel === 'internal' ? 'sent' : 'queued';
     const { data, error } = await supabase
       .from('messages')
       .insert({
@@ -39,13 +40,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         direction: 'outbound',
         body: body.body,
         sender_user_id: ctx.userId,
-        status,
+        status: initialStatus,
         message_type: 'text'
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    let delivery = initialStatus;
+    let providerMessageId: string | null = null;
+
+    if (conversation.channel === 'whatsapp') {
+      const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
+      const sent = await sendWhatsAppText(ctx.tenantId, contact?.phone, body.body);
+      if (sent.delivered) {
+        delivery = 'sent';
+        providerMessageId = sent.providerMessageId ?? null;
+        await supabase
+          .from('messages')
+          .update({ status: delivery, provider_message_id: providerMessageId })
+          .eq('tenant_id', ctx.tenantId)
+          .eq('id', data.id);
+      }
+    }
 
     await supabase
       .from('conversations')
@@ -59,10 +77,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       action: 'message.send',
       entity: 'conversation',
       entityId: id,
-      metadata: { channel: conversation.channel, status }
+      metadata: { channel: conversation.channel, status: delivery }
     });
 
-    return NextResponse.json({ data, delivery: status }, { status: 201 });
+    return NextResponse.json({
+      data: { ...data, status: delivery, provider_message_id: providerMessageId },
+      delivery
+    }, { status: 201 });
   } catch (e) {
     if (e instanceof Response) return e;
     if (e instanceof z.ZodError) return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });

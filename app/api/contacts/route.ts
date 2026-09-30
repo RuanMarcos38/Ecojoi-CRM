@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { requirePermission } from '@/lib/auth/context';
 import { audit } from '@/lib/server/audit';
 
@@ -39,7 +40,6 @@ function normalizeAttribution(input?: Attribution | null) {
 function inferSource(source: string | null | undefined, attribution: Record<string, unknown>) {
   const explicit = source?.trim();
   if (explicit) return explicit.slice(0, 80);
-
   const utmSource = typeof attribution.utm_source === 'string' ? attribution.utm_source.trim() : '';
   if (utmSource) return utmSource.slice(0, 80);
   if (attribution.gclid) return 'Google Ads';
@@ -47,13 +47,9 @@ function inferSource(source: string | null | undefined, attribution: Record<stri
 
   const referrer = typeof attribution.referrer === 'string' ? attribution.referrer : '';
   if (referrer) {
-    try {
-      return new URL(referrer).hostname.replace(/^www\./, '').slice(0, 80);
-    } catch {
-      return referrer.slice(0, 80);
-    }
+    try { return new URL(referrer).hostname.replace(/^www\./, '').slice(0, 80); }
+    catch { return referrer.slice(0, 80); }
   }
-
   return null;
 }
 
@@ -65,14 +61,11 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from('contacts')
-      .select('id,name,email,phone,source,status,attribution,created_at')
+      .select('id,name,email,phone,source,status,owner_id,attribution,created_at,owner:profiles!contacts_owner_id_fkey(id,full_name)')
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
 
-    if (status && ['lead', 'active', 'inactive'].includes(status)) {
-      query = query.eq('status', status);
-    }
-
+    if (status && ['lead', 'active', 'inactive'].includes(status)) query = query.eq('status', status);
     const { data, error } = await query;
     if (error) throw error;
     return NextResponse.json({ data });
@@ -103,19 +96,32 @@ export async function POST(req: Request) {
 
     if (error) throw error;
 
+    let ownerId: string | null = null;
+    try {
+      const admin = createAdminClient();
+      const { data: assigned } = await admin.rpc('next_lead_assignee', { p_tenant_id: ctx.tenantId });
+      ownerId = typeof assigned === 'string' ? assigned : null;
+      if (ownerId) {
+        await admin
+          .from('contacts')
+          .update({ owner_id: ownerId, updated_at: new Date().toISOString() })
+          .eq('tenant_id', ctx.tenantId)
+          .eq('id', data.id);
+      }
+    } catch {
+      ownerId = null;
+    }
+
     await audit({
       tenantId: ctx.tenantId,
       userId: ctx.userId,
       action: 'contact.create',
       entity: 'contact',
       entityId: data.id,
-      metadata: {
-        source: data.source ?? null,
-        has_attribution: Object.keys(attribution).length > 0
-      }
+      metadata: { source: data.source ?? null, has_attribution: Object.keys(attribution).length > 0, owner_id: ownerId }
     });
 
-    return NextResponse.json({ data }, { status: 201 });
+    return NextResponse.json({ data: { ...data, owner_id: ownerId } }, { status: 201 });
   } catch (error) {
     if (error instanceof Response) return error;
     if (error instanceof z.ZodError) {

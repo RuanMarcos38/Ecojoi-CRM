@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
+import { sendWhatsAppMedia } from '@/lib/server/meta';
 
 const BUCKET = 'ecojoi-message-attachments';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -44,7 +45,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const supabase = await createClient();
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state')
+      .select('id,channel,attendance_state,contact:contacts(phone)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
@@ -64,13 +65,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (uploadError) throw uploadError;
 
     const type = messageType(file);
-    const status = conversation.channel === 'internal' ? 'sent' : 'queued';
+    const initialStatus = conversation.channel === 'internal' ? 'sent' : 'queued';
     const { data, error } = await supabase.from('messages').insert({
       tenant_id: ctx.tenantId,
       conversation_id: id,
       direction: 'outbound',
       body: caption || (type === 'audio' ? 'Mensagem de voz' : file.name),
-      status,
+      status: initialStatus,
       sender_user_id: ctx.userId,
       message_type: type,
       attachment_path: path,
@@ -85,9 +86,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       throw error;
     }
 
+    let delivery = initialStatus;
+    let providerMessageId: string | null = null;
+
+    if (conversation.channel === 'whatsapp') {
+      const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
+      const sent = await sendWhatsAppMedia(ctx.tenantId, contact?.phone, file, caption || null);
+      if (sent.delivered) {
+        delivery = 'sent';
+        providerMessageId = sent.providerMessageId ?? null;
+        await supabase
+          .from('messages')
+          .update({ status: delivery, provider_message_id: providerMessageId })
+          .eq('tenant_id', ctx.tenantId)
+          .eq('id', data.id);
+      }
+    }
+
     await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', id).eq('tenant_id', ctx.tenantId);
-    await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'message.attachment_send', entity: 'conversation', entityId: id, metadata: { type, status } });
-    return NextResponse.json({ data }, { status: 201 });
+    await audit({
+      tenantId: ctx.tenantId,
+      userId: ctx.userId,
+      action: 'message.attachment_send',
+      entity: 'conversation',
+      entityId: id,
+      metadata: { type, status: delivery, channel: conversation.channel }
+    });
+
+    return NextResponse.json({
+      data: { ...data, status: delivery, provider_message_id: providerMessageId },
+      delivery
+    }, { status: 201 });
   } catch (e) {
     if (e instanceof Response) return e;
     return NextResponse.json({ error: 'attachment_send_failed' }, { status: 500 });

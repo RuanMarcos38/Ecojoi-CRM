@@ -21,7 +21,17 @@ type Message = {
   audio_duration_ms?: number | null;
   created_at: string;
 };
-type Contact = { id: string; name: string; email?: string; phone?: string };
+type Contact = {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  source?: string | null;
+  owner_id?: string | null;
+  attribution?: Record<string, unknown> | null;
+};
+type Assignee = { id: string; full_name: string };
+
 type Conversation = {
   id: string;
   status: string;
@@ -31,6 +41,7 @@ type Conversation = {
   attendance_changed_at?: string;
   updated_at?: string;
   contact: Contact;
+  assignee?: Assignee | null;
   messages: Message[];
 };
 type Me = { features?: Record<string, boolean> };
@@ -79,8 +90,8 @@ export default function Atendimento() {
   const audioChunks = useRef<Blob[]>([]);
   const recordStartedAt = useRef<number>(0);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     const [cr, ct, mr] = await Promise.all([
       fetch('/api/conversations', { cache: 'no-store' }),
       fetch('/api/contacts', { cache: 'no-store' }),
@@ -90,10 +101,14 @@ export default function Atendimento() {
     if (cr.ok) setItems(cd.data ?? []);
     if (ct.ok) setContacts(td.data ?? []);
     if (mr.ok) setMe(md?.data ?? null);
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(true), 5000);
+    return () => window.clearInterval(timer);
+  }, []);
   useEffect(() => {
     if (!recording) return;
     const timer = window.setInterval(() => setRecordSeconds(Math.floor((Date.now() - recordStartedAt.current) / 1000)), 500);
@@ -122,6 +137,13 @@ export default function Atendimento() {
 
   const active = items.find(item => item.id === activeId) ?? null;
   const aiAgentEnabled = me?.features?.ai_agent === true;
+  const channelName = (channel: string) => ({
+    whatsapp: 'WhatsApp',
+    instagram: 'Instagram',
+    facebook: 'Facebook',
+    email: 'E-mail',
+    internal: 'Interno'
+  } as Record<string, string>)[channel] ?? channel;
 
   async function send(e: FormEvent) {
     e.preventDefault();
@@ -256,7 +278,7 @@ export default function Atendimento() {
     <div className={`${styles.root} ${styles.whatsappShell}`}>
       <aside className={styles.sidebar}>
         <div className={styles.sidebarTop}>
-          <div><strong>Atendimento</strong><span>Caixa de entrada omnichannel</span></div>
+          <div><strong>Conversas</strong><span>WhatsApp e canais conectados</span></div>
           <button className={styles.roundButton} onClick={() => setCreating(v => !v)} aria-label="Novo atendimento">{creating ? <X size={18}/> : <Plus size={18}/>}</button>
         </div>
         {creating && (
@@ -275,7 +297,11 @@ export default function Atendimento() {
             const last = conversation.messages?.[conversation.messages.length - 1];
             return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => setActiveId(conversation.id)}>
               <span className={styles.avatar}>{initials(conversation.contact?.name)}</span>
-              <span className={styles.conversationCopy}><span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span><span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span></span>
+              <span className={styles.conversationCopy}>
+                <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
+                <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
+                <span className={styles.conversationMeta}><i>{channelName(conversation.channel)}</i><span>{conversation.assignee?.full_name ? `Responsável: ${conversation.assignee.full_name}` : 'Sem responsável'}</span></span>
+              </span>
             </button>;
           })}
         </div>
@@ -284,7 +310,7 @@ export default function Atendimento() {
       <main className={styles.chatPanel}>
         {active ? <>
           <header className={styles.chatHeader}>
-            <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(active.contact?.name)}</span><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{active.contact?.phone ?? active.contact?.email ?? active.channel} · {STATE_LABEL[active.attendance_state]}</span></div></div>
+            <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(active.contact?.name)}</span><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)} · {active.contact?.phone ?? active.contact?.email ?? 'sem identificação'} · {active.assignee?.full_name ?? 'sem responsável'}</span></div></div>
             <div className={styles.headerActions}>
               {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
               {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
@@ -315,7 +341,7 @@ export default function Atendimento() {
       </main>
 
       <aside className={styles.details}>
-        {active && <><span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span><h3>{active.contact?.name}</h3><p>{active.contact?.phone}</p><p>{active.contact?.email}</p><hr/><b>Status do atendimento</b><div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div><hr/><b>Canal</b><p className={styles.channelLabel}>{active.channel}</p><hr/><small className={styles.securityText}>Arquivos e mensagens ficam isolados pelo tenant da empresa. Mensagens de canais externos aparecem como “na fila” enquanto o provedor oficial não estiver conectado.</small></>}
+        {active && <><span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span><h3>{active.contact?.name}</h3><p>{active.contact?.phone || 'Telefone não informado'}</p><p>{active.contact?.email || 'E-mail não informado'}</p><hr/><b>Responsável</b><div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div><hr/><b>Status do atendimento</b><div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div><hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p><hr/><b>Origem</b><p className={styles.channelLabel}>{active.contact?.source || 'Não identificada'}</p></>}
       </aside>
     </div>
   );
