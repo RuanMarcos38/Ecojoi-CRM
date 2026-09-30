@@ -5,7 +5,7 @@ import {
   Bot, CheckCheck, Clock3, Download, FileText, Headphones, Image as ImageIcon,
   Mic, MoreVertical, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
-import styles from './attendance.module.css';
+import styles from './whatsapp.module.css';
 
 type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = {
