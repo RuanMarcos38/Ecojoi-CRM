@@ -35,6 +35,8 @@ type Lead = {
   email?: string | null;
   phone?: string | null;
   source?: string | null;
+  owner_id?: string | null;
+  owner?: { id: string; full_name: string } | null;
   attribution?: Attribution | null;
   status: 'lead' | 'active' | 'inactive';
   created_at: string;
@@ -222,7 +224,7 @@ export default function Leads() {
           <div className={styles.recordTop}>
             <div className={styles.identity}>
               <span className={styles.avatar}>{row.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
-              <div className={styles.identityCopy}><strong>{row.name}</strong><span>{row.source || 'Sem origem'} · {ageLabel(row.created_at)}</span></div>
+              <div className={styles.identityCopy}><strong>{row.name}</strong><span>{row.source || 'Sem origem'} · {ageLabel(row.created_at)}</span><span>{row.owner?.full_name ? `Responsável: ${row.owner.full_name}` : 'Aguardando responsável'}</span></div>
             </div>
             <span className={`${styles.statusBadge} ${styles.statusLead}`}>Lead</span>
           </div>
