@@ -30,19 +30,16 @@ const patch = z.object({
   meta_instagram_account_id: optionalId()
 });
 
-const SETTINGS_COLUMNS = [
-  'legal_name','document','phone','email','timezone','locale',
-  'meta_pixel_id','google_analytics_id','auto_assign_leads',
-  'meta_business_id','meta_waba_id','meta_phone_number_id','meta_page_id','meta_instagram_account_id'
-].join(',');
-
 export async function GET() {
   try {
     const ctx = await requirePermission('settings.view');
     const supabase = await createClient();
     const [{ data: tenant, error: tenantError }, { data: settings, error: settingsError }] = await Promise.all([
       supabase.from('tenants').select('id,name,slug,active').eq('id', ctx.tenantId).single(),
-      supabase.from('tenant_settings').select(SETTINGS_COLUMNS).eq('tenant_id', ctx.tenantId).maybeSingle()
+      supabase.from('tenant_settings')
+        .select('legal_name,document,phone,email,timezone,locale,meta_pixel_id,google_analytics_id,auto_assign_leads,meta_business_id,meta_waba_id,meta_phone_number_id,meta_page_id,meta_instagram_account_id')
+        .eq('tenant_id', ctx.tenantId)
+        .maybeSingle()
     ]);
 
     if (tenantError || settingsError) throw tenantError ?? settingsError;
