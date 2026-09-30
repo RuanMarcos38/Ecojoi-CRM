@@ -29,6 +29,8 @@ type Attribution = {
   fbclid?: string | null;
 };
 
+type SavedView={id:string;name:string;filters?:Record<string,unknown>;is_default?:boolean};
+
 type Lead = {
   id: string;
   name: string;
@@ -73,12 +75,23 @@ export default function Leads() {
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [temperatureFilter,setTemperatureFilter]=useState<'all'|'cold'|'warm'|'hot'>('all');
+  const [savedViews,setSavedViews]=useState<SavedView[]>([]);
+  const [showSaveView,setShowSaveView]=useState(false);
+  const [viewName,setViewName]=useState('');
 
   async function load() {
-    const response = await fetch('/api/contacts?status=lead', { cache: 'no-store' });
-    const payload = await response.json();
+    const [response,viewsResponse]=await Promise.all([
+      fetch('/api/contacts?status=lead', { cache: 'no-store' }),
+      fetch('/api/saved-views?entity=leads',{cache:'no-store'})
+    ]);
+    const [payload,viewsPayload]=await Promise.all([
+      response.json(),
+      viewsResponse.ok?viewsResponse.json():Promise.resolve(null)
+    ]);
     if (response.ok) setRows(payload.data ?? []);
     else setError('Não foi possível carregar leads.');
+    if(viewsResponse.ok)setSavedViews(viewsPayload?.data??[]);
   }
 
   useEffect(() => { void load(); }, []);
@@ -101,13 +114,53 @@ export default function Leads() {
     return rows.filter(row => {
       const source = row.source?.trim() || 'Sem origem';
       const text = [row.name, row.email, row.phone, row.source].filter(Boolean).join(' ').toLowerCase();
-      return (!term || text.includes(term)) && (sourceFilter === 'all' || source === sourceFilter);
+      return (!term || text.includes(term))
+        && (sourceFilter === 'all' || source === sourceFilter)
+        && (temperatureFilter === 'all' || row.lead_temperature === temperatureFilter);
     });
-  }, [query, rows, sourceFilter]);
+  }, [query, rows, sourceFilter, temperatureFilter]);
 
   const recentCount = useMemo(() => rows.filter(row => Date.now() - new Date(row.created_at).getTime() <= 7 * 86400000).length, [rows]);
   const noPhoneCount = useMemo(() => rows.filter(row => !row.phone).length, [rows]);
   const hotCount = useMemo(() => rows.filter(row => row.lead_temperature === 'hot').length, [rows]);
+
+  async function saveCurrentView(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const name=viewName.trim();
+    if(!name)return;
+    const response=await fetch('/api/saved-views',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({
+        entity_type:'leads',
+        name,
+        filters:{query,sourceFilter,temperatureFilter},
+        columns:[],
+        is_default:false
+      })
+    });
+    if(response.ok){
+      setViewName('');
+      setShowSaveView(false);
+      setNotice('Visão salva para uso rápido.');
+      await load();
+    }else setError('Não foi possível salvar a visão.');
+  }
+
+  function applyView(id:string){
+    if(!id){
+      setQuery('');
+      setSourceFilter('all');
+      setTemperatureFilter('all');
+      return;
+    }
+    const view=savedViews.find(item=>item.id===id);
+    const filters=(view?.filters??{}) as Record<string,unknown>;
+    setQuery(typeof filters.query==='string'?filters.query:'');
+    setSourceFilter(typeof filters.sourceFilter==='string'?filters.sourceFilter:'all');
+    const temp=typeof filters.temperatureFilter==='string'?filters.temperatureFilter:'all';
+    setTemperatureFilter(['cold','warm','hot'].includes(temp)?temp as 'cold'|'warm'|'hot':'all');
+  }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -190,9 +243,18 @@ export default function Leads() {
         <p className="page-sub">Entrada comercial para capturar, qualificar e converter oportunidades.</p>
       </div>
       <div className={styles.heroActions}>
+        <button type="button" className="btn btn-secondary" onClick={()=>setShowSaveView(value=>!value)}>{showSaveView?'Cancelar visão':'Salvar visão'}</button>
         <button type="button" className="btn btn-primary" onClick={() => setOpen(value => !value)}>{open ? <X size={17}/> : <Plus size={17}/>} {open ? 'Fechar' : 'Novo lead'}</button>
       </div>
     </div>
+
+    {showSaveView&&<form className={styles.formPanel} onSubmit={saveCurrentView}>
+      <div><h3>Salvar visão de leads</h3><p className={styles.sideHint}>Guarda os filtros atuais para reutilizar com um clique.</p></div>
+      <div className={styles.formGrid}>
+        <div className="field"><label>Nome da visão</label><input className="input" value={viewName} onChange={e=>setViewName(e.target.value)} placeholder="Ex.: Leads quentes do Meta" required/></div>
+      </div>
+      <div className={styles.formFooter}><button className="btn btn-primary">Salvar visão</button></div>
+    </form>}
 
     <section className={styles.kpiGrid} aria-label="Resumo de leads">
       <article className={styles.kpi}><span className={styles.kpiIcon}><UserPlus size={18}/></span><span>Leads abertos</span><strong>{rows.length}</strong><small>aguardando qualificação</small></article>
@@ -204,7 +266,10 @@ export default function Leads() {
     <section className={styles.toolbar} aria-label="Filtros de leads">
       <label className={styles.searchField}><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar lead, e-mail, telefone ou origem"/></label>
       <label className={styles.selectField}><Filter size={16}/><select value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">Todas as origens</option>{sources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
-      <label className={styles.selectField}><ClipboardCheck size={16}/><select value="qualification" onChange={() => undefined} aria-label="Modo"><option value="qualification">Qualificação comercial</option></select></label>
+      <label className={styles.selectField}><Target size={16}/><select value={temperatureFilter} onChange={event=>setTemperatureFilter(event.target.value as 'all'|'cold'|'warm'|'hot')}><option value="all">Todas temperaturas</option><option value="hot">Quentes</option><option value="warm">Mornos</option><option value="cold">Frios</option></select></label>
+    </section>
+    <section className={styles.toolbar} aria-label="Visões salvas" style={{gridTemplateColumns:'minmax(260px,1fr)'}}>
+      <label className={styles.selectField}><ClipboardCheck size={16}/><select defaultValue="" onChange={event=>applyView(event.target.value)}><option value="">Visão padrão</option>{savedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}</select></label>
     </section>
 
     {error && <div className="error">{error}</div>}
