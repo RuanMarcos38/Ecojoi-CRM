@@ -71,6 +71,15 @@ export default function Integracoes() {
     else setError('Não foi possível processar a fila.');
   }
 
+  async function runWorkers(){
+    setBusy('workers');setError('');setNotice('');
+    const r=await fetch('/api/integrations/workers',{method:'POST'});
+    const d=await r.json().catch(()=>null);
+    setBusy('');
+    if(r.ok){setNotice(`Automações processadas: ${d?.data?.processed??0}; sucesso: ${d?.data?.succeeded??0}; falhas: ${d?.data?.failed??0}.`);await load();}
+    else setError('Não foi possível executar os workers.');
+  }
+
   async function saveAgent(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setBusy('agent');setError('');setNotice('');
     const fd=new FormData(e.currentTarget);
@@ -113,7 +122,7 @@ export default function Integracoes() {
   return <div className="content">
     <div className="page-head">
       <div><h1 className="page-title">Integrações e Operação</h1><p className="page-sub">Saúde dos canais, automações, IA e mensageria.</p></div>
-      <button className="btn btn-secondary" onClick={()=>void load()}><RefreshCw size={15}/>Atualizar</button>
+      <div className="inlineActions"><button className="btn btn-secondary" onClick={()=>void load()}><RefreshCw size={15}/>Atualizar</button><button className="btn btn-primary" onClick={()=>void runWorkers()} disabled={busy==='workers'}><Workflow size={15}/>Processar automações</button></div>
     </div>
 
     {error&&<div className="error">{error}</div>}
