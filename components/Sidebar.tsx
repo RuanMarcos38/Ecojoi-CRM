@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -10,6 +10,7 @@ type Me={permissions:Permission[];features:Record<string,boolean>;role:Role};
 const groups:{title:string;items:Item[]}[]=[
   {title:'Visão geral',items:[{href:'/app',label:'Painel',Icon:LayoutDashboard}]},
   {title:'Comercial',items:[
+    {href:'/app/atendimento',label:'Atendimento',Icon:MessageCircle,permission:'conversations.view',feature:'atendimento'},
     {href:'/app/contatos',label:'Contatos',Icon:Users,permission:'contacts.view'},
     {href:'/app/leads',label:'Pré-vendas',Icon:UserPlus,permission:'contacts.view'},
     {href:'/app/pipeline',label:'Funil',Icon:Kanban,permission:'deals.view'},

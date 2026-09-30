@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
+import { notifyAiAgent } from '@/lib/server/ai-agent';
 
 const schema = z.object({
   state: z.enum(['waiting', 'in_service', 'automatic'])
@@ -19,7 +20,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: current, error: currentError } = await supabase
       .from('conversations')
-      .select('id,attendance_state')
+      .select('id,attendance_state,channel,contact:contacts(id,name,email,phone),messages(id,direction,body,message_type,created_at)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
@@ -52,6 +53,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       entity: 'conversation',
       entityId: id,
       metadata: { from: current.attendance_state, to: state }
+    });
+
+    const recentMessages = [...(current.messages ?? [])]
+      .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)))
+      .slice(-30);
+
+    await notifyAiAgent({
+      tenantId: ctx.tenantId,
+      conversationId: id,
+      state,
+      channel: current.channel,
+      contact: current.contact,
+      messages: recentMessages
     });
 
     return NextResponse.json({ data });
