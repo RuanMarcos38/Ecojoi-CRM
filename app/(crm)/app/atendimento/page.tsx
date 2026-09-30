@@ -45,6 +45,9 @@ type Conversation = {
   last_outbound_at?: string | null;
   first_response_at?: string | null;
   sla_due_at?: string | null;
+  ai_summary?: string | null;
+  ai_next_action?: string | null;
+  ai_summary_updated_at?: string | null;
   contact: Contact;
   assignee?: Assignee | null;
   messages: Message[];
@@ -52,6 +55,7 @@ type Conversation = {
 type Me = { features?: Record<string, boolean>; tenantId?: string; userId?: string };
 type QuickReply = { id:string; shortcut:string; title:string; body:string };
 type WhatsAppTemplate = { id:string; name:string; language:string; category?:string|null; status?:string|null };
+type ConversationNote = { id:string; body:string; created_at:string; user?: { id:string; full_name:string } | null };
 
 const QUEUES: { state: AttendanceState; label: string; Icon: typeof Clock3 }[] = [
   { state: 'waiting', label: 'Esperando', Icon: Clock3 },
@@ -94,6 +98,9 @@ export default function Atendimento() {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [notes,setNotes]=useState<ConversationNote[]>([]);
+  const [noteText,setNoteText]=useState('');
+  const [savingNote,setSavingNote]=useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const mediaStream = useRef<MediaStream | null>(null);
@@ -171,6 +178,18 @@ export default function Atendimento() {
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
   }, [filtered, activeId]);
+
+  useEffect(()=>{
+    if(!activeId){setNotes([]);return;}
+    let cancelled=false;
+    fetch(`/api/conversations/${activeId}/notes`,{cache:'no-store'})
+      .then(async response=>{
+        const payload=await response.json().catch(()=>null);
+        if(!cancelled&&response.ok)setNotes(payload?.data??[]);
+      })
+      .catch(()=>{if(!cancelled)setNotes([]);});
+    return()=>{cancelled=true;};
+  },[activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
   const aiAgentEnabled = me?.features?.ai_agent === true;
@@ -314,6 +333,34 @@ export default function Atendimento() {
     }
   }
 
+  async function addInternalNote(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(!active||!noteText.trim()||savingNote)return;
+    setSavingNote(true);setError('');setNotice('');
+    try{
+      const response=await fetch(`/api/conversations/${active.id}/notes`,{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body:JSON.stringify({body:noteText.trim()})
+      });
+      const payload=await response.json().catch(()=>null);
+      if(!response.ok){
+        setError('Não foi possível salvar a nota interna.');
+        return;
+      }
+      setNoteText('');
+      setNotes(current=>[{
+        id:payload?.data?.id??crypto.randomUUID(),
+        body:payload?.data?.body??noteText.trim(),
+        created_at:payload?.data?.created_at??new Date().toISOString(),
+        user:me?.userId?{id:me.userId,full_name:'Você'}:null
+      },...current]);
+      setNotice('Nota interna registrada.');
+    }finally{
+      setSavingNote(false);
+    }
+  }
+
   function applyQuickReply(reply: QuickReply) {
     setText(reply.body);
   }
@@ -411,7 +458,49 @@ export default function Atendimento() {
       </main>
 
       <aside className={styles.details}>
-        {active && <><span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span><h3>{active.contact?.name}</h3><p>{active.contact?.phone || 'Telefone não informado'}</p><p>{active.contact?.email || 'E-mail não informado'}</p><hr/><b>Responsável</b><div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div><hr/><b>Status do atendimento</b><div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div><hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p><hr/><b>Origem</b><p className={styles.channelLabel}>{active.contact?.source || 'Não identificada'}</p></>}
+        {active && <>
+          <span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span>
+          <h3>{active.contact?.name}</h3>
+          <p>{active.contact?.phone || 'Telefone não informado'}</p>
+          <p>{active.contact?.email || 'E-mail não informado'}</p>
+
+          <hr/>
+          <b>Responsável</b>
+          <div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div>
+
+          <hr/>
+          <b>Status do atendimento</b>
+          <div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div>
+
+          {(active.ai_summary||active.ai_next_action)&&<>
+            <hr/>
+            <b>Inteligência da conversa</b>
+            {active.ai_summary&&<div style={{marginTop:9,padding:10,border:'1px solid #e5e9e7',borderRadius:7,textAlign:'left',background:'#f8faf9'}}>
+              <strong style={{fontSize:11}}>Resumo IA</strong>
+              <p style={{marginTop:5,lineHeight:1.45,whiteSpace:'pre-wrap'}}>{active.ai_summary}</p>
+            </div>}
+            {active.ai_next_action&&<div style={{marginTop:7,padding:10,border:'1px solid #d8e8df',borderRadius:7,textAlign:'left',background:'#f0f8f4'}}>
+              <strong style={{fontSize:11}}>Próxima ação</strong>
+              <p style={{marginTop:5,lineHeight:1.45,whiteSpace:'pre-wrap'}}>{active.ai_next_action}</p>
+            </div>}
+          </>}
+
+          <hr/>
+          <b>Notas internas</b>
+          <form onSubmit={addInternalNote} style={{display:'grid',gap:7,marginTop:8,textAlign:'left'}}>
+            <textarea className="textarea" rows={3} value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Visível somente para a equipe..." maxLength={4000}/>
+            <button className="btn btn-secondary" disabled={savingNote||!noteText.trim()}>{savingNote?'Salvando...':'Adicionar nota'}</button>
+          </form>
+          <div style={{display:'grid',gap:6,marginTop:9,maxHeight:190,overflow:'auto',textAlign:'left'}}>
+            {notes.length?notes.map(note=><div key={note.id} style={{padding:'8px 9px',border:'1px solid #e8ece9',borderRadius:6,background:'#fff'}}>
+              <p style={{margin:0,whiteSpace:'pre-wrap',lineHeight:1.4}}>{note.body}</p>
+              <small className="muted">{Array.isArray(note.user)?note.user[0]?.full_name:note.user?.full_name||'Equipe'} · {new Date(note.created_at).toLocaleString('pt-BR')}</small>
+            </div>):<p className="muted">Nenhuma nota interna.</p>}
+          </div>
+
+          <hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p>
+          <hr/><b>Origem</b><p className={styles.channelLabel}>{active.contact?.source || 'Não identificada'}</p>
+        </>}
       </aside>
     </div>
   );

@@ -4,10 +4,23 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isWhatsAppWindowOpen, sendWhatsAppText } from '@/lib/server/meta';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
+const usageSchema=z.object({
+  provider:z.string().trim().max(80).optional().default('external'),
+  model:z.string().trim().max(160).optional().nullable(),
+  input_tokens:z.coerce.number().int().min(0).optional().default(0),
+  output_tokens:z.coerce.number().int().min(0).optional().default(0),
+  estimated_cost:z.coerce.number().min(0).optional().default(0),
+  request_id:z.string().trim().max(240).optional().nullable(),
+  metadata:z.record(z.unknown()).optional().default({})
+});
+
 const schema = z.object({
   tenant_id: z.string().uuid(),
   conversation_id: z.string().uuid(),
-  body: z.string().trim().min(1).max(4000)
+  body: z.string().trim().min(1).max(4000),
+  summary: z.string().trim().max(8000).optional().nullable(),
+  next_action: z.string().trim().max(2000).optional().nullable(),
+  usage: usageSchema.optional()
 });
 
 export async function POST(req: Request) {
@@ -82,15 +95,40 @@ export async function POST(req: Request) {
     }
 
     const now = new Date().toISOString();
-    await supabase
-      .from('conversations')
-      .update({
-        updated_at: now,
-        last_outbound_at: now,
-        first_response_at: conversation.first_response_at ?? now
-      })
+    const conversationPatch:Record<string,unknown>={
+      updated_at: now,
+      last_outbound_at: now,
+      first_response_at: conversation.first_response_at ?? now
+    };
+    if(input.summary!==undefined){
+      conversationPatch.ai_summary=input.summary||null;
+      conversationPatch.ai_summary_updated_at=now;
+    }
+    if(input.next_action!==undefined){
+      conversationPatch.ai_next_action=input.next_action||null;
+      conversationPatch.ai_summary_updated_at=now;
+    }
+
+    await supabase.from('conversations')
+      .update(conversationPatch)
       .eq('id', input.conversation_id)
       .eq('tenant_id', input.tenant_id);
+
+    if(input.usage){
+      const totalTokens=Number(input.usage.input_tokens??0)+Number(input.usage.output_tokens??0);
+      await supabase.from('ai_usage_logs').insert({
+        tenant_id:input.tenant_id,
+        conversation_id:input.conversation_id,
+        provider:input.usage.provider||'external',
+        model:input.usage.model??null,
+        input_tokens:Number(input.usage.input_tokens??0),
+        output_tokens:Number(input.usage.output_tokens??0),
+        total_tokens:totalTokens,
+        estimated_cost:Number(input.usage.estimated_cost??0),
+        request_id:input.usage.request_id??null,
+        metadata:input.usage.metadata??{}
+      });
+    }
 
     return NextResponse.json({
       data: { ...data, status: delivery, provider_message_id: providerMessageId },

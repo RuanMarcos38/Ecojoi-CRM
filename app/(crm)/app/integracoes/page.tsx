@@ -19,6 +19,8 @@ type Template = { id:string; name:string; language:string; category?:string|null
 type Version = { id:string; workflow_id?:string|null; workflow_name:string; version_number:number; created_at:string };
 type Log = { id:string; event_type:string; status:string; duration_ms?:number|null; error?:string|null; created_at:string };
 type Knowledge = { id:string; name:string; active:boolean; created_at:string };
+type AiUsage = { days:number; requests:number; input_tokens:number; output_tokens:number; total_tokens:number; estimated_cost:number; by_model?:Array<{name:string;requests:number;tokens:number;cost:number}> };
+type Retention = { attachment_retention_days:number };
 
 function statusLabel(ok?: boolean) { return ok ? 'Operacional' : 'Pendente'; }
 
@@ -29,26 +31,33 @@ export default function Integracoes() {
   const [logs,setLogs]=useState<Log[]>([]);
   const [knowledge,setKnowledge]=useState<Knowledge[]>([]);
   const [agent,setAgent]=useState<any>({});
+  const [aiUsage,setAiUsage]=useState<AiUsage>({days:30,requests:0,input_tokens:0,output_tokens:0,total_tokens:0,estimated_cost:0});
+  const [retention,setRetention]=useState<Retention>({attachment_retention_days:365});
   const [notice,setNotice]=useState('');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState('');
 
   async function load() {
-    const [hr,tr,nr,ar,kr]=await Promise.all([
+    const [hr,tr,nr,ar,kr,ur,rr]=await Promise.all([
       fetch('/api/integrations/health',{cache:'no-store'}),
       fetch('/api/integrations/meta/templates',{cache:'no-store'}),
       fetch('/api/integrations/n8n/operations',{cache:'no-store'}),
       fetch('/api/integrations/ai/settings',{cache:'no-store'}),
-      fetch('/api/integrations/ai/knowledge',{cache:'no-store'})
+      fetch('/api/integrations/ai/knowledge',{cache:'no-store'}),
+      fetch('/api/integrations/ai/usage?days=30',{cache:'no-store'}),
+      fetch('/api/integrations/storage/retention',{cache:'no-store'})
     ]);
-    const [hd,td,nd,ad,kd]=await Promise.all([
-      hr.json().catch(()=>null),tr.json().catch(()=>null),nr.json().catch(()=>null),ar.json().catch(()=>null),kr.json().catch(()=>null)
+    const [hd,td,nd,ad,kd,ud,rd]=await Promise.all([
+      hr.json().catch(()=>null),tr.json().catch(()=>null),nr.json().catch(()=>null),ar.json().catch(()=>null),kr.json().catch(()=>null),
+      ur.json().catch(()=>null),rr.json().catch(()=>null)
     ]);
     if(hr.ok) setHealth(hd?.data??{});
     if(tr.ok) setTemplates(td?.data??[]);
     if(nr.ok){setVersions(nd?.data?.versions??[]);setLogs(nd?.data?.logs??[]);}
     if(ar.ok) setAgent(ad?.data??{});
     if(kr.ok) setKnowledge(kd?.data??[]);
+    if(ur.ok) setAiUsage(ud?.data??aiUsage);
+    if(rr.ok) setRetention(rd?.data??retention);
   }
 
   useEffect(()=>{void load(); const timer=window.setInterval(()=>void load(),30000); return()=>window.clearInterval(timer);},[]);
@@ -104,6 +113,29 @@ export default function Integracoes() {
     if(r.ok){e.currentTarget.reset();setNotice('Conteúdo adicionado à base da IA.');await load();} else setError('Não foi possível adicionar o conteúdo.');
   }
 
+  async function cleanupAttachments(){
+    setBusy('retention');setError('');setNotice('');
+    const r=await fetch('/api/integrations/storage/retention',{method:'POST'});
+    const d=await r.json().catch(()=>null);
+    setBusy('');
+    if(r.ok){
+      setNotice(`Retenção processada: ${d?.data?.removed??0} arquivos expirados removidos; histórico das mensagens preservado.`);
+      await load();
+    }else setError('Não foi possível executar a limpeza de anexos.');
+  }
+
+  async function saveRetention(days:number){
+    setBusy('retention-save');setError('');setNotice('');
+    const r=await fetch('/api/settings/company',{
+      method:'PATCH',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({attachment_retention_days:days})
+    });
+    setBusy('');
+    if(r.ok){setRetention({attachment_retention_days:days});setNotice('Política de retenção atualizada.');}
+    else setError('Não foi possível atualizar a retenção.');
+  }
+
   async function restore(versionId:string){
     if(!confirm('Restaurar esta versão como um novo workflow no n8n?'))return;
     setBusy('restore');setError('');setNotice('');
@@ -134,6 +166,13 @@ export default function Integracoes() {
         <strong style={{fontSize:17}}>{statusLabel(ok)}</strong>
         <small className="muted">{detail}</small>
       </div>)}
+    </section>
+
+    <section className="report-grid" style={{marginTop:12}}>
+      <div><span>Chamadas IA · 30 dias</span><strong>{aiUsage.requests}</strong><small className="muted">respostas com telemetria</small></div>
+      <div><span>Tokens IA</span><strong>{aiUsage.total_tokens.toLocaleString('pt-BR')}</strong><small className="muted">{aiUsage.input_tokens.toLocaleString('pt-BR')} entrada · {aiUsage.output_tokens.toLocaleString('pt-BR')} saída</small></div>
+      <div><span>Custo estimado IA</span><strong>{Number(aiUsage.estimated_cost||0).toLocaleString('pt-BR',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:4})}</strong><small className="muted">informado pelo workflow/provedor</small></div>
+      <div><span>Retenção de anexos</span><strong>{retention.attachment_retention_days} dias</strong><small className="muted">mensagens permanecem no histórico</small></div>
     </section>
 
     <div className="settings-grid" style={{marginTop:12}}>
@@ -183,6 +222,24 @@ export default function Integracoes() {
         <div style={{display:'grid',gap:6,marginTop:12}}>
           {knowledge.map(k=><div className="setting-row" key={k.id}><span><FileText size={14}/> {k.name}</span><small className="muted">{k.active?'Ativo':'Inativo'}</small></div>)}
         </div>
+      </section>
+
+      <section className="card section">
+        <div className="automation-top">
+          <div><h3>Armazenamento e retenção</h3><p className="muted">Remove somente arquivos físicos vencidos; mensagens e auditoria permanecem.</p></div>
+          <ServerCog size={20}/>
+        </div>
+        <div className="form-grid">
+          <div className="field"><label>Manter anexos por</label><select className="select" value={String(retention.attachment_retention_days)} onChange={e=>void saveRetention(Number(e.target.value))} disabled={busy==='retention-save'}>
+            <option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option><option value="180">180 dias</option><option value="365">1 ano</option><option value="730">2 anos</option><option value="1825">5 anos</option>
+          </select></div>
+          <div className="field" style={{justifyContent:'end'}}><label>&nbsp;</label><button className="btn btn-secondary" type="button" onClick={()=>void cleanupAttachments()} disabled={busy==='retention'}><RotateCcw size={14}/>{busy==='retention'?'Processando...':'Executar limpeza agora'}</button></div>
+        </div>
+        {aiUsage.by_model&&aiUsage.by_model.length>0&&<div className="table-wrap" style={{marginTop:12,maxHeight:180}}>
+          <table className="table"><thead><tr><th>IA / modelo</th><th>Chamadas</th><th>Tokens</th><th>Custo est.</th></tr></thead><tbody>
+            {aiUsage.by_model.map(row=><tr key={row.name}><td>{row.name}</td><td>{row.requests}</td><td>{row.tokens.toLocaleString('pt-BR')}</td><td>{Number(row.cost||0).toLocaleString('pt-BR',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:4})}</td></tr>)}
+          </tbody></table>
+        </div>}
       </section>
 
       <section className="card section">
