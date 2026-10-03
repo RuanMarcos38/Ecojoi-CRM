@@ -9,6 +9,7 @@ const schema = z.object({
   stage: z.enum(['new','qualification','proposal','closing','won','lost']).default('new'),
   value: z.coerce.number().min(0).default(0),
   probability: z.coerce.number().int().min(0).max(100).default(10),
+  pipeline_stage_id:z.string().uuid().nullable().optional(),
   contact_id: z.string().uuid().optional().nullable()
 });
 
@@ -17,7 +18,7 @@ export async function GET() {
     const ctx = await requirePermission('deals.view');
     const supabase = await createClient();
     const { data, error } = await supabase.from('deals')
-      .select('id,title,stage,value,probability,contact_id,stage_changed_at,created_at,updated_at,contact:contacts(id,name,phone,email)')
+      .select('id,title,stage,pipeline_id,pipeline_stage_id,value,probability,contact_id,stage_changed_at,created_at,updated_at,contact:contacts(id,name,phone,email)')
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
       owner_id: ctx.userId,
       stage_changed_at: now
     }).select().single();
-    if (error) throw error;
+    if (error) {if(error.message?.includes('pipeline_stage_invalid'))return NextResponse.json({error:'pipeline_stage_invalid'},{status:409});throw error;}
     await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'deal.create', entity: 'deal', entityId: data.id, metadata: { stage: body.stage } });
     return NextResponse.json({ data }, { status: 201 });
   } catch (e) {

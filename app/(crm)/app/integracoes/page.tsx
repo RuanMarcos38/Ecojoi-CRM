@@ -1,5 +1,7 @@
 'use client';
 
+import MetaInboxPanel from '@/components/integrations/MetaInboxPanel';
+import KnowledgePanel from '@/components/integrations/KnowledgePanel';
 import { FormEvent, useEffect, useState } from 'react';
 import {
   Activity, Bot, CheckCircle2, CloudCog, Database, Download, FileText, MessageCircle,
@@ -103,6 +105,7 @@ export default function Integracoes() {
     e.preventDefault();setBusy('agent');setError('');setNotice('');
     const fd=new FormData(e.currentTarget);
     const body={
+      enabled:fd.get('enabled')==='on',
       name:String(fd.get('name')??''),
       tone:String(fd.get('tone')??'professional'),
       objective:String(fd.get('objective')??''),
@@ -113,14 +116,6 @@ export default function Integracoes() {
     const r=await fetch('/api/integrations/ai/settings',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     setBusy('');
     if(r.ok){setNotice('Configuração do agente atualizada.');await load();} else setError('Não foi possível salvar o agente.');
-  }
-
-  async function addKnowledge(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();setBusy('knowledge');setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
-    const r=await fetch('/api/integrations/ai/knowledge',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:fd.get('name'),text:fd.get('text')})});
-    setBusy('');
-    if(r.ok){e.currentTarget.reset();setNotice('Conteúdo adicionado à base da IA.');await load();} else setError('Não foi possível adicionar o conteúdo.');
   }
 
   async function cleanupAttachments(){
@@ -207,7 +202,9 @@ export default function Integracoes() {
           <div><h3>Agente IA</h3><p className="muted">Comportamento e handoff para atendimento humano.</p></div>
           <Bot size={20}/>
         </div>
-        <form onSubmit={saveAgent} style={{display:'grid',gap:10}}>
+        <form key={JSON.stringify(agent)} onSubmit={saveAgent} style={{display:'grid',gap:10}}>
+          <label><input type="checkbox" name="enabled" defaultChecked={agent.enabled!==false}/> Permitir atendimento automático pela IA</label>
+          <p className="muted">Ao desativar, conversas automáticas retornam à equipe e envios pendentes da IA são cancelados.</p>
           <div className="form-grid">
             <div className="field"><label>Nome do agente</label><input className="input" name="name" defaultValue={agent.name??''}/></div>
             <div className="field"><label>Tom</label><select className="select" name="tone" defaultValue={agent.tone??'professional'}><option value="professional">Profissional</option><option value="friendly">Amigável</option><option value="consultative">Consultivo</option><option value="direct">Direto</option></select></div>
@@ -222,17 +219,9 @@ export default function Integracoes() {
         </form>
       </section>
 
-      <section className="card section">
-        <div className="automation-top"><div><h3>Base de conhecimento</h3><p className="muted">Conteúdo real enviado ao agente n8n em cada atendimento.</p></div><Database size={20}/></div>
-        <form onSubmit={addKnowledge} style={{display:'grid',gap:9}}>
-          <div className="field"><label>Nome</label><input className="input" name="name" required placeholder="Ex.: Catálogo 2026"/></div>
-          <div className="field"><label>Conteúdo</label><textarea className="textarea" name="text" required rows={5} placeholder="Cole FAQ, catálogo, políticas ou informações comerciais..."/></div>
-          <button className="btn btn-primary" disabled={busy==='knowledge'}><UploadCloud size={14}/>Adicionar à base</button>
-        </form>
-        <div style={{display:'grid',gap:6,marginTop:12}}>
-          {knowledge.map(k=><div className="setting-row" key={k.id}><span><FileText size={14}/> {k.name}</span><small className="muted">{k.active?'Ativo':'Inativo'}</small></div>)}
-        </div>
-      </section>
+      <KnowledgePanel/>
+      <MetaInboxPanel/>
+
 
       <section className="card section">
         <div className="automation-top">

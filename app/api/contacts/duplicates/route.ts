@@ -4,13 +4,14 @@ import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { audit } from '@/lib/server/audit';
+import { phoneKey } from '@/lib/crm/phone';
 
 const mergeSchema=z.object({
   source_id:z.string().uuid(),
   target_id:z.string().uuid()
 });
 
-function normalizePhone(value?:string|null){return String(value??'').replace(/\D/g,'');}
+function normalizePhone(value?:string|null){return phoneKey(value) ?? '';}
 function normalizeEmail(value?:string|null){return String(value??'').trim().toLowerCase();}
 
 export async function GET(){

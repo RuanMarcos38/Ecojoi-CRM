@@ -14,7 +14,7 @@ export async function GET() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('ai_knowledge_documents')
-      .select('id,name,mime_type,active,created_at,updated_at')
+      .select('id,name,draft_name,mime_type,active,published_version,published_at,created_at,updated_at')
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -36,11 +36,13 @@ export async function POST(request: Request) {
         tenant_id: ctx.tenantId,
         name: input.name,
         mime_type: 'text/plain',
-        extracted_text: input.text,
-        active: true,
+        draft_text: input.text,
+        draft_name: input.name,
+        published_version: 0,
+        active: false,
         created_by: ctx.userId
       })
-      .select('id,name,active,created_at')
+      .select('id,name,draft_name,active,published_version,updated_at,created_at')
       .single();
     if (error) throw error;
     return NextResponse.json({ data }, { status: 201 });

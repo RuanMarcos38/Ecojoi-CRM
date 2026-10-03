@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
-import { sendWhatsAppTemplate } from '@/lib/server/meta';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 import { audit } from '@/lib/server/audit';
+import { canSendHumanMessage } from '@/lib/crm/concurrency';
+import { requireFeature } from '@/lib/server/feature';
 
 const schema = z.object({
   name: z.string().trim().min(1).max(512),
@@ -15,19 +16,21 @@ const schema = z.object({
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await requirePermission('conversations.send');
+    await requireFeature(ctx,'atendimento');
     const { id } = await params;
     const input = schema.parse(await request.json());
     const supabase = await createClient();
 
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,contact:contacts(phone,consent_status)')
+      .select('id,status,assigned_to,attendance_state,channel,contact:contacts(phone,consent_status)')
       .eq('tenant_id', ctx.tenantId)
       .eq('id', id)
       .maybeSingle();
 
     if (conversationError) throw conversationError;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (!canSendHumanMessage({userId:ctx.userId,assignedTo:conversation.assigned_to,state:conversation.attendance_state,status:conversation.status})) return NextResponse.json({error:'conversation_not_assigned_to_you'},{status:409});
     if (conversation.channel !== 'whatsapp') return NextResponse.json({ error: 'whatsapp_only' }, { status: 409 });
 
     const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
@@ -51,38 +54,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .single();
     if (messageError) throw messageError;
 
-    const sent = await sendWhatsAppTemplate(ctx.tenantId, contact?.phone, input.name, input.language, input.components);
-    let delivery = 'queued';
-    let queueId: string | null = null;
-
-    if (sent.delivered) {
-      delivery = 'sent';
-      await supabase
-        .from('messages')
-        .update({ status: 'sent', provider_message_id: sent.providerMessageId ?? null })
-        .eq('tenant_id', ctx.tenantId)
-        .eq('id', message.id);
-    } else {
-      queueId = await enqueueOutbound({
-        tenantId: ctx.tenantId,
-        conversationId: id,
-        messageId: message.id,
-        channel: 'whatsapp',
-        payload: {
-          kind: 'template',
-          to: contact?.phone ?? '',
-          name: input.name,
-          language: input.language,
-          components: input.components
-        },
-        error: sent.reason ?? null
-      });
-    }
+    const delivery='queued';
+    const queueId=await enqueueOutbound({
+      tenantId:ctx.tenantId,conversationId:id,messageId:message.id,channel:'whatsapp',
+      payload:{kind:'template',to:contact?.phone??'',name:input.name,language:input.language,components:input.components,actor:'human',actorUserId:ctx.userId}
+    });
 
     const now = new Date().toISOString();
     await supabase
       .from('conversations')
-      .update({ last_outbound_at: now, first_response_at: now, updated_at: now })
+      .update({ updated_at: now })
       .eq('tenant_id', ctx.tenantId)
       .eq('id', id);
 

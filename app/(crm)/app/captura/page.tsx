@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, Code2, ExternalLink, FormInput, MessageSquare, Plus, Webhook } from 'lucide-react';
+import WebhookPanel from '@/components/integrations/WebhookPanel';
 
 type FormItem={id:string;slug:string;name:string;title:string;active:boolean};
 type Booking={id:string;slug:string;name:string;duration_minutes:number;active:boolean};
@@ -44,7 +45,8 @@ export default function Captura(){
 
   async function createForm(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const form=e.currentTarget;
+    const fd=new FormData(form);
     const r=await fetch('/api/capture/forms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       slug:String(fd.get('slug')??'').trim().toLowerCase(),
       name:String(fd.get('name')??'').trim(),
@@ -53,35 +55,38 @@ export default function Captura(){
       source:String(fd.get('source')??'Formulário').trim(),
       active:true
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Formulário criado.');await load();}else setError('Não foi possível criar o formulário.');
+    if(r.ok){form.reset();setNotice('Formulário criado.');await load();}else setError('Não foi possível criar o formulário.');
   }
 
   async function createBooking(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const form=e.currentTarget;
+    const fd=new FormData(form);
     const r=await fetch('/api/capture/booking-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       slug:String(fd.get('slug')??'').trim().toLowerCase(),
       name:String(fd.get('name')??'').trim(),
       duration_minutes:Number(fd.get('duration_minutes')??30),
       active:true
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Link de agendamento criado.');await load();}else setError('Não foi possível criar o agendamento.');
+    if(r.ok){form.reset();setNotice('Link de agendamento criado.');await load();}else setError('Não foi possível criar o agendamento.');
   }
 
   async function createWidget(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const form=e.currentTarget;
+    const fd=new FormData(form);
     const r=await fetch('/api/capture/chat-widgets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       name:String(fd.get('name')??'').trim(),
       welcome_message:String(fd.get('welcome_message')??'').trim(),
       active:true
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Chat criado.');await load();}else setError('Não foi possível criar o chat.');
+    if(r.ok){form.reset();setNotice('Chat criado.');await load();}else setError('Não foi possível criar o chat.');
   }
 
   async function createWebhook(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const form=e.currentTarget;
+    const fd=new FormData(form);
     const events=String(fd.get('events')??'lead.created').split(',').map(v=>v.trim()).filter(Boolean);
     const r=await fetch('/api/integrations/webhooks',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       name:String(fd.get('name')??'').trim(),
@@ -89,7 +94,7 @@ export default function Captura(){
       events
     })});
     const d=await r.json().catch(()=>null);
-    if(r.ok){e.currentTarget.reset();setNotice(`Webhook criado. Segredo de assinatura: ${d?.data?.signing_secret??'gerado'} — copie e armazene com segurança.`);await load();}
+    if(r.ok){form.reset();setNotice(`Webhook criado. Segredo de assinatura: ${d?.data?.signing_secret??'gerado'} — copie e armazene com segurança.`);await load();}
     else setError('Não foi possível criar o webhook.');
   }
 
@@ -143,16 +148,7 @@ export default function Captura(){
         <div style={{display:'grid',gap:7,marginTop:12}}>{widgets.map(w=><div className="setting-row" key={w.id}><span><strong>{w.name}</strong><small className="muted" style={{display:'block'}}>{chatUrl(w.public_key)}</small></span><a className="btn btn-secondary" target="_blank" rel="noreferrer" href={chatUrl(w.public_key)}><ExternalLink size={13}/></a></div>)}</div>
       </section>
 
-      <section className="card section">
-        <div className="automation-top"><div><h3>Webhooks de saída</h3><p className="muted">Envie eventos do CRM para ERP, n8n ou qualquer sistema externo.</p></div><Webhook size={20}/></div>
-        <form onSubmit={createWebhook} style={{display:'grid',gap:8}}>
-          <div className="field"><label>Nome</label><input className="input" name="name" required/></div>
-          <div className="field"><label>Endpoint HTTPS</label><input className="input" type="url" name="endpoint_url" required placeholder="https://..."/></div>
-          <div className="field"><label>Eventos separados por vírgula</label><input className="input" name="events" defaultValue="lead.created,deal.won"/></div>
-          <button className="btn btn-primary"><Code2 size={14}/>Criar webhook</button>
-        </form>
-        <div style={{display:'grid',gap:7,marginTop:12}}>{hooks.map(h=><div className="setting-row" key={h.id}><span><strong>{h.name}</strong><small className="muted" style={{display:'block'}}>{h.events.join(', ')}</small></span><span className={h.active?'badge':'badge badge-off'}>{h.last_status||'Ativo'}</span></div>)}</div>
-      </section>
+      <WebhookPanel />
     </div>
   </div>;
 }
