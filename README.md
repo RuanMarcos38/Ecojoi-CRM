@@ -92,7 +92,11 @@ O cPanel deve apontar a aplicação para:
 - Node.js: **20.9 ou superior**
 - Branch de deploy: `cpanel-deploy`
 
-O arquivo `.cpanel.yml` apenas toca `tmp/restart.txt` após o checkout para solicitar reinício do Passenger/Node. Não é necessário rodar `npm install` nem recompilar no cPanel quando a branch `cpanel-deploy` estiver sendo usada.
+O repositório gerenciado no cPanel (`repositories/Ecojoi-CRM-app`) deve usar a branch `cpanel-deploy`. Após **Update from Remote**, use **Deploy HEAD Commit**: `.cpanel.yml` copia o pacote para `repositories/Ecojoi-CRM` e solicita o reinício do Passenger. As variáveis de ambiente e o `node_modules` do ambiente virtual são preservados. Não é necessário rodar `npm install` nem recompilar no cPanel.
+
+O pacote mantém o Next.js e suas dependências em `runtime/`, separado do link `node_modules` gerenciado pelo CloudLinux. O arquivo de inicialização continua sendo `server.js`. A configuração pública do Supabase é lida a cada requisição no servidor e entregue ao navegador; assim, o build não depende de credenciais no GitHub. A chave de serviço permanece exclusivamente no servidor.
+
+Antes de publicar a branch, o workflow verifica tipos, testes e a inicialização do pacote com variáveis definidas apenas em runtime. Sem configuração, rotas protegidas retornam 503 em vez de carregar uma interface quebrada.
 
 ## Integrações externas
 O canal `internal` do Atendimento funciona com o banco do CRM. WhatsApp, Instagram, Facebook e e-mail estão modelados como canais, porém o envio externo real exige credenciais/API oficial do respectivo provedor. Enquanto um provedor externo não estiver configurado, o backend bloqueia o envio em vez de simular sucesso.

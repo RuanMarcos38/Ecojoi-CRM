@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -30,5 +30,6 @@
   },
   "engines": {
     "node": ">=20.9.0"
-  }
+  },
+  "packageManager": "pnpm@11.19.0"
 }

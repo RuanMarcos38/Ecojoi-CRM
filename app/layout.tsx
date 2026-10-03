@@ -8,13 +8,16 @@ import './crm-enterprise-refinement.css';
 import type { Metadata } from 'next';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
 import { PwaRegister } from '@/components/PwaRegister';
+import { connection } from 'next/server';
 
 export const metadata: Metadata = {
   title: 'Ecojoi CRM',
   description: 'CRM multiempresa seguro para atendimento, vendas e gestão comercial.'
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // cPanel supplies configuration at startup, after the standalone build.
+  await connection();
   const runtimeEnv = {
     supabaseUrl: getSupabaseUrl(),
     supabaseAnonKey: getSupabaseAnonKey()
