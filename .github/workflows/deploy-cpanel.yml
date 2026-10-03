@@ -34,7 +34,12 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate types and tests
+        run: |
+          pnpm run typecheck
+          pnpm test
 
       - name: Build Next.js
         run: pnpm run build
@@ -45,13 +50,13 @@ jobs:
           set -euo pipefail
           test -f .next/standalone/server.js
           rm -rf deploy
-          mkdir -p deploy/.next deploy/tmp
+          mkdir -p deploy/runtime/.next deploy/tmp
 
           # Next standalone carries the exact runtime dependencies used by this build.
-          rsync -a .next/standalone/ deploy/
-          rsync -a .next/static/ deploy/.next/static/
+          rsync -a .next/standalone/ deploy/runtime/
+          rsync -a .next/static/ deploy/runtime/.next/static/
           if [ -d public ]; then
-            rsync -a public/ deploy/public/
+            rsync -a public/ deploy/runtime/public/
           fi
 
           # Operational/support files do not participate in runtime resolution.
@@ -60,6 +65,16 @@ jobs:
               rsync -a "$item" deploy/
             fi
           done
+
+          # Isolate standalone dependencies from CloudLinux's node_modules symlink.
+          cp scripts/cpanel-start.cjs deploy/server.js
+
+      - name: Verify standalone runtime without build-time credentials
+        run: node scripts/smoke-standalone.mjs deploy/runtime
+
+      - name: Record deployment revision
+        shell: bash
+        run: |
 
           printf '%s\n' "$GITHUB_SHA" > deploy/DEPLOY_SOURCE_SHA
           printf '%s\n' "$GITHUB_SHA" > deploy/tmp/restart.txt

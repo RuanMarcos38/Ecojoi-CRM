@@ -18,7 +18,9 @@ export async function middleware(request:NextRequest){
   let response=NextResponse.next({request});
   const url=getSupabaseUrl();
   const anon=getSupabaseAnonKey();
-  if(!url||!anon)return response;
+  if(!url||!anon){
+    return NextResponse.json({error:'service_unavailable',message:'O CRM está temporariamente indisponível. A configuração de conexão precisa ser revisada.'},{status:503,headers:{'cache-control':'no-store'}});
+  }
 
   const supabase=createServerClient(url,anon,{
     cookies:{

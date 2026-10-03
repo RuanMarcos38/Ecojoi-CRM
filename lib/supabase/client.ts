@@ -12,8 +12,8 @@ declare global {
 
 export function createClient() {
   const runtimeEnv = typeof window !== 'undefined' ? window.__ECOJOI_PUBLIC_ENV__ : undefined;
-  const url = runtimeEnv?.supabaseUrl || (typeof process !== 'undefined' ? process.env['NEXT_PUBLIC_SUPABASE_URL'] : undefined);
-  const anon = runtimeEnv?.supabaseAnonKey || (typeof process !== 'undefined' ? process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] : undefined);
+  const url = runtimeEnv?.supabaseUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = runtimeEnv?.supabaseAnonKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) throw new Error('Supabase environment variables are missing.');
   return createBrowserClient(url, anon);
 }
