@@ -44,7 +44,7 @@ export default function Vendas(){
 
   async function createProduct(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const r=await fetch('/api/products',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       sku:String(fd.get('sku')??'').trim()||null,
       name:String(fd.get('name')??'').trim(),
@@ -54,13 +54,13 @@ export default function Vendas(){
       cost:String(fd.get('cost')??'').trim()?Number(fd.get('cost')):null,
       active:true
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Produto/serviço adicionado ao catálogo.');await load();}
+    if(r.ok){formElement.reset();setNotice('Produto/serviço adicionado ao catálogo.');await load();}
     else setError('Não foi possível salvar o produto.');
   }
 
   async function createProposal(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const product=products.find(p=>p.id===String(fd.get('product_id')??''));
     const quantity=Number(fd.get('quantity')??1);
     const unitPrice=Number(fd.get('unit_price')??product?.price??0);
@@ -78,7 +78,7 @@ export default function Vendas(){
         discount:0
       }]
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Proposta criada.');await load();}
+    if(r.ok){formElement.reset();setNotice('Proposta criada.');await load();}
     else setError('Não foi possível criar a proposta.');
   }
 
@@ -104,7 +104,7 @@ export default function Vendas(){
 
   async function createSequence(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const r=await fetch('/api/sequences',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       name:String(fd.get('name')??'').trim(),
       description:String(fd.get('description')??'').trim()||null,
@@ -114,20 +114,20 @@ export default function Vendas(){
         {delay_minutes:Number(fd.get('delay2')??1440),action_type:String(fd.get('action2')??'whatsapp'),template_body:String(fd.get('body2')??'').trim()||null}
       ]
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Sequência criada.');await load();}
+    if(r.ok){formElement.reset();setNotice('Sequência criada.');await load();}
     else setError('Não foi possível criar a sequência.');
   }
 
   async function createSurvey(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const r=await fetch('/api/surveys',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       name:String(fd.get('name')??'').trim(),
       survey_type:String(fd.get('survey_type')??'nps'),
       question:String(fd.get('question')??'').trim(),
       active:true
     })});
-    if(r.ok){e.currentTarget.reset();setNotice('Pesquisa criada.');await load();}
+    if(r.ok){formElement.reset();setNotice('Pesquisa criada.');await load();}
     else setError('Não foi possível criar a pesquisa.');
   }
 

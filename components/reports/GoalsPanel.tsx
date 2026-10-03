@@ -26,7 +26,7 @@ export function GoalsPanel(){
 
   async function create(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const r=await fetch('/api/goals',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
       user_id:String(fd.get('user_id')??'')||null,
       period_start:String(fd.get('period_start')??''),
@@ -35,7 +35,7 @@ export function GoalsPanel(){
       deals_target:Number(fd.get('deals_target')??0),
       leads_target:Number(fd.get('leads_target')??0)
     })});
-    if(r.ok){setNotice('Meta criada.');e.currentTarget.reset();await load();}else setError('Não foi possível criar a meta.');
+    if(r.ok){setNotice('Meta criada.');formElement.reset();await load();}else setError('Não foi possível criar a meta.');
   }
 
   const today=new Date();

@@ -76,7 +76,7 @@ export default function Relacionamento(){
 
   async function createCase(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const dateValue=(name:string)=>{
       const value=String(fd.get(name)??'').trim();
       return value?new Date(value+'T12:00:00').toISOString():null;
@@ -97,7 +97,7 @@ export default function Relacionamento(){
         notes:String(fd.get('notes')??'').trim()||null
       })
     });
-    if(response.ok){e.currentTarget.reset();setNotice('Caso de relacionamento criado.');await load();}
+    if(response.ok){formElement.reset();setNotice('Caso de relacionamento criado.');await load();}
     else setError('Não foi possível criar o caso.');
   }
 
@@ -110,7 +110,7 @@ export default function Relacionamento(){
 
   async function createPlaybook(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const lines=String(fd.get('questions')??'').split('\n').map(v=>v.trim()).filter(Boolean);
     const questions=lines.map((label,index)=>({
       field_key:'q_'+(index+1),
@@ -129,13 +129,13 @@ export default function Relacionamento(){
         questions
       })
     });
-    if(response.ok){e.currentTarget.reset();setNotice('Playbook criado.');await load();}
+    if(response.ok){formElement.reset();setNotice('Playbook criado.');await load();}
     else setError('Não foi possível criar o playbook.');
   }
 
   async function runPlaybook(e:FormEvent<HTMLFormElement>,playbook:Playbook){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const responses=Object.fromEntries((playbook.sales_playbook_questions??[]).map(q=>[q.field_key,String(fd.get('q__'+q.field_key)??'').trim()]));
     const response=await fetch('/api/playbooks/run',{
       method:'POST',headers:{'content-type':'application/json'},
@@ -153,7 +153,7 @@ export default function Relacionamento(){
 
   async function createProspect(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const response=await fetch('/api/prospects',{
       method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({
@@ -171,7 +171,7 @@ export default function Relacionamento(){
         enrichment:{}
       })
     });
-    if(response.ok){e.currentTarget.reset();setNotice('Prospect cadastrado.');await load();}
+    if(response.ok){formElement.reset();setNotice('Prospect cadastrado.');await load();}
     else setError('Não foi possível cadastrar o prospect.');
   }
 

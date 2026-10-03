@@ -9,10 +9,10 @@ export default function PublicForm({params}:{params:Promise<{tenant:string;slug:
   useEffect(()=>{params.then(p=>{setRoute(p);fetch(`/api/public/forms/${p.tenant}/${p.slug}`,{cache:'no-store'}).then(r=>r.json()).then(d=>setForm(d.data??null)).catch(()=>setError('Formulário indisponível.'));});},[params]);
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();if(!route)return;setError('');setMessage('');
-    const fd=new FormData(e.currentTarget);const body:Object=Object.fromEntries(fd.entries());
+    const formElement=e.currentTarget;const fd=new FormData(formElement);const body:Object=Object.fromEntries(fd.entries());
     const r=await fetch(`/api/public/forms/${route.tenant}/${route.slug}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json().catch(()=>null);
-    if(r.ok){setMessage(d?.data?.message??'Enviado com sucesso.');e.currentTarget.reset();}else setError('Não foi possível enviar.');
+    if(r.ok){setMessage(d?.data?.message??'Enviado com sucesso.');formElement.reset();}else setError('Não foi possível enviar.');
   }
   return <main style={{minHeight:'100vh',display:'grid',placeItems:'center',padding:20,background:'#f3f5f4'}}>
     <section style={{width:'min(560px,100%)',background:'#fff',border:'1px solid #dfe5e1',borderRadius:10,padding:24}}>
