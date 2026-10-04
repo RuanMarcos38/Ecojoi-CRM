@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, X } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -34,8 +34,9 @@ const groups:{title:string;items:Item[]}[]=[
   {title:'Plataforma',items:[{href:'/app/admin/empresas',label:'Empresas SaaS',Icon:ShieldCheck,roles:['super_admin']}] }
 ];
 export function Sidebar(){
-  const pathname=usePathname(); const [me,setMe]=useState<Me|null>(null);
+  const pathname=usePathname(); const [me,setMe]=useState<Me|null>(null); const [menuOpen,setMenuOpen]=useState(false);
   useEffect(()=>{fetch('/api/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>setMe(d?.data??null)).catch(()=>{})},[]);
+  useEffect(()=>{setMenuOpen(false)},[pathname]);
   function allowed(i:Item){if(!me)return i.href==='/app';if(i.roles&&!i.roles.includes(me.role))return false;if(i.permission&&!me.permissions.includes(i.permission))return false;if(i.feature&&me.features[i.feature]!==true)return false;return true}
-  return <aside className="sidebar"><div className="brand"><div className="brand-mark"></div><div><div className="brand-name">ecojoi</div><span className="brand-sub">CRM • SEJA ECO COM ECOJOI</span></div></div><nav className="nav">{groups.map(g=>{const items=g.items.filter(allowed);return items.length?<div key={g.title}><div className="nav-title">{g.title}</div>{items.map(({href,label,Icon})=><Link className={pathname===href?'active':''} key={href} href={href}><Icon/>{label}</Link>)}</div>:null})}</nav></aside>
+  return <aside className={`sidebar${menuOpen?' mobile-open':''}`}><div className="sidebar-mobile-head"><div className="sidebar-mobile-brand"><div className="brand-mark"></div><span>ecojoi CRM</span></div><button type="button" className="sidebar-mobile-toggle" aria-label={menuOpen?'Fechar menu':'Abrir menu'} aria-expanded={menuOpen} aria-controls="crm-primary-nav" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?<X size={18}/>:<Menu size={18}/>}</button></div><div className="brand"><div className="brand-mark"></div><div><div className="brand-name">ecojoi</div><span className="brand-sub">CRM • SEJA ECO COM ECOJOI</span></div></div><nav className="nav" id="crm-primary-nav">{groups.map(g=>{const items=g.items.filter(allowed);return items.length?<div key={g.title}><div className="nav-title">{g.title}</div>{items.map(({href,label,Icon})=><Link className={pathname===href?'active':''} key={href} href={href}><Icon/>{label}</Link>)}</div>:null})}</nav></aside>
 }
