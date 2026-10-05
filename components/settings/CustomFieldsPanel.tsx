@@ -33,7 +33,7 @@ export function CustomFieldsPanel({enabled}:{enabled:boolean}){
 
   async function create(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const fieldType=String(fd.get('field_type')??'text');
     const options=String(fd.get('options')??'').split(',').map(v=>v.trim()).filter(Boolean);
     const r=await fetch('/api/custom-fields',{
@@ -51,7 +51,7 @@ export function CustomFieldsPanel({enabled}:{enabled:boolean}){
       })
     });
     if(r.ok){
-      e.currentTarget.reset();
+      formElement.reset();
       setNotice('Campo personalizado salvo.');
       await load();
     }else{

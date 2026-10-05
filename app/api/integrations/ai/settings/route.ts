@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { audit } from '@/lib/server/audit';
 
 const schema = z.object({
+  enabled: z.boolean().optional(),
   name: z.string().trim().max(80).optional(),
   tone: z.enum(['professional','friendly','consultative','direct']).optional(),
   objective: z.string().trim().max(1000).optional(),
@@ -35,11 +36,13 @@ export async function PATCH(request: Request) {
     const ctx = await requirePermission('settings.manage');
     const input = schema.parse(await request.json());
     const supabase = await createClient();
+    const {data:current,error:readError}=await supabase.from('tenant_settings').select('ai_agent_config').eq('tenant_id',ctx.tenantId).maybeSingle();
+    if(readError)throw readError;
     const { error } = await supabase
       .from('tenant_settings')
       .upsert({
         tenant_id: ctx.tenantId,
-        ai_agent_config: input,
+        ai_agent_config: {...(current?.ai_agent_config??{}),...input},
         updated_at: new Date().toISOString()
       }, { onConflict: 'tenant_id' });
     if (error) throw error;

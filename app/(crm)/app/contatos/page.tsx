@@ -90,7 +90,7 @@ export default function Contatos(){
 
   async function submit(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setSaving(true);setError('');setNotice('');
-    const form=new FormData(event.currentTarget);
+    const formElement=event.currentTarget;const form=new FormData(formElement);
     const tagId=String(form.get('tag_id')??'').trim();
     const custom_fields=Object.fromEntries(
       customFields.map(field=>{
@@ -120,7 +120,7 @@ export default function Contatos(){
 
   async function createOrganization(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setError('');setNotice('');
-    const form=new FormData(event.currentTarget);
+    const formElement=event.currentTarget;const form=new FormData(formElement);
     const response=await fetch('/api/organizations',{
       method:'POST',
       headers:{'content-type':'application/json'},
@@ -137,7 +137,7 @@ export default function Contatos(){
       })
     });
     if(response.ok){
-      event.currentTarget.reset();
+      formElement.reset();
       setOpenOrg(false);
       setNotice('Empresa cadastrada e disponível para vincular aos contatos.');
       await load();

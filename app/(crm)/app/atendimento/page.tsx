@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
 import { createClient } from '@/lib/supabase/client';
+import { canSendHumanMessage } from '@/lib/crm/concurrency';
 
 type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = {
@@ -192,6 +193,7 @@ export default function Atendimento() {
   },[activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
+  const ownsAttendance=!!active&&canSendHumanMessage({userId:me?.userId??'',assignedTo:active.assigned_to??null,state:active.attendance_state,status:active.status});
   const aiAgentEnabled = me?.features?.ai_agent === true;
   const quickMatches = useMemo(() => {
     if (!text.startsWith('/')) return [];
@@ -208,7 +210,7 @@ export default function Atendimento() {
 
   async function send(e: FormEvent) {
     e.preventDefault();
-    if (!text.trim() || !active || active.attendance_state !== 'in_service') return;
+    if (!text.trim() || !active || !ownsAttendance) return;
     setError(''); setNotice('');
     const r = await fetch(`/api/conversations/${active.id}/messages`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: text.trim() })
@@ -230,7 +232,7 @@ export default function Atendimento() {
   }
 
   async function sendFile(file: File, durationMs?: number) {
-    if (!active || active.attendance_state !== 'in_service') return;
+    if (!active || !ownsAttendance) return;
     setSendingMedia(true); setError(''); setNotice('');
     const form = new FormData();
     form.append('file', file);
@@ -263,7 +265,7 @@ export default function Atendimento() {
   }
 
   async function startRecording() {
-    if (!active || active.attendance_state !== 'in_service') return;
+    if (!active || !ownsAttendance) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('Seu navegador não permite gravação de áudio neste dispositivo.');
       return;
@@ -310,13 +312,14 @@ export default function Atendimento() {
     try {
       const r = await fetch(`/api/conversations/${active.id}/attendance`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
       const d = await r.json();
-      if (!r.ok) { setError(d.error === 'attendance_state_update_failed' ? 'Não foi possível alterar a fila.' : 'Você não possui permissão para alterar esta fila.'); return; }
-      setQueue(state); setActiveId(active.id); await load();
+      if (!r.ok) { setError(r.status===409?'A conversa mudou ou já está com outro atendente. Atualize a fila.':'Não foi possível alterar esta fila.'); await load(true); return; }
+      if(d.notice==='ai_bridge_unavailable_handoff')setNotice('Agente indisponível. A conversa voltou para a fila humana.');
+      setQueue(d.data?.attendance_state??state); setActiveId(active.id); await load();
     } finally { setChangingState(false); }
   }
 
   async function sendTemplate(template: WhatsAppTemplate) {
-    if (!active) return;
+    if (!active || !ownsAttendance) return;
     setError(''); setNotice('');
     const r = await fetch(`/api/conversations/${active.id}/template`, {
       method: 'POST',
@@ -428,9 +431,9 @@ export default function Atendimento() {
             <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(active.contact?.name)}</span><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)} · {active.contact?.phone ?? active.contact?.email ?? 'sem identificação'} · {active.assignee?.full_name ?? 'sem responsável'}</span></div></div>
             <div className={styles.headerActions}>
               {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
-              {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
+              {ownsAttendance && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
               {active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
-              {active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
+              {ownsAttendance && active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
               <button className={styles.roundButton} aria-label="Mais opções"><MoreVertical size={18}/></button>
             </div>
           </header>
@@ -439,10 +442,11 @@ export default function Atendimento() {
           {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
           {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
 
+          {(error || notice) && <div role={error?'alert':'status'} className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
           <div className={styles.messages}>{active.messages?.length ? active.messages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
 
-          {active.attendance_state === 'in_service' ? <>
-            {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
+          {ownsAttendance ? <>
+
             <form className={styles.composer} onSubmit={send}>
               <div className={styles.composerTools}>
                 <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} aria-label="Emoji"><Smile size={22}/></button>
@@ -453,7 +457,7 @@ export default function Atendimento() {
               {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<input value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem ou /atalho" /></div>}
               {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} aria-label="Parar gravação"><Square size={18}/></button> : text.trim() ? <button className={styles.sendButton} type="submit" aria-label="Enviar"><Send size={19}/></button> : <button type="button" className={styles.sendButton} onClick={startRecording} disabled={sendingMedia} aria-label="Gravar áudio"><Mic size={20}/></button>}
             </form>
-          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
+          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : active.attendance_state==='in_service'?'Outro atendente é responsável por esta conversa.':'Assuma o atendimento para responder.'}</span></div>}
         </> : <div className={styles.chatPlaceholder}><div className={styles.placeholderIcon}><ImageIcon size={28}/></div><h3>Ecojoi Atendimento</h3><p>Selecione uma conversa para iniciar.</p></div>}
       </main>
 

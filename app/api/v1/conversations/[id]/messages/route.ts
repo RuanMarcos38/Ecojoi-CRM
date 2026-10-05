@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticatePublicApi } from '@/lib/server/public-api';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendWhatsAppText } from '@/lib/server/meta';
+import { isWhatsAppWindowOpen } from '@/lib/server/meta';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
 const schema=z.object({body:z.string().trim().min(1).max(4000)});
@@ -29,9 +29,12 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
     const input=schema.parse(await req.json());
     const admin=createAdminClient();
     const {data:conversation}=await admin.from('conversations')
-      .select('id,channel,contact:contacts(phone)')
+      .select('id,status,channel,attendance_state,last_inbound_at,contact:contacts(phone)')
       .eq('tenant_id',auth.tenantId).eq('id',id).maybeSingle();
     if(!conversation)return NextResponse.json({error:'conversation_not_found'},{status:404});
+
+    if(conversation.status==='closed'||conversation.attendance_state!=='in_service')return NextResponse.json({error:'conversation_not_in_human_service'},{status:409});
+    if(conversation.channel==='whatsapp'&&!isWhatsAppWindowOpen(conversation.last_inbound_at))return NextResponse.json({error:'whatsapp_window_closed'},{status:409});
 
     const initialStatus=conversation.channel==='internal'?'sent':'queued';
     const {data:message,error}=await admin.from('messages').insert({
@@ -42,16 +45,8 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
     let delivery=initialStatus;
     if(conversation.channel==='whatsapp'){
       const contact=Array.isArray(conversation.contact)?conversation.contact[0]:conversation.contact;
-      const sent=await sendWhatsAppText(auth.tenantId,contact?.phone,input.body);
-      if(sent.delivered){
-        delivery='sent';
-        await admin.from('messages').update({status:'sent',provider_message_id:sent.providerMessageId??null}).eq('id',message.id);
-      }else if(contact?.phone){
-        await enqueueOutbound({
-          tenantId:auth.tenantId,conversationId:id,messageId:message.id,channel:'whatsapp',
-          payload:{kind:'text',to:contact.phone,body:input.body},error:sent.reason
-        });
-      }
+      await enqueueOutbound({tenantId:auth.tenantId,conversationId:id,messageId:message.id,channel:'whatsapp',
+        payload:{kind:'text',to:contact?.phone??'',body:input.body,actor:'api'}});
     }
     await admin.from('conversations').update({updated_at:new Date().toISOString()}).eq('tenant_id',auth.tenantId).eq('id',id);
     return NextResponse.json({data:{...message,status:delivery},delivery},{status:201});

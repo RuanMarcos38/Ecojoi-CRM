@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { processMetaWebhook, verifyMetaSignature } from '@/lib/server/meta';
+import { verifyMetaSignature } from '@/lib/server/meta';
+
+import { enqueueMetaWebhook } from '@/lib/server/meta-inbox';
 
 export const runtime = 'nodejs';
 
@@ -19,14 +21,15 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const raw = await request.text();
+  if(Buffer.byteLength(raw)>1048576)return NextResponse.json({error:'payload_too_large'},{status:413});
   if (!verifyMetaSignature(raw, request.headers.get('x-hub-signature-256'))) {
     return NextResponse.json({ error: 'invalid_meta_signature' }, { status: 401 });
   }
 
   try {
     const payload = JSON.parse(raw);
-    await processMetaWebhook(payload);
-    return NextResponse.json({ received: true });
+    const queue = await enqueueMetaWebhook(payload);
+    return NextResponse.json({ received: true, ...queue });
   } catch {
     return NextResponse.json({ error: 'meta_webhook_processing_failed' }, { status: 500 });
   }

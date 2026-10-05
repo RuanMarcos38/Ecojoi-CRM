@@ -27,6 +27,7 @@ type Deal = {
   id: string;
   title: string;
   stage: string;
+  pipeline_id?:string|null;pipeline_stage_id?:string|null;
   value: number;
   probability: number;
   contact_id?: string | null;
@@ -46,7 +47,7 @@ type Rule = {
   enabled: boolean;
 };
 
-const stages = [
+const legacyStages = [
   ['new', 'Novo'],
   ['qualification', 'Qualificação'],
   ['proposal', 'Proposta'],
@@ -54,7 +55,7 @@ const stages = [
   ['won', 'Ganho'],
   ['lost', 'Perdido']
 ] as const;
-const stageLabel = Object.fromEntries(stages) as Record<string, string>;
+const legacyStageLabel = Object.fromEntries(legacyStages) as Record<string, string>;
 const openStages = new Set(['new', 'qualification', 'proposal', 'closing']);
 const staleMinutes = 48 * 60;
 type FocusFilter = 'all' | 'stalled' | 'no-contact' | 'automation';
@@ -90,7 +91,16 @@ function isStalled(deal: Deal) {
   return openStages.has(deal.stage) && elapsedMinutes(deal.stage_changed_at) >= staleMinutes;
 }
 
+type StageRow={id:string;name:string;pipeline_id:string;semantic_stage:string;active:boolean};
 export default function Pipeline() {
+  const [stageRows,setStageRows]=useState<StageRow[]>([]);
+  const [pipelineId,setPipelineId]=useState('');
+  const [pipelines,setPipelines]=useState<Array<{id:string;name:string;is_default:boolean}>>([]);
+  const stages:Array<readonly[string,string]>=stageRows.length?stageRows.filter(row=>row.active).map(row=>[row.id,row.name]):[...legacyStages];
+  const stageLabel:Record<string,string>={...legacyStageLabel,...Object.fromEntries(stages)};
+  function stageIdentity(deal:Deal){return deal.pipeline_stage_id??stageRows.find(row=>row.active&&row.semantic_stage===deal.stage)?.id??deal.stage;}
+  function semanticStage(stage:string){return stageRows.find(row=>row.id===stage)?.semantic_stage??stage;}
+
   const [deals, setDeals] = useState<Deal[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -104,15 +114,18 @@ export default function Pipeline() {
   const [stageFilter, setStageFilter] = useState('all');
   const [focusFilter, setFocusFilter] = useState<FocusFilter>('all');
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
 
-  async function load() {
-    const [dr, cr, rr] = await Promise.all([
+  async function load(selectedPipeline?:string) {
+    const [dr, cr, rr, sr] = await Promise.all([
       fetch('/api/deals', { cache: 'no-store' }),
       fetch('/api/contacts', { cache: 'no-store' }),
-      fetch('/api/pipeline-rules', { cache: 'no-store' })
+      fetch('/api/pipeline-rules', { cache: 'no-store' }),
+      fetch('/api/pipeline-stages'+((selectedPipeline??pipelineId)?'?pipeline_id='+(selectedPipeline??pipelineId):''),{cache:'no-store'})
     ]);
-    const [dd, cd, rd] = await Promise.all([dr.json(), cr.json(), rr.json()]);
-    if (dr.ok) setDeals(dd.data ?? []); else setError('Não foi possível carregar o pipeline.');
+    const [dd, cd, rd, sd] = await Promise.all([dr.json(), cr.json(), rr.json(),sr.json()]);
+    if(sr.ok){setStageRows(sd.data??[]);setPipelineId(sd.pipeline_id);setPipelines(sd.pipelines??[]);}
+    if (dr.ok) setDeals(sr.ok?(dd.data??[]).filter((deal:Deal)=>deal.pipeline_id===sd.pipeline_id||(!deal.pipeline_id&&sd.pipelines?.find((p:{id:string;is_default:boolean})=>p.id===sd.pipeline_id)?.is_default)):dd.data??[]); else setError('Não foi possível carregar o pipeline.');
     if (cr.ok) setContacts(cd.data ?? []);
     if (rr.ok) { setRules(rd.data ?? []); setRulesAllowed(true); }
     else if (rr.status === 403) { setRulesAllowed(false); setRules([]); }
@@ -156,20 +169,20 @@ export default function Pipeline() {
         .join(' ')
         .toLowerCase();
       const matchesQuery = !term || searchable.includes(term);
-      const matchesStage = stageFilter === 'all' || deal.stage === stageFilter;
+      const matchesStage = stageFilter === 'all' || stageIdentity(deal) === stageFilter;
       const matchesFocus = focusFilter === 'all'
         || (focusFilter === 'stalled' && isStalled(deal))
         || (focusFilter === 'no-contact' && !deal.contact_id)
         || (focusFilter === 'automation' && (enabledByStage[deal.stage]?.length ?? 0) > 0);
       return matchesQuery && matchesStage && matchesFocus;
     });
-  }, [deals, enabledByStage, focusFilter, query, stageFilter]);
+  }, [deals, enabledByStage, focusFilter, query, stageFilter,stageRows]);
 
   const groupedDeals = useMemo(() => {
     const map = Object.fromEntries(stages.map(([stage]) => [stage, [] as Deal[]])) as Record<string, Deal[]>;
-    for (const deal of filteredDeals) (map[deal.stage] ??= []).push(deal);
+    for (const deal of filteredDeals) (map[stageIdentity(deal)] ??= []).push(deal);
     return map;
-  }, [filteredDeals]);
+  }, [filteredDeals,stageRows]);
 
   const selectedDeal = useMemo(() => {
     return deals.find(deal => deal.id === selectedDealId) ?? filteredDeals[0] ?? null;
@@ -183,6 +196,8 @@ export default function Pipeline() {
     const fd = new FormData(e.currentTarget);
     const body: Record<string, FormDataEntryValue> = Object.fromEntries(fd.entries());
     if (!body.contact_id) delete body.contact_id;
+    const stageRow=stageRows.find(row=>row.id===body.stage);
+    if(stageRow){body.pipeline_stage_id=stageRow.id;body.stage=stageRow.semantic_stage;}
     const r = await fetch('/api/deals', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const payload = await r.json().catch(() => null);
     if (r.ok) {
@@ -195,11 +210,20 @@ export default function Pipeline() {
   }
 
   async function move(id: string, stage: string) {
+    if (movingId) return;
     setError(''); setNotice('');
-    const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stage }) });
-    if (!r.ok) setError('Sem permissão para alterar esta oportunidade.');
-    else setNotice(`Oportunidade movida para ${stageLabel[stage]}. O tempo da nova etapa foi reiniciado.`);
-    await load();
+    setMovingId(id);
+    try {
+      const current = deals.find(deal => deal.id === id);
+      if(!current)return;
+      const stageRow=stageRows.find(row=>row.id===stage);
+      const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stage:stageRow?.semantic_stage??stage,...(stageRow?{pipeline_stage_id:stageRow.id}:{}),expected_updated_at: current.updated_at }) });
+      if (!r.ok) setError(r.status === 409 ? 'Esta oportunidade foi alterada por outro usuário. A visão foi atualizada; tente novamente.' : 'Não foi possível mover a oportunidade. A etapa foi preservada.');
+      else setNotice(`Oportunidade movida para ${stageLabel[stage]}. O tempo da nova etapa foi reiniciado.`);
+      await load();
+    } catch {
+      setError('Falha de conexão. Atualize o pipeline para conferir a etapa antes de tentar novamente.');
+    } finally { setMovingId(null); }
   }
 
   async function remove(id: string) {
@@ -346,20 +370,23 @@ export default function Pipeline() {
       </>}
     </section>}
 
+    <label>Pipeline<select className="select" value={pipelineId} onChange={event=>{setStageFilter("all");void load(event.target.value);}}>{pipelines.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></label>
+    <p className="muted">Arraste uma oportunidade para a etapa desejada ou use o seletor do cartão.</p>
     <div className="pipeline-workspace">
-      <div className="kanban kanban-six pipeline-kanban">
+      <div className="kanban pipeline-kanban" style={{gridAutoFlow:"column",gridTemplateColumns:"none",gridAutoColumns:"minmax(240px,1fr)"}}>
         {stages.map(([stage, label]) => {
           const stageDeals = groupedDeals[stage] ?? [];
           const stageValue = stageDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0);
-          return <div className={`column stage-${stage}`} key={stage}>
+          return <div className={`column stage-${semanticStage(stage)}`} key={stage} onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect="move";}} onDrop={event=>{event.preventDefault();const id=event.dataTransfer.getData("application/x-ecojoi-deal");if(id)void move(id,stage);}}>
             <div className="column-head"><div><span>{label}</span><small>{formatCurrency(stageValue)}</small></div><span className="badge">{stageDeals.length}</span></div>
-            {(enabledByStage[stage]?.length ?? 0) > 0 && <div className="stage-automation-hint"><Bot size={13}/>{enabledByStage[stage].length} automação{enabledByStage[stage].length === 1 ? '' : 'ões'}</div>}
+            {(enabledByStage[semanticStage(stage)]?.length ?? 0) > 0 && <div className="stage-automation-hint"><Bot size={13}/>{enabledByStage[stage].length} automação{enabledByStage[stage].length === 1 ? '' : 'ões'}</div>}
             {stageDeals.length === 0 && <div className="column-empty">Nenhuma oportunidade</div>}
             {stageDeals.map(deal => {
               const stageRules = enabledByStage[stage] ?? [];
               const currentElapsedMinutes = elapsedMinutes(deal.stage_changed_at);
               const nextRule = stageRules.find(rule => rule.wait_minutes > currentElapsedMinutes);
               return <article
+                draggable={!movingId} onDragStart={event=>{event.dataTransfer.setData("application/x-ecojoi-deal",deal.id);event.dataTransfer.effectAllowed="move";}}
                 className={`deal pipeline-deal ${selectedDeal?.id === deal.id ? 'pipeline-deal-selected' : ''} ${isStalled(deal) ? 'pipeline-deal-stalled' : ''}`}
                 key={deal.id}
                 tabIndex={0}
@@ -372,7 +399,7 @@ export default function Pipeline() {
                 <div className="deal-value">{formatCurrency(deal.value)}</div>
                 {isStalled(deal) && <div className="deal-alert"><AlertTriangle size={13}/><span>Sem avanço há {elapsedLabel(deal.stage_changed_at)}</span></div>}
                 {nextRule ? <div className="deal-next-message"><MessageSquareText size={13}/><span>Próximo envio em {waitLabel(Math.max(1, nextRule.wait_minutes - currentElapsedMinutes))}</span></div> : stageRules.length > 0 ? <div className="deal-next-message completed"><Bot size={13}/><span>Regra de tempo alcançada</span></div> : null}
-                <select className="select compact-select" value={deal.stage} onClick={event => event.stopPropagation()} onChange={event => { event.stopPropagation(); void move(deal.id, event.target.value); }} aria-label="Mover oportunidade entre etapas">{stages.map(([value, stageName]) => <option key={value} value={value}>{stageName}</option>)}</select>
+                <select className="select compact-select" disabled={!!movingId} value={stageIdentity(deal)} onClick={event => event.stopPropagation()} onChange={event => { event.stopPropagation(); void move(deal.id, event.target.value); }} aria-label="Mover oportunidade entre etapas">{stages.map(([value, stageName]) => <option key={value} value={value}>{stageName}</option>)}</select>
               </article>;
             })}
           </div>;
@@ -394,12 +421,12 @@ export default function Pipeline() {
             <div><UserRound size={16}/><span>{selectedDeal.contact?.name ?? 'Sem contato vinculado'}</span></div>
             <div><Phone size={16}/><span>{selectedDeal.contact?.phone ?? 'Telefone não informado'}</span></div>
             <div><Mail size={16}/><span>{selectedDeal.contact?.email ?? 'E-mail não informado'}</span></div>
-            <div><CalendarClock size={16}/><span>{stageLabel[selectedDeal.stage]} há {elapsedLabel(selectedDeal.stage_changed_at)}</span></div>
+            <div><CalendarClock size={16}/><span>{stageLabel[stageIdentity(selectedDeal)]} há {elapsedLabel(selectedDeal.stage_changed_at)}</span></div>
           </div>
           {isStalled(selectedDeal) && <div className="inspector-alert"><AlertTriangle size={16}/><span>Essa oportunidade precisa de uma próxima ação para sair da inércia.</span></div>}
           <div className="inspector-stage-control">
             <label>Etapa atual</label>
-            <select className="select" value={selectedDeal.stage} onChange={event => void move(selectedDeal.id, event.target.value)}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+            <select className="select" disabled={!!movingId} value={stageIdentity(selectedDeal)} onChange={event => void move(selectedDeal.id, event.target.value)}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           </div>
           <div className="inspector-rules">
             <div className="inspector-section-title"><Bot size={15}/><strong>Automações da etapa</strong></div>

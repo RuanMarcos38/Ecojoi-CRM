@@ -34,7 +34,7 @@ export function ApiKeysPanel({enabled}:{enabled:boolean}){
 
   async function createKey(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setError('');setNewKey('');
-    const form=new FormData(event.currentTarget);
+    const formElement=event.currentTarget;const form=new FormData(formElement);
     const mode=String(form.get('scope_mode')??'leads');
     const response=await fetch('/api/settings/api-keys',{
       method:'POST',headers:{'content-type':'application/json'},
@@ -46,7 +46,7 @@ export function ApiKeysPanel({enabled}:{enabled:boolean}){
     });
     const payload=await response.json();
     if(!response.ok){setError('Não foi possível gerar a chave de integração.');return;}
-    setNewKey(payload.data?.api_key??'');event.currentTarget.reset();await load();
+    setNewKey(payload.data?.api_key??'');formElement.reset();await load();
   }
 
   async function revoke(id:string){

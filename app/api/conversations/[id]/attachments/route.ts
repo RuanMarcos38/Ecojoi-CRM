@@ -3,8 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
-import { isWhatsAppWindowOpen, sendWhatsAppMedia } from '@/lib/server/meta';
+import { isWhatsAppWindowOpen } from '@/lib/server/meta';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
+import { canSendHumanMessage } from '@/lib/crm/concurrency';
 
 const BUCKET = 'ecojoi-message-attachments';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
@@ -46,13 +47,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const supabase = await createClient();
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
+      .select('id,status,assigned_to,channel,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
 
     if (conversationError) throw conversationError;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (!canSendHumanMessage({userId:ctx.userId,assignedTo:conversation.assigned_to,state:conversation.attendance_state,status:conversation.status})) return NextResponse.json({error:'conversation_not_assigned_to_you'},{status:409});
     if (conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'conversation_not_in_human_service' }, { status: 409 });
     }
@@ -94,41 +96,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let providerMessageId: string | null = null;
     let queueId: string | null = null;
 
-    if (conversation.channel === 'whatsapp') {
-      const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
-      const sent = await sendWhatsAppMedia(ctx.tenantId, contact?.phone, file, caption || null);
-      if (sent.delivered) {
-        delivery = 'sent';
-        providerMessageId = sent.providerMessageId ?? null;
-        await supabase
-          .from('messages')
-          .update({ status: delivery, provider_message_id: providerMessageId })
-          .eq('tenant_id', ctx.tenantId)
-          .eq('id', data.id);
-      } else {
-        queueId = await enqueueOutbound({
-          tenantId: ctx.tenantId,
-          conversationId: id,
-          messageId: data.id,
-          channel: 'whatsapp',
-          payload: {
-            kind: 'media',
-            to: contact?.phone ?? '',
-            storagePath: path,
-            fileName: file.name,
-            mime: file.type,
-            caption: caption || null
-          },
-          error: sent.reason ?? null
-        });
-      }
+    if(conversation.channel==='whatsapp'){
+      const contact=Array.isArray(conversation.contact)?conversation.contact[0]:conversation.contact;
+      queueId=await enqueueOutbound({tenantId:ctx.tenantId,conversationId:id,messageId:data.id,channel:'whatsapp',payload:{kind:'media',to:contact?.phone??'',storagePath:path,fileName:file.name,mime:file.type,caption:caption||null,actor:'human',actorUserId:ctx.userId}});
     }
 
     const now = new Date().toISOString();
     await supabase.from('conversations').update({
       updated_at: now,
-      last_outbound_at: now,
-      first_response_at: conversation.first_response_at ?? now
+      ...(delivery==='sent'?{last_outbound_at:now,first_response_at:conversation.first_response_at??now}:{})
     }).eq('id', id).eq('tenant_id', ctx.tenantId);
 
     await audit({

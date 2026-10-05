@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { integrationError } from '@/lib/server/integration-policy';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
 import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
@@ -46,49 +47,28 @@ async function graphRequest(path: string, init?: RequestInit) {
   headers.set('Authorization', `Bearer ${token}`);
   if (init?.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
 
-  const response = await fetch(graphUrl(path), { ...init, headers, cache: 'no-store' });
+  const response = await fetch(graphUrl(path), { ...init, headers, cache: 'no-store', signal: init?.signal ?? AbortSignal.timeout(12000) });
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
     const message = data?.error?.message || `Meta Graph API ${response.status}`;
-    throw new Error(message);
+    const failure=new Error(message);failure.name='MetaProviderError';throw failure;
   }
   return data;
 }
 
-async function tenantByAsset(
+export async function tenantByMetaAsset(
   column: 'meta_phone_number_id' | 'meta_page_id' | 'meta_instagram_account_id',
   id?: string | null
 ) {
   if (!id) return null;
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from('tenant_settings')
     .select('tenant_id')
-    .eq(column, id)
-    .limit(1)
-    .maybeSingle();
-  return data?.tenant_id ?? null;
-}
-
-async function claimEvent(tenantId: string, eventKey: string, eventType: string, metadata: Record<string, unknown> = {}) {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from('integration_events')
-    .insert({
-      tenant_id: tenantId,
-      provider: 'meta',
-      event_key: eventKey,
-      event_type: eventType,
-      payload_meta: metadata
-    })
-    .select('id')
-    .maybeSingle();
-
-  if (!error && data?.id) return true;
-  if ((error as any)?.code === '23505') return false;
-  if (error) throw error;
-  return false;
+    .eq(column,id).limit(2);
+  if(error)throw error;if((data?.length??0)>1)throw new Error('meta_asset_ambiguous');
+  return data?.[0]?.tenant_id??null;
 }
 
 export async function getTenantMetaStatus(tenantId: string) {
@@ -127,9 +107,9 @@ async function wabaIdForTenant(tenantId: string) {
 }
 
 export function isWhatsAppWindowOpen(lastInboundAt?: string | null) {
-  if (!lastInboundAt) return true;
+  if (!lastInboundAt) return false;
   const ts = new Date(lastInboundAt).getTime();
-  if (!Number.isFinite(ts)) return true;
+  if (!Number.isFinite(ts)) return false;
   return Date.now() - ts <= 24 * 60 * 60 * 1000;
 }
 
@@ -151,7 +131,7 @@ export async function sendWhatsAppText(tenantId: string, to: string | null | und
     });
     return { delivered: true as const, providerMessageId: data?.messages?.[0]?.id ?? null };
   } catch (error) {
-    return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_send_failed' };
+    return { delivered: false as const, reason: error instanceof Error&&error.name==='MetaProviderError'?'meta_provider_rejected':integrationError(error) };
   }
 }
 
@@ -192,7 +172,7 @@ export async function sendWhatsAppMedia(
 
     return { delivered: true as const, providerMessageId: sent?.messages?.[0]?.id ?? null };
   } catch (error) {
-    return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_media_send_failed' };
+    return { delivered: false as const, reason: error instanceof Error&&error.name==='MetaProviderError'?'meta_provider_rejected':integrationError(error) };
   }
 }
 
@@ -225,7 +205,7 @@ export async function sendWhatsAppTemplate(
     });
     return { delivered: true as const, providerMessageId: data?.messages?.[0]?.id ?? null };
   } catch (error) {
-    return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_template_send_failed' };
+    return { delivered: false as const, reason: error instanceof Error&&error.name==='MetaProviderError'?'meta_provider_rejected':integrationError(error) };
   }
 }
 
@@ -322,26 +302,23 @@ async function notifyAutomaticConversation(tenantId: string, conversationId?: st
   });
 }
 
-async function processWhatsAppValue(value: any) {
+async function processWhatsAppValue(value: any, expectedTenant?:string) {
   const phoneNumberId = value?.metadata?.phone_number_id;
-  const tenantId = await tenantByAsset('meta_phone_number_id', phoneNumberId);
-  if (!tenantId) return;
+  const tenantId = await tenantByMetaAsset('meta_phone_number_id', phoneNumberId);
+  if (!tenantId || (expectedTenant && tenantId!==expectedTenant)) throw new Error('meta_asset_not_available_for_tenant');
 
   const admin = createAdminClient();
 
   for (const status of value?.statuses ?? []) {
-    if (!status?.id) continue;
-    await admin
-      .from('messages')
-      .update({ status: status.status ?? 'sent' })
-      .eq('tenant_id', tenantId)
-      .eq('provider_message_id', status.id);
+    if (!status?.id || !['sent','delivered','read','failed'].includes(status.status)) continue;
+    const allowed=status.status==='read'?['queued','sent','delivered']:status.status==='delivered'?['queued','sent']:['queued','sent'];
+    const {error:statusError}=await admin.from('messages').update({status:status.status})
+      .eq('tenant_id',tenantId).eq('provider_message_id',status.id).in('status',allowed);
+    if(statusError)throw statusError;
   }
 
   for (const message of value?.messages ?? []) {
     if (!message?.id || !message?.from) continue;
-    const fresh = await claimEvent(tenantId, message.id, 'whatsapp_message', { phone_number_id: phoneNumberId });
-    if (!fresh) continue;
 
     const waContact = (value?.contacts ?? []).find((item: any) => item?.wa_id === message.from);
     const displayName = waContact?.profile?.name ?? null;
@@ -370,7 +347,7 @@ async function processWhatsAppValue(value: any) {
         attachment = { ...stored, name: mediaNode.filename || defaultName };
         body = body || mediaNode.caption || (type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : attachment.name || 'Arquivo recebido');
       } catch {
-        body = body || (type === 'audio' ? 'Mensagem de voz recebida' : 'Mídia recebida pelo WhatsApp');
+        throw new Error('inbound_media_storage_failed');
       }
     }
 
@@ -402,12 +379,10 @@ function fieldsToObject(fieldData: any[]) {
   return out;
 }
 
-async function processLeadgen(pageId: string, leadgenId: string, raw: any) {
-  const tenantId = await tenantByAsset('meta_page_id', pageId);
-  if (!tenantId) return;
+async function processLeadgen(pageId: string, leadgenId: string, raw: any, expectedTenant?:string) {
+  const tenantId = await tenantByMetaAsset('meta_page_id', pageId);
+  if (!tenantId || (expectedTenant && tenantId!==expectedTenant)) throw new Error('meta_asset_not_available_for_tenant');
 
-  const fresh = await claimEvent(tenantId, leadgenId, 'meta_leadgen', { page_id: pageId });
-  if (!fresh) return;
 
   const data = await graphRequest(`${leadgenId}?fields=created_time,field_data,form_id,ad_id,adset_id,campaign_id,platform`);
   const fields = fieldsToObject(data?.field_data ?? []);
@@ -445,18 +420,16 @@ async function fetchMetaPersonName(id: string) {
   }
 }
 
-async function processMessagingEntry(object: string, entry: any) {
+async function processMessagingEntry(object: string, entry: any, expectedTenant?:string) {
   const isInstagram = object === 'instagram';
   const assetId = entry?.id;
-  const tenantId = await tenantByAsset(isInstagram ? 'meta_instagram_account_id' : 'meta_page_id', assetId);
-  if (!tenantId) return;
+  const tenantId = await tenantByMetaAsset(isInstagram ? 'meta_instagram_account_id' : 'meta_page_id', assetId);
+  if (!tenantId || (expectedTenant && tenantId!==expectedTenant)) throw new Error('meta_asset_not_available_for_tenant');
 
   for (const event of entry?.messaging ?? []) {
     const providerId = event?.message?.mid;
     const senderId = event?.sender?.id;
-    if (!providerId || !senderId) continue;
-    const fresh = await claimEvent(tenantId, providerId, isInstagram ? 'instagram_message' : 'facebook_message', { asset_id: assetId });
-    if (!fresh) continue;
+    if (!providerId || !senderId || event?.message?.is_echo) continue;
 
     const name = await fetchMetaPersonName(senderId);
     const received = await ingestLead({
@@ -476,13 +449,13 @@ async function processMessagingEntry(object: string, entry: any) {
   }
 }
 
-export async function processMetaWebhook(payload: any) {
+export async function processMetaWebhook(payload: any, expectedTenant?:string) {
   const object = String(payload?.object ?? '');
 
   if (object === 'whatsapp_business_account') {
     for (const entry of payload?.entry ?? []) {
       for (const change of entry?.changes ?? []) {
-        if (change?.field === 'messages') await processWhatsAppValue(change.value);
+        if (change?.field === 'messages') await processWhatsAppValue(change.value,expectedTenant);
       }
     }
     return;
@@ -492,15 +465,15 @@ export async function processMetaWebhook(payload: any) {
     for (const entry of payload?.entry ?? []) {
       for (const change of entry?.changes ?? []) {
         if (change?.field === 'leadgen' && change?.value?.leadgen_id) {
-          await processLeadgen(String(entry.id), String(change.value.leadgen_id), change.value);
+          await processLeadgen(String(entry.id), String(change.value.leadgen_id), change.value,expectedTenant);
         }
       }
-      await processMessagingEntry(object, entry);
+      await processMessagingEntry(object, entry,expectedTenant);
     }
     return;
   }
 
   if (object === 'instagram') {
-    for (const entry of payload?.entry ?? []) await processMessagingEntry(object, entry);
+    for (const entry of payload?.entry ?? []) await processMessagingEntry(object, entry,expectedTenant);
   }
 }

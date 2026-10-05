@@ -4,8 +4,9 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
-import { isWhatsAppWindowOpen, sendWhatsAppText } from '@/lib/server/meta';
+import { isWhatsAppWindowOpen } from '@/lib/server/meta';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
+import { canSendHumanMessage } from '@/lib/crm/concurrency';
 
 const schema = z.object({ body: z.string().min(1).max(4000) });
 
@@ -19,12 +20,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: conversation } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
+      .select('id,status,assigned_to,channel,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
 
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (!canSendHumanMessage({userId:ctx.userId,assignedTo:conversation.assigned_to,state:conversation.attendance_state,status:conversation.status})) return NextResponse.json({error:'conversation_not_assigned_to_you'},{status:409});
     if (conversation.attendance_state === 'automatic') {
       return NextResponse.json({ error: 'conversation_in_automatic_mode' }, { status: 409 });
     }
@@ -56,27 +58,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let providerMessageId: string | null = null;
     let queueId: string | null = null;
 
-    if (conversation.channel === 'whatsapp') {
-      const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
-      const sent = await sendWhatsAppText(ctx.tenantId, contact?.phone, body.body);
-      if (sent.delivered) {
-        delivery = 'sent';
-        providerMessageId = sent.providerMessageId ?? null;
-        await supabase
-          .from('messages')
-          .update({ status: delivery, provider_message_id: providerMessageId })
-          .eq('tenant_id', ctx.tenantId)
-          .eq('id', data.id);
-      } else {
-        queueId = await enqueueOutbound({
-          tenantId: ctx.tenantId,
-          conversationId: id,
-          messageId: data.id,
-          channel: 'whatsapp',
-          payload: { kind: 'text', to: contact?.phone ?? '', body: body.body },
-          error: sent.reason ?? null
-        });
-      }
+    if(conversation.channel==='whatsapp'){
+      const contact=Array.isArray(conversation.contact)?conversation.contact[0]:conversation.contact;
+      queueId=await enqueueOutbound({tenantId:ctx.tenantId,conversationId:id,messageId:data.id,channel:'whatsapp',payload:{kind:'text',to:contact?.phone??'',body:body.body,actor:'human',actorUserId:ctx.userId}});
     }
 
     const now = new Date().toISOString();
@@ -84,8 +68,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .from('conversations')
       .update({
         updated_at: now,
-        last_outbound_at: now,
-        first_response_at: conversation.first_response_at ?? now
+        ...(delivery==='sent'?{last_outbound_at:now,first_response_at:conversation.first_response_at??now}:{})
       })
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId);

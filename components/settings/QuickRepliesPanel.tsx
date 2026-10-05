@@ -20,7 +20,7 @@ export function QuickRepliesPanel({enabled}:{enabled:boolean}){
 
   async function save(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const formElement=e.currentTarget;const fd=new FormData(formElement);
     const r=await fetch('/api/quick-replies',{
       method:'POST',
       headers:{'content-type':'application/json'},
@@ -30,7 +30,7 @@ export function QuickRepliesPanel({enabled}:{enabled:boolean}){
         body:String(fd.get('body')??'').trim()
       })
     });
-    if(r.ok){e.currentTarget.reset();setNotice('Resposta rápida salva.');await load();}
+    if(r.ok){formElement.reset();setNotice('Resposta rápida salva.');await load();}
     else setError('Não foi possível salvar a resposta rápida.');
   }
 

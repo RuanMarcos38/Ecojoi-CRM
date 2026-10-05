@@ -5,28 +5,32 @@ import { requirePermission } from '@/lib/auth/context';
 import { audit } from '@/lib/server/audit';
 
 const patch = z.object({
+  pipeline_stage_id:z.string().uuid().nullable().optional(),
   title: z.string().min(2).max(180).optional(),
   stage: z.enum(['new','qualification','proposal','closing','won','lost']).optional(),
   value: z.coerce.number().min(0).optional(),
   probability: z.coerce.number().int().min(0).max(100).optional()
+  ,expected_updated_at: z.string().datetime({ offset: true }).optional()
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await requirePermission('deals.update');
     const { id } = await params;
-    const body = patch.parse(await req.json());
+    const { expected_updated_at, ...body } = patch.parse(await req.json());
     const supabase = await createClient();
-    const { data: current } = await supabase.from('deals').select('id,title,stage,contact_id,owner_id').eq('id', id).eq('tenant_id', ctx.tenantId).maybeSingle();
+    const { data: current, error: readError } = await supabase.from('deals').select('id,title,stage,pipeline_stage_id,contact_id,owner_id,updated_at').eq('id', id).eq('tenant_id', ctx.tenantId).maybeSingle();
+    if (readError) throw readError;
     if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (expected_updated_at && expected_updated_at !== current.updated_at) return NextResponse.json({ error: 'deal_changed_reload' }, { status: 409 });
 
     const now = new Date().toISOString();
     const changes: Record<string, unknown> = { ...body, updated_at: now };
-    if (body.stage && body.stage !== current.stage) changes.stage_changed_at = now;
+    if ((body.stage && body.stage !== current.stage) || (body.pipeline_stage_id && body.pipeline_stage_id!==current.pipeline_stage_id)) changes.stage_changed_at = now;
 
-    const { data, error } = await supabase.from('deals').update(changes).eq('id', id).eq('tenant_id', ctx.tenantId).select().maybeSingle();
-    if (error) throw error;
-    if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    const { data, error } = await supabase.from('deals').update(changes).eq('id', id).eq('tenant_id', ctx.tenantId).eq('updated_at', current.updated_at).select().maybeSingle();
+    if (error) {if(error.message?.includes('pipeline_stage_invalid'))return NextResponse.json({error:'pipeline_stage_invalid'},{status:409});throw error;}
+    if (!data) return NextResponse.json({ error: 'deal_changed_reload' }, { status: 409 });
     if(body.stage==='won'&&current.stage!=='won'){
       try{
         const {data:existing}=await supabase.from('customer_success_cases')
@@ -54,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'deal.update', entity: 'deal', entityId: id, metadata: { previous_stage: current.stage, stage: body.stage ?? current.stage } });
+    await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'deal.update', entity: 'deal', entityId: id, metadata: { previous_stage: current.stage, stage: data.stage, previous_pipeline_stage_id: current.pipeline_stage_id, pipeline_stage_id: data.pipeline_stage_id } });
     return NextResponse.json({ data });
   } catch (e) {
     if (e instanceof Response) return e;

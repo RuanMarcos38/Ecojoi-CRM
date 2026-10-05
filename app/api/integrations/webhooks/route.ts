@@ -5,6 +5,7 @@ import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { audit } from '@/lib/server/audit';
+import { validateWebhookUrl } from '@/lib/server/webhook-transport';
 
 const schema=z.object({
   name:z.string().trim().min(2).max(120),
@@ -31,6 +32,8 @@ export async function POST(req:Request){
   try{
     const ctx=await requirePermission('settings.manage');
     const input=schema.parse(await req.json());
+    try { validateWebhookUrl(input.endpoint_url); }
+    catch { return NextResponse.json({error:'webhook_https_public_endpoint_required'},{status:400}); }
     const signingSecret=randomBytes(32).toString('base64url');
     const supabase=await createClient();
     const {data,error}=await supabase.from('webhook_subscriptions')
