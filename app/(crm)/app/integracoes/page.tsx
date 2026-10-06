@@ -5,6 +5,7 @@ import {
   Activity, Bot, CheckCircle2, CloudCog, Database, Download, FileText, MessageCircle,
   RefreshCw, RotateCcw, ServerCog, ShieldCheck, TriangleAlert, UploadCloud, Workflow
 } from 'lucide-react';
+import { WhatsAppConnectionPanel } from '@/components/integrations/WhatsAppConnectionPanel';
 
 type Health = {
   whatsapp?: { provider:'meta'|'evolution'; ok:boolean; state?:string };
@@ -171,7 +172,11 @@ export default function Integracoes() {
     {error&&<div className="error">{error}</div>}
     {notice&&<div className="success">{notice}</div>}
 
-    <section className="report-grid">
+    <div className="settings-grid" style={{marginTop:12}}>
+      <WhatsAppConnectionPanel/>
+    </div>
+
+    <section className="report-grid" style={{marginTop:12}}>
       {cards.map(({label,ok,Icon,detail})=><div key={label}>
         <span style={{display:'flex',alignItems:'center',gap:7}}><Icon size={16}/>{label}</span>
         <strong style={{fontSize:17}}>{statusLabel(ok)}</strong>
@@ -189,7 +194,7 @@ export default function Integracoes() {
     <div className="settings-grid" style={{marginTop:12}}>
       <section className="card section">
         <div className="automation-top">
-          <div><h3>WhatsApp oficial</h3><p className="muted">Templates aprovados e fila de retentativa.</p></div>
+          <div><h3>Templates e fila de mensagens</h3><p className="muted">Templates da Meta e reprocessamento seguro da fila de saída.</p></div>
           <ShieldCheck size={20}/>
         </div>
         <div className="inlineActions">
