@@ -28,6 +28,15 @@ type Company = {
   meta_page_id?: string | null;
   meta_instagram_account_id?: string | null;
   meta_connector_ready?: boolean;
+  whatsapp_provider?: 'meta' | 'evolution';
+  evolution_instance_name?: string | null;
+};
+
+type WhatsAppStatus = {
+  provider: 'meta' | 'evolution';
+  ok: boolean;
+  evolution?: { runtimeConfigured:boolean; instanceConfigured:boolean; instanceName?:string|null; state:string; error?:string };
+  meta?: { runtimeConfigured:boolean; identifiersConfigured:boolean };
 };
 
 const defaults = ['atendimento', 'automacoes', 'relatorios', 'ai_agent', 'whatsapp', 'instagram', 'facebook'];
@@ -38,17 +47,29 @@ export default function Config() {
   const [company, setCompany] = useState<Company | null>(null);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
+  const [provider, setProvider] = useState<'meta' | 'evolution'>('meta');
+  const [evolutionInstance, setEvolutionInstance] = useState('');
+  const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppStatus | null>(null);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [connectionBusy, setConnectionBusy] = useState(false);
 
   async function load() {
-    const [fr, mr, cr] = await Promise.all([
+    const [fr, mr, cr, wr] = await Promise.all([
       fetch('/api/features', { cache: 'no-store' }),
       fetch('/api/me', { cache: 'no-store' }),
-      fetch('/api/settings/company', { cache: 'no-store' })
+      fetch('/api/settings/company', { cache: 'no-store' }),
+      fetch('/api/integrations/whatsapp/status', { cache: 'no-store' })
     ]);
-    const [fd, md, cd] = await Promise.all([fr.json(), mr.json(), cr.json()]);
+    const [fd, md, cd, wd] = await Promise.all([fr.json(), mr.json(), cr.json(), wr.json().catch(()=>null)]);
     if (fr.ok) setFlags(fd.data ?? []);
     if (mr.ok) setMe(md.data ?? null);
-    if (cr.ok) setCompany(cd.data ?? null);
+    if (cr.ok) {
+      const next = cd.data ?? null;
+      setCompany(next);
+      setProvider(next?.whatsapp_provider === 'evolution' ? 'evolution' : 'meta');
+      setEvolutionInstance(next?.evolution_instance_name ?? '');
+    }
+    if (wr.ok) setWhatsappStatus(wd?.data ?? null);
   }
 
   useEffect(() => { void load(); }, []);
@@ -102,6 +123,46 @@ export default function Config() {
     await load();
   }
 
+  async function connectEvolution() {
+    if (!evolutionInstance.trim()) {
+      setError('Informe o nome da instância Evolution.');
+      return;
+    }
+    setConnectionBusy(true);
+    setError('');
+    setSaved('');
+    setQrCode(null);
+    try {
+      const save = await fetch('/api/settings/company', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          whatsapp_provider: 'evolution',
+          evolution_instance_name: evolutionInstance.trim()
+        })
+      });
+      if (!save.ok) {
+        setError('Não foi possível salvar a configuração do Evolution.');
+        return;
+      }
+
+      const response = await fetch('/api/integrations/whatsapp/evolution/connect', { method: 'POST' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setError(payload?.detail || 'Não foi possível gerar o QR Code do Evolution API.');
+        return;
+      }
+
+      setQrCode(payload?.data?.qr ?? null);
+      setSaved(payload?.data?.connected
+        ? 'Evolution API já está conectado ao WhatsApp.'
+        : 'QR Code gerado. Escaneie em WhatsApp > Aparelhos conectados.');
+      await load();
+    } finally {
+      setConnectionBusy(false);
+    }
+  }
+
   const canManage = me?.permissions.includes('features.manage') ?? false;
   const canSettings = me?.permissions.includes('settings.manage') ?? false;
 
@@ -142,7 +203,41 @@ export default function Config() {
               <hr/>
               <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center'}}>
                 <div>
-                  <h3 style={{marginBottom:4}}>Meta · WhatsApp, Facebook e Instagram</h3>
+                  <h3 style={{marginBottom:4}}>WhatsApp · provedor do atendimento</h3>
+                  <p className="muted" style={{marginTop:0}}>Escolha a conexão oficial da Meta ou Evolution API via QR Code. A troca não altera conversas, leads, IA ou filas existentes.</p>
+                </div>
+                <span className={whatsappStatus?.ok ? 'success' : 'muted'} style={{whiteSpace:'nowrap',fontSize:12}}>
+                  {whatsappStatus?.ok ? 'Canal conectado' : 'Conexão pendente'}
+                </span>
+              </div>
+
+              <div className="form-grid settings-form">
+                <div className="field">
+                  <label>Provedor do WhatsApp</label>
+                  <select className="select" name="whatsapp_provider" value={provider} onChange={e=>setProvider(e.target.value as 'meta'|'evolution')} disabled={!canSettings}>
+                    <option value="meta">WhatsApp API da Meta (Cloud API)</option>
+                    <option value="evolution">Evolution API (QR Code)</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Instância Evolution API</label>
+                  <input className="input" name="evolution_instance_name" value={evolutionInstance} onChange={e=>setEvolutionInstance(e.target.value)} placeholder="ecojoi-whatsapp" disabled={!canSettings || provider!=='evolution'}/>
+                </div>
+              </div>
+
+              {provider==='evolution' && <div style={{marginTop:10,padding:12,border:'1px solid #e5e9e7',borderRadius:8,background:'#fafcfb'}}>
+                <div className="setting-row">
+                  <span><strong>Status Evolution</strong><small className="muted" style={{display:'block'}}>Estado: {whatsappStatus?.evolution?.state ?? 'não verificado'} · Instância: {evolutionInstance || 'não informada'}</small></span>
+                  {canSettings && <button type="button" className="btn btn-primary" onClick={()=>void connectEvolution()} disabled={connectionBusy || !evolutionInstance.trim()}>{connectionBusy?'Conectando...':whatsappStatus?.ok?'Reconectar / novo QR':'Gerar QR Code'}</button>}
+                </div>
+                {whatsappStatus?.evolution && !whatsappStatus.evolution.runtimeConfigured && <p className="muted" style={{marginTop:8}}>Servidor pendente: configure EVOLUTION_API_URL, EVOLUTION_API_KEY e EVOLUTION_WEBHOOK_TOKEN no ambiente do CRM.</p>}
+                {qrCode && <div style={{display:'grid',justifyItems:'center',gap:8,marginTop:12}}><img src={qrCode} alt="QR Code Evolution API" width={260} height={260} style={{maxWidth:'100%',height:'auto',background:'#fff',padding:8,borderRadius:8,border:'1px solid #e5e9e7'}}/><small className="muted">Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho.</small></div>}
+              </div>}
+
+              <hr/>
+              <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center'}}>
+                <div>
+                  <h3 style={{marginBottom:4}}>Meta · WhatsApp Cloud API, Facebook e Instagram</h3>
                   <p className="muted" style={{marginTop:0}}>Identificadores da conta conectada. Tokens e segredos permanecem somente no servidor.</p>
                 </div>
                 <span className={company.meta_connector_ready ? 'success' : 'muted'} style={{whiteSpace:'nowrap',fontSize:12}}>
