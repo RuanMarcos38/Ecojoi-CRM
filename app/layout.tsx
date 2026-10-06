@@ -6,6 +6,7 @@ import './approved-layout.css';
 import './sidebar-full-height.css';
 import './crm-enterprise-refinement.css';
 import './reference-theme.css';
+import './professional-ui.css';
 import type { Metadata } from 'next';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
 import { PwaRegister } from '@/components/PwaRegister';
