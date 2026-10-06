@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
 import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
@@ -16,11 +16,15 @@ function cleanBaseUrl(value?: string | null) {
   return String(value ?? '').trim().replace(/\/$/, '');
 }
 
+function derivedWebhookToken(apiKey: string) {
+  return createHash('sha256').update(`ecojoi-evolution-webhook:${apiKey}`).digest('hex');
+}
+
 function envRuntime(): EvolutionRuntime | null {
   const baseUrl = cleanBaseUrl(process.env.EVOLUTION_API_URL);
   const apiKey = process.env.EVOLUTION_API_KEY?.trim() || '';
-  const webhookToken = process.env.EVOLUTION_WEBHOOK_TOKEN?.trim() || '';
-  return baseUrl && apiKey && webhookToken
+  const webhookToken = process.env.EVOLUTION_WEBHOOK_TOKEN?.trim() || (apiKey ? derivedWebhookToken(apiKey) : '');
+  return baseUrl && apiKey
     ? { baseUrl, apiKey, webhookToken, source: 'environment' }
     : null;
 }
@@ -39,8 +43,8 @@ async function tenantRuntime(tenantId: string): Promise<EvolutionRuntime | null>
       const config = data.config as Record<string, unknown>;
       const baseUrl = cleanBaseUrl(String(config.api_url ?? ''));
       const apiKey = String(config.api_key ?? '').trim();
-      const webhookToken = String(config.webhook_token ?? '').trim();
-      if (baseUrl && apiKey && webhookToken) {
+      const webhookToken = String(config.webhook_token ?? '').trim() || (apiKey ? derivedWebhookToken(apiKey) : '');
+      if (baseUrl && apiKey) {
         return { baseUrl, apiKey, webhookToken, source: 'database' };
       }
     }
