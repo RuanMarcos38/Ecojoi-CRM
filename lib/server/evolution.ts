@@ -1,36 +1,70 @@
+import { timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
 import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
 
 const BUCKET = 'ecojoi-message-attachments';
 
-function baseUrl() {
-  return (process.env.EVOLUTION_API_URL?.trim() || '').replace(/\/$/, '');
+type EvolutionRuntime = {
+  baseUrl: string;
+  apiKey: string;
+  webhookToken: string;
+  source: 'database' | 'environment';
+};
+
+function cleanBaseUrl(value?: string | null) {
+  return String(value ?? '').trim().replace(/\/$/, '');
 }
 
-function apiKey() {
-  return process.env.EVOLUTION_API_KEY?.trim() || '';
+function envRuntime(): EvolutionRuntime | null {
+  const baseUrl = cleanBaseUrl(process.env.EVOLUTION_API_URL);
+  const apiKey = process.env.EVOLUTION_API_KEY?.trim() || '';
+  const webhookToken = process.env.EVOLUTION_WEBHOOK_TOKEN?.trim() || '';
+  return baseUrl && apiKey && webhookToken
+    ? { baseUrl, apiKey, webhookToken, source: 'environment' }
+    : null;
 }
 
-function webhookToken() {
-  return process.env.EVOLUTION_WEBHOOK_TOKEN?.trim() || '';
+async function tenantRuntime(tenantId: string): Promise<EvolutionRuntime | null> {
+  const admin = createAdminClient();
+  try {
+    const { data, error } = await admin
+      .from('integration_secrets')
+      .select('config')
+      .eq('tenant_id', tenantId)
+      .eq('provider', 'evolution')
+      .maybeSingle();
+
+    if (!error && data?.config) {
+      const config = data.config as Record<string, unknown>;
+      const baseUrl = cleanBaseUrl(String(config.api_url ?? ''));
+      const apiKey = String(config.api_key ?? '').trim();
+      const webhookToken = String(config.webhook_token ?? '').trim();
+      if (baseUrl && apiKey && webhookToken) {
+        return { baseUrl, apiKey, webhookToken, source: 'database' };
+      }
+    }
+  } catch {
+    // Environment fallback keeps existing deployments compatible.
+  }
+
+  return envRuntime();
 }
 
 function digits(value?: string | null) {
   return String(value ?? '').replace(/\D/g, '');
 }
 
-export function evolutionRuntimeConfigured() {
-  return Boolean(baseUrl() && apiKey() && webhookToken());
+export async function evolutionRuntimeConfigured(tenantId: string) {
+  return Boolean(await tenantRuntime(tenantId));
 }
 
-async function evolutionRequest(path: string, init?: RequestInit) {
-  if (!baseUrl() || !apiKey()) throw new Error('Evolution API is not configured.');
+async function evolutionRequest(runtime: EvolutionRuntime, path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
-  headers.set('apikey', apiKey());
+  headers.set('apikey', runtime.apiKey);
   if (init?.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
 
-  const response = await fetch(`${baseUrl()}/${path.replace(/^\//, '')}`, {
+  const response = await fetch(`${runtime.baseUrl}/${path.replace(/^\//, '')}`, {
     ...init,
     headers,
     cache: 'no-store'
@@ -94,6 +128,7 @@ function qrImageFrom(data: any) {
     data?.qrcode?.code,
     data?.qrcode,
     data?.data?.base64,
+    data?.data?.qrcode?.base64,
     data?.data?.qrcode
   ].filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
 
@@ -109,12 +144,13 @@ function qrImageFrom(data: any) {
 
 export async function getTenantEvolutionStatus(tenantId: string) {
   const settings = await tenantEvolutionSettings(tenantId);
-  const configured = evolutionRuntimeConfigured() && Boolean(settings.instanceName);
+  const runtime = await tenantRuntime(tenantId);
+  const configured = Boolean(runtime && settings.instanceName);
 
   if (!configured) {
     return {
       ok: false,
-      runtimeConfigured: evolutionRuntimeConfigured(),
+      runtimeConfigured: Boolean(runtime),
       instanceConfigured: Boolean(settings.instanceName),
       instanceName: settings.instanceName,
       state: 'not_configured' as const
@@ -122,7 +158,7 @@ export async function getTenantEvolutionStatus(tenantId: string) {
   }
 
   try {
-    const data = await evolutionRequest(`instance/connectionState/${encodeURIComponent(settings.instanceName!)}`);
+    const data = await evolutionRequest(runtime!, `instance/connectionState/${encodeURIComponent(settings.instanceName!)}`);
     const state = String(stateFrom(data) || 'unknown').toLowerCase();
     return {
       ok: state === 'open' || state === 'connected',
@@ -143,30 +179,35 @@ export async function getTenantEvolutionStatus(tenantId: string) {
   }
 }
 
-function webhookUrl(publicBaseUrl: string) {
+function webhookUrl(publicBaseUrl: string, webhookToken: string) {
   const url = new URL('/api/integrations/evolution/webhook', publicBaseUrl);
-  url.searchParams.set('token', webhookToken());
+  url.searchParams.set('token', webhookToken);
   return url.toString();
 }
 
-async function ensureInstance(instanceName: string) {
-  let exists = false;
+async function ensureInstance(runtime: EvolutionRuntime, instanceName: string) {
   try {
-    const found = await evolutionRequest(`instance/fetchInstances?instanceName=${encodeURIComponent(instanceName)}`);
+    await evolutionRequest(runtime, `instance/connectionState/${encodeURIComponent(instanceName)}`);
+    return null;
+  } catch {
+    // Not available by direct state lookup; try manager listing next.
+  }
+
+  try {
+    const found = await evolutionRequest(runtime, `instance/fetchInstances?instanceName=${encodeURIComponent(instanceName)}`);
     const rows = Array.isArray(found) ? found : Array.isArray(found?.data) ? found.data : [];
-    exists = rows.some((row: any) =>
+    const exists = rows.some((row: any) =>
       row?.name === instanceName
       || row?.instanceName === instanceName
       || row?.instance?.instanceName === instanceName
     );
+    if (exists) return null;
   } catch {
-    exists = false;
+    // Some Evolution deployments restrict the global instance listing.
   }
 
-  if (exists) return null;
-
   try {
-    return await evolutionRequest('instance/create', {
+    return await evolutionRequest(runtime, 'instance/create', {
       method: 'POST',
       body: JSON.stringify({
         instanceName,
@@ -181,43 +222,77 @@ async function ensureInstance(instanceName: string) {
   }
 }
 
+async function configureWebhook(runtime: EvolutionRuntime, instanceName: string, publicBaseUrl: string) {
+  const webhook = {
+    enabled: true,
+    url: webhookUrl(publicBaseUrl, runtime.webhookToken),
+    webhookByEvents: false,
+    webhookBase64: true,
+    events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE']
+  };
+
+  try {
+    await evolutionRequest(runtime, `webhook/set/${encodeURIComponent(instanceName)}`, {
+      method: 'POST',
+      body: JSON.stringify(webhook)
+    });
+  } catch (firstError) {
+    try {
+      await evolutionRequest(runtime, `webhook/set/${encodeURIComponent(instanceName)}`, {
+        method: 'POST',
+        body: JSON.stringify({ webhook })
+      });
+    } catch {
+      throw firstError;
+    }
+  }
+}
+
 export async function connectEvolution(tenantId: string, publicBaseUrl: string) {
   const settings = await tenantEvolutionSettings(tenantId);
-  if (!evolutionRuntimeConfigured()) throw new Error('Evolution API server configuration is incomplete.');
+  const runtime = await tenantRuntime(tenantId);
+  if (!runtime) throw new Error('Evolution API server configuration is incomplete.');
   if (!settings.instanceName) throw new Error('Evolution instance name is not configured for this tenant.');
 
-  const created = await ensureInstance(settings.instanceName);
+  const created = await ensureInstance(runtime, settings.instanceName);
+  await configureWebhook(runtime, settings.instanceName, publicBaseUrl);
 
-  await evolutionRequest(`webhook/set/${encodeURIComponent(settings.instanceName)}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      enabled: true,
-      url: webhookUrl(publicBaseUrl),
-      webhookByEvents: false,
-      webhookBase64: true,
-      events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CONNECTION_UPDATE']
-    })
-  });
+  let connected: any = null;
+  try {
+    connected = await evolutionRequest(runtime, `instance/connect/${encodeURIComponent(settings.instanceName)}`);
+  } catch (error) {
+    const status = await getTenantEvolutionStatus(tenantId);
+    if (!status.ok) throw error;
+  }
 
-  const connected = await evolutionRequest(`instance/connect/${encodeURIComponent(settings.instanceName)}`);
   const qr = qrImageFrom(connected) || qrImageFrom(created);
-  const state = String(stateFrom(connected) || (qr ? 'connecting' : 'unknown')).toLowerCase();
+  const refreshed = await getTenantEvolutionStatus(tenantId);
+  const state = refreshed.state === 'error'
+    ? String(stateFrom(connected) || (qr ? 'connecting' : 'unknown')).toLowerCase()
+    : refreshed.state;
 
   return {
     instanceName: settings.instanceName,
     state,
-    connected: state === 'open' || state === 'connected',
+    connected: refreshed.ok || state === 'open' || state === 'connected',
     qr,
-    pairingCode: connected?.pairingCode || connected?.qrcode?.pairingCode || null
+    pairingCode: connected?.pairingCode || connected?.qrcode?.pairingCode || created?.pairingCode || created?.qrcode?.pairingCode || null,
+    qrCode: connected?.code || connected?.qrcode?.code || created?.code || created?.qrcode?.code || null
   };
 }
 
-async function sendTextOnce(instanceName: string, recipient: string, body: string, legacy = false) {
+async function sendTextOnce(
+  runtime: EvolutionRuntime,
+  instanceName: string,
+  recipient: string,
+  body: string,
+  legacy = false
+) {
   const payload = legacy
     ? { number: recipient, text: body, textMessage: { text: body } }
     : { number: recipient, text: body };
 
-  return evolutionRequest(`message/sendText/${encodeURIComponent(instanceName)}`, {
+  return evolutionRequest(runtime, `message/sendText/${encodeURIComponent(instanceName)}`, {
     method: 'POST',
     body: JSON.stringify(payload)
   });
@@ -225,17 +300,18 @@ async function sendTextOnce(instanceName: string, recipient: string, body: strin
 
 export async function sendEvolutionText(tenantId: string, to: string | null | undefined, body: string) {
   const settings = await tenantEvolutionSettings(tenantId);
+  const runtime = await tenantRuntime(tenantId);
   const recipient = digits(to);
-  if (!settings.instanceName || !recipient || !evolutionRuntimeConfigured()) {
+  if (!settings.instanceName || !recipient || !runtime) {
     return { delivered: false as const, reason: 'not_configured' };
   }
 
   try {
     let data: any;
     try {
-      data = await sendTextOnce(settings.instanceName, recipient, body);
+      data = await sendTextOnce(runtime, settings.instanceName, recipient, body);
     } catch {
-      data = await sendTextOnce(settings.instanceName, recipient, body, true);
+      data = await sendTextOnce(runtime, settings.instanceName, recipient, body, true);
     }
 
     return {
@@ -254,8 +330,9 @@ export async function sendEvolutionMedia(
   caption?: string | null
 ) {
   const settings = await tenantEvolutionSettings(tenantId);
+  const runtime = await tenantRuntime(tenantId);
   const recipient = digits(to);
-  if (!settings.instanceName || !recipient || !evolutionRuntimeConfigured()) {
+  if (!settings.instanceName || !recipient || !runtime) {
     return { delivered: false as const, reason: 'not_configured' };
   }
 
@@ -264,11 +341,11 @@ export async function sendEvolutionMedia(
     const media = `data:${file.type || 'application/octet-stream'};base64,${base64}`;
 
     const data = file.type.startsWith('audio/')
-      ? await evolutionRequest(`message/sendWhatsAppAudio/${encodeURIComponent(settings.instanceName)}`, {
+      ? await evolutionRequest(runtime, `message/sendWhatsAppAudio/${encodeURIComponent(settings.instanceName)}`, {
           method: 'POST',
           body: JSON.stringify({ number: recipient, audio: media })
         })
-      : await evolutionRequest(`message/sendMedia/${encodeURIComponent(settings.instanceName)}`, {
+      : await evolutionRequest(runtime, `message/sendMedia/${encodeURIComponent(settings.instanceName)}`, {
           method: 'POST',
           body: JSON.stringify({
             number: recipient,
@@ -287,6 +364,20 @@ export async function sendEvolutionMedia(
   } catch (error) {
     return { delivered: false as const, reason: error instanceof Error ? error.message : 'evolution_media_send_failed' };
   }
+}
+
+function safeEqual(left: string, right: string) {
+  if (!left || !right || left.length !== right.length) return false;
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export async function verifyEvolutionWebhookToken(instanceName: string, suppliedToken: string) {
+  const tenantId = await tenantByInstance(instanceName);
+  if (!tenantId) return false;
+  const runtime = await tenantRuntime(tenantId);
+  return Boolean(runtime && safeEqual(runtime.webhookToken, suppliedToken));
 }
 
 async function claimEvent(tenantId: string, eventKey: string, eventType: string, metadata: Record<string, unknown> = {}) {
