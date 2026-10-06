@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
-import { isWhatsAppWindowOpen, sendWhatsAppMedia } from '@/lib/server/meta';
+import { canSendFreeformWhatsApp, sendWhatsAppMedia } from '@/lib/server/whatsapp';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
 const BUCKET = 'ecojoi-message-attachments';
@@ -56,7 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'conversation_not_in_human_service' }, { status: 409 });
     }
-    if (conversation.channel === 'whatsapp' && !isWhatsAppWindowOpen(conversation.last_inbound_at)) {
+    if (conversation.channel === 'whatsapp' && !(await canSendFreeformWhatsApp(ctx.tenantId, conversation.last_inbound_at))) {
       return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
     }
 
