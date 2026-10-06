@@ -12,7 +12,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'evolution_provider_not_selected' }, { status: 409 });
     }
 
-    const result = await connectEvolution(ctx.tenantId, new URL(request.url).origin);
+    const publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || new URL(request.url).origin;
+    const result = await connectEvolution(ctx.tenantId, publicBaseUrl);
 
     await audit({
       tenantId: ctx.tenantId,
