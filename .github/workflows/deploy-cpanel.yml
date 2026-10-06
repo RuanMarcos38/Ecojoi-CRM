@@ -80,6 +80,23 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > deploy/tmp/restart.txt
           touch deploy/.nojekyll
 
+      - name: Package cPanel deployment artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd deploy
+          zip -qr ../ecojoi-crm-cpanel-deploy.zip .
+          cd ..
+          test -s ecojoi-crm-cpanel-deploy.zip
+
+      - name: Upload cPanel deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecojoi-crm-cpanel-deploy
+          path: ecojoi-crm-cpanel-deploy.zip
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Publish cpanel-deploy branch
         shell: bash
         env:
