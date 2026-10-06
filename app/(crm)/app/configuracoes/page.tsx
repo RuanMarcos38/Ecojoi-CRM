@@ -222,7 +222,7 @@ export default function Config() {
                 </div>
                 <div className="field">
                   <label>Instância Evolution API</label>
-                  <input className="input" name="evolution_instance_name" value={evolutionInstance} onChange={e=>setEvolutionInstance(e.target.value)} placeholder="ecojoi-whatsapp" disabled={!canSettings || provider!=='evolution'}/>
+                  <input className="input" name="evolution_instance_name" value={evolutionInstance} onChange={e=>setEvolutionInstance(e.target.value)} placeholder="Ecojoi - Prospecto" disabled={!canSettings || provider!=='evolution'}/>
                 </div>
               </div>
 
