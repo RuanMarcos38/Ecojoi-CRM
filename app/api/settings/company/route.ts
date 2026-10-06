@@ -28,6 +28,9 @@ const patch = z.object({
   meta_phone_number_id: optionalId(),
   meta_page_id: optionalId(),
   meta_instagram_account_id: optionalId(),
+  whatsapp_provider: z.enum(['meta','evolution']).optional(),
+  evolution_instance_name: z.union([z.string().trim().regex(/^[a-zA-Z0-9_-]{2,80}$/), z.literal(''), z.null()])
+    .optional().transform(value => value === '' ? null : value),
   attachment_retention_days: z.coerce.number().int().min(30).max(3650).optional()
 });
 
@@ -38,7 +41,7 @@ export async function GET() {
     const [{ data: tenant, error: tenantError }, { data: settings, error: settingsError }] = await Promise.all([
       supabase.from('tenants').select('id,name,slug,active').eq('id', ctx.tenantId).single(),
       supabase.from('tenant_settings')
-        .select('legal_name,document,phone,email,timezone,locale,meta_pixel_id,google_analytics_id,auto_assign_leads,meta_business_id,meta_waba_id,meta_phone_number_id,meta_page_id,meta_instagram_account_id,attachment_retention_days')
+        .select('legal_name,document,phone,email,timezone,locale,meta_pixel_id,google_analytics_id,auto_assign_leads,meta_business_id,meta_waba_id,meta_phone_number_id,meta_page_id,meta_instagram_account_id,whatsapp_provider,evolution_instance_name,attachment_retention_days')
         .eq('tenant_id', ctx.tenantId)
         .maybeSingle()
     ]);
