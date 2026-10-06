@@ -29,7 +29,7 @@ const patch = z.object({
   meta_page_id: optionalId(),
   meta_instagram_account_id: optionalId(),
   whatsapp_provider: z.enum(['meta','evolution']).optional(),
-  evolution_instance_name: z.union([z.string().trim().regex(/^[a-zA-Z0-9_-]{2,80}$/), z.literal(''), z.null()])
+  evolution_instance_name: z.union([z.string().trim().regex(/^[a-zA-Z0-9 ._-]{2,80}$/), z.literal(''), z.null()])
     .optional().transform(value => value === '' ? null : value),
   attachment_retention_days: z.coerce.number().int().min(30).max(3650).optional()
 });
