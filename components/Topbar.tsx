@@ -102,7 +102,7 @@ export function Topbar(){
   }
 
   const unread=useMemo(()=>notifications.filter(n=>!n.read_at).length,[notifications]);
-  const initials=(me?.fullName??'Ecojoi').split(/s+/).filter(Boolean).slice(0,2).map(x=>x[0]??'').join('').toUpperCase()||'EC';
+  const initials=(me?.fullName??'Ecojoi').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]??'').join('').toUpperCase()||'EC';
 
   return <header className="topbar">
     <div className="search-wrap">
@@ -117,9 +117,9 @@ export function Topbar(){
     <div className="top-actions">
       <div className="user-meta"><strong>{me?.fullName??'Usuário'}</strong><small>{me?.companyName??'Ecojoi CRM'}</small></div>
       <div className="notification-wrap">
-        <button className="btn btn-secondary" aria-label="Notificações" onClick={()=>setNotificationsOpen(v=>!v)} style={{position:'relative'}}>
+        <button className="btn btn-secondary notification-button" aria-label="Notificações" onClick={()=>setNotificationsOpen(v=>!v)}>
           <Bell size={17}/>
-          {unread>0&&<span style={{position:'absolute',right:-4,top:-5,minWidth:17,height:17,padding:'0 4px',borderRadius:999,display:'grid',placeItems:'center',background:'#b42318',color:'#fff',fontSize:9,fontWeight:700}}>{unread>99?'99+':unread}</span>}
+          {unread>0&&<span className="notification-badge">{unread>99?'99+':unread}</span>}
         </button>
         {notificationsOpen&&<div className="notification-popover" style={{width:340,maxHeight:430,overflow:'auto'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><strong>Notificações</strong>{unread>0&&<button className="btn btn-secondary" style={{minHeight:28,padding:'5px 7px',fontSize:10}} onClick={()=>void markRead()}><CheckCheck size={13}/>Marcar lidas</button>}</div>
