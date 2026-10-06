@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import type { Permission } from '@/lib/auth/permissions';
 import { ApiKeysPanel } from '@/components/settings/ApiKeysPanel';
@@ -231,7 +232,7 @@ export default function Config() {
                   {canSettings && <button type="button" className="btn btn-primary" onClick={()=>void connectEvolution()} disabled={connectionBusy || !evolutionInstance.trim()}>{connectionBusy?'Conectando...':whatsappStatus?.ok?'Reconectar / novo QR':'Gerar QR Code'}</button>}
                 </div>
                 {whatsappStatus?.evolution && !whatsappStatus.evolution.runtimeConfigured && <p className="muted" style={{marginTop:8}}>Servidor pendente: configure EVOLUTION_API_URL, EVOLUTION_API_KEY e EVOLUTION_WEBHOOK_TOKEN no ambiente do CRM.</p>}
-                {qrCode && <div style={{display:'grid',justifyItems:'center',gap:8,marginTop:12}}><img src={qrCode} alt="QR Code Evolution API" width={260} height={260} style={{maxWidth:'100%',height:'auto',background:'#fff',padding:8,borderRadius:8,border:'1px solid #e5e9e7'}}/><small className="muted">Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho.</small></div>}
+                {qrCode && <div style={{display:'grid',justifyItems:'center',gap:8,marginTop:12}}><Image src={qrCode} alt="QR Code Evolution API" width={260} height={260} unoptimized style={{maxWidth:'100%',height:'auto',background:'#fff',padding:8,borderRadius:8,border:'1px solid #e5e9e7'}}/><small className="muted">Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho.</small></div>}
               </div>}
 
               <hr/>
