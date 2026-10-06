@@ -1,23 +1,16 @@
 import { NextResponse } from 'next/server';
-import { processEvolutionWebhook } from '@/lib/server/evolution';
-
-function safeEqual(left: string, right: string) {
-  if (!left || !right || left.length !== right.length) return false;
-  let diff = 0;
-  for (let i = 0; i < left.length; i += 1) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
-  return diff === 0;
-}
+import { processEvolutionWebhook, verifyEvolutionWebhookToken } from '@/lib/server/evolution';
 
 export async function POST(request: Request) {
-  const expected = process.env.EVOLUTION_WEBHOOK_TOKEN?.trim() || '';
-  const supplied = new URL(request.url).searchParams.get('token') || '';
-
-  if (!safeEqual(expected, supplied)) {
-    return NextResponse.json({ error: 'invalid_webhook_token' }, { status: 401 });
-  }
-
   try {
+    const supplied = new URL(request.url).searchParams.get('token') || '';
     const payload = await request.json();
+    const instanceName = String(payload?.instance || payload?.instanceName || payload?.data?.instance || '');
+
+    if (!instanceName || !(await verifyEvolutionWebhookToken(instanceName, supplied))) {
+      return NextResponse.json({ error: 'invalid_webhook_token' }, { status: 401 });
+    }
+
     await processEvolutionWebhook(payload);
     return NextResponse.json({ ok: true });
   } catch {
