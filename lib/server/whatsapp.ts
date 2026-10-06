@@ -13,6 +13,12 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export type WhatsAppProvider = 'meta' | 'evolution';
+export type WhatsAppStatus = {
+  provider: WhatsAppProvider;
+  ok: boolean;
+  meta?: Awaited<ReturnType<typeof getTenantMetaStatus>>;
+  evolution?: Awaited<ReturnType<typeof getTenantEvolutionStatus>>;
+};
 
 export async function getWhatsAppProvider(tenantId: string): Promise<WhatsAppProvider> {
   const admin = createAdminClient();
@@ -25,7 +31,7 @@ export async function getWhatsAppProvider(tenantId: string): Promise<WhatsAppPro
   return data?.whatsapp_provider === 'evolution' ? 'evolution' : 'meta';
 }
 
-export async function getWhatsAppStatus(tenantId: string) {
+export async function getWhatsAppStatus(tenantId: string): Promise<WhatsAppStatus> {
   const provider = await getWhatsAppProvider(tenantId);
 
   if (provider === 'evolution') {
