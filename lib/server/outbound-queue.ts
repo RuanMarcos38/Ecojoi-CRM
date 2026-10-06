@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppMedia } from '@/lib/server/meta';
+import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppMedia } from '@/lib/server/whatsapp';
 
 const BUCKET = 'ecojoi-message-attachments';
 

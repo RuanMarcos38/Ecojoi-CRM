@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 
 type Health = {
+  whatsapp?: { provider:'meta'|'evolution'; ok:boolean; state?:string };
   meta?: { ok:boolean; runtimeConfigured:boolean; identifiersConfigured:boolean };
   n8n?: { ok:boolean; importConfigured:boolean; webhookConfigured:boolean; aiEnabled:boolean; workflowId?:string|null; lastExecution?:any };
   queue?: { pending:number; deadLetter:number };
@@ -155,7 +156,7 @@ export default function Integracoes() {
   }
 
   const cards=[
-    {label:'Meta / WhatsApp',ok:health.meta?.ok,Icon:MessageCircle,detail:health.meta?.ok?'API e identificadores configurados':'Verifique API/IDs da Meta'},
+    {label:health.whatsapp?.provider==='evolution'?'WhatsApp · Evolution API':'WhatsApp · Meta Cloud API',ok:health.whatsapp?.ok??health.meta?.ok,Icon:MessageCircle,detail:health.whatsapp?.ok?`Canal conectado · ${health.whatsapp?.state??'operacional'}`:(health.whatsapp?.provider==='evolution'?'Verifique instância/QR Code do Evolution':'Verifique API/IDs da Meta')},
     {label:'n8n / Agente IA',ok:health.n8n?.ok,Icon:Workflow,detail:health.n8n?.ok?'Webhook e importação disponíveis':'Webhook ou API n8n pendente'},
     {label:'Fila de mensagens',ok:(health.queue?.deadLetter??0)===0,Icon:ServerCog,detail:`${health.queue?.pending??0} pendentes · ${health.queue?.deadLetter??0} dead-letter`},
     {label:'SLA',ok:(health.sla?.breached??0)===0,Icon:Activity,detail:`${health.sla?.breached??0} atendimentos fora do SLA`}

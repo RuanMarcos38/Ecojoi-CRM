@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
-import { sendWhatsAppTemplate } from '@/lib/server/meta';
+import { getWhatsAppProvider, sendWhatsAppTemplate } from '@/lib/server/whatsapp';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 import { audit } from '@/lib/server/audit';
 
@@ -29,6 +29,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (conversationError) throw conversationError;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     if (conversation.channel !== 'whatsapp') return NextResponse.json({ error: 'whatsapp_only' }, { status: 409 });
+    if (await getWhatsAppProvider(ctx.tenantId) !== 'meta') {
+      return NextResponse.json({ error: 'templates_require_meta_provider' }, { status: 409 });
+    }
 
     const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
     if (contact?.consent_status === 'opt_out') {

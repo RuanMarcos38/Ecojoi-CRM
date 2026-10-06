@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/context';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getTenantMetaStatus } from '@/lib/server/meta';
+import { getWhatsAppStatus } from '@/lib/server/whatsapp';
 import { getN8nStatus } from '@/lib/server/n8n';
 
 export async function GET() {
@@ -9,6 +10,7 @@ export async function GET() {
     const ctx = await requirePermission('settings.view');
     const admin = createAdminClient();
     const now = new Date();
+    const whatsapp = await getWhatsAppStatus(ctx.tenantId);
     const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
 
     const [
@@ -35,6 +37,11 @@ export async function GET() {
 
     return NextResponse.json({
       data: {
+        whatsapp: {
+          provider: whatsapp.provider,
+          ok: whatsapp.ok,
+          state: whatsapp.evolution?.state ?? (whatsapp.ok ? 'open' : 'pending')
+        },
         meta: {
           ok: meta.runtimeConfigured && meta.identifiersConfigured,
           runtimeConfigured: meta.runtimeConfigured,
