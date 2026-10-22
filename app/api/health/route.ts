@@ -1,26 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { hasSupabasePublicEnv } from '@/lib/supabase/env';
 
-export async function GET(){
-  const started=Date.now();
-  try{
-    const admin=createAdminClient();
-    const {error}=await admin.from('tenants').select('id',{head:true,count:'exact'}).limit(1);
-    if(error)throw error;
-    return NextResponse.json({
-      status:'ok',
-      service:'ecojoi-crm',
-      database:'ok',
-      timestamp:new Date().toISOString(),
-      response_ms:Date.now()-started
-    },{headers:{'cache-control':'no-store'}});
-  }catch{
-    return NextResponse.json({
-      status:'degraded',
-      service:'ecojoi-crm',
-      database:'error',
-      timestamp:new Date().toISOString(),
-      response_ms:Date.now()-started
-    },{status:503,headers:{'cache-control':'no-store'}});
-  }
+export const dynamic = 'force-dynamic';
+
+// Read-only operational probe: never expose environment variable values or credentials.
+export async function GET() {
+  const configured = hasSupabasePublicEnv();
+  return NextResponse.json({
+    status: configured ? 'ready' : 'configuration_required',
+    authenticationConfigured: configured
+  }, {
+    status: configured ? 200 : 503,
+    headers: { 'cache-control': 'no-store, max-age=0' }
+  });
 }
