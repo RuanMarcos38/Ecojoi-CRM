@@ -72,14 +72,24 @@ export function Topbar(){
   },[]);
 
   useEffect(()=>{
-    if(q.trim().length<2){setResults([]);return;}
-    const t=window.setTimeout(()=>{
-      fetch(`/api/search?q=${encodeURIComponent(q.trim())}`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null)
-        .then(d=>setResults(Array.isArray(d?.data)?d.data:[]))
-        .catch(()=>setResults([]));
-    },220);
-    return()=>window.clearTimeout(t);
+    const query=q.trim();
+    if(query.length<2){setResults([]);return;}
+    const controller=new AbortController();
+    // Clear stale results immediately and prevent out-of-order responses.
+    setResults([]);
+    const timer=window.setTimeout(async()=>{
+      try{
+        const response=await fetch(`/api/search?q=${encodeURIComponent(query)}`,{
+          cache:'no-store',signal:controller.signal
+        });
+        if(!response.ok)throw new Error('search_failed');
+        const payload=await response.json();
+        if(!controller.signal.aborted)setResults(Array.isArray(payload?.data)?payload.data:[]);
+      }catch(error){
+        if(!controller.signal.aborted)setResults([]);
+      }
+    },250);
+    return()=>{window.clearTimeout(timer);controller.abort();};
   },[q]);
 
   async function logout(){
@@ -92,13 +102,14 @@ export function Topbar(){
 
   async function markRead(id?:string){
     try{
-      await fetch('/api/notifications',{
+      const response=await fetch('/api/notifications',{
         method:'PATCH',
         headers:{'content-type':'application/json'},
         body:JSON.stringify(id?{id}:{all:true})
       });
+      if(!response.ok)throw new Error('notifications_update_failed');
       await loadNotifications();
-    }catch{}
+    }catch{await loadNotifications();}
   }
 
   const unread=useMemo(()=>notifications.filter(n=>!n.read_at).length,[notifications]);
