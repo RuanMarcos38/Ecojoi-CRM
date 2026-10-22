@@ -1,0 +1,73 @@
+/* Ecojoi Enterprise 2026 — presentation-only final layer.
+   Existing themes, endpoints, auth, tenant isolation and integration contracts remain intact. */
+:root {
+ --corporate-navy:#10283e;--corporate-navy-dark:#0b1d30;--corporate-accent:#16745f;
+ --corporate-surface:#ffffff;--corporate-bg:#f3f6f9;--corporate-border:#dce4eb;
+ --corporate-text:#152a3d;--corporate-muted:#637487;
+ --eco-950:#0b1d30;--eco-900:#10283e;--eco-800:#173b54;--eco-700:#146c60;
+ --ink:#152a3d;--muted:#637487;--line:#dce4eb;--bg:#f3f6f9;
+ --ui-primary:#146c60;--ui-primary-hover:#10594f;--ui-text:#152a3d;
+ --ui-muted:#637487;--ui-border:#dce4eb;--ui-border-strong:#cad7e1;
+ --ref-primary:#146c60;--ref-primary-hover:#10594f;--ref-border:#dce4eb;
+ --approved-green:#146c60;--approved-green-dark:#10594f;--approved-border:#dce4eb;
+}
+html,body{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+body{background:var(--corporate-bg);color:var(--corporate-text)}
+.shell{border:1px solid var(--corporate-border);box-shadow:0 12px 38px rgba(16,40,62,.07)}
+.sidebar{background:var(--corporate-navy-dark)!important;color:#e9f2f8!important;border-right:1px solid #243d51!important}
+.sidebar .brand{border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:12px}
+.sidebar .brand-name{color:#fff!important;font-weight:750}
+.sidebar .brand-sub{color:#bdcfdd!important;opacity:1}
+.sidebar .brand-mark{border-color:#8bbaa9!important}
+.sidebar .nav-title{color:#b1c2d2!important;opacity:1!important;font-weight:700;letter-spacing:.08em}
+.sidebar .nav a{color:#d9e7f1!important;border-radius:8px!important;transition:background .16s ease,color .16s ease}
+.sidebar .nav a:hover{background:rgba(255,255,255,.11)!important;color:#fff!important}
+.sidebar .nav a.active{background:#24435a!important;color:#fff!important;box-shadow:inset 3px 0 0 #67c1a3!important}
+.sidebar .nav a svg{color:inherit!important;flex-shrink:0}
+.topbar{background:#fff!important;border-bottom:1px solid var(--corporate-border)!important}
+.main>.content{background:var(--corporate-bg)!important}
+.page-title,.approved-greeting h1,.hero h1{color:var(--corporate-text)!important;font-weight:700!important}
+.page-sub{color:var(--corporate-muted)!important}
+.card,.section,.automation-card,.report-grid div,.approved-panel,.dashboard-panel,.approved-kpi{
+ border-color:var(--corporate-border)!important;border-radius:10px!important;box-shadow:0 2px 9px rgba(16,40,62,.035)!important}
+.stat-value,.approved-kpi-value{font-weight:700!important}
+.btn{min-height:36px;font-size:12px!important;font-weight:650!important;border-radius:7px!important}
+.btn-primary{background:var(--corporate-accent)!important;color:#fff!important}
+.btn-primary:hover:not(:disabled){background:#0d5e4e!important}
+.btn:focus-visible,.nav a:focus-visible,.sidebar-mobile-toggle:focus-visible{outline:3px solid #75bca8!important;outline-offset:2px}
+.input,.textarea,.select{font-size:13px!important;min-height:38px;border-radius:7px!important}
+.field label{font-size:12px!important;font-weight:650!important;color:#41556a!important}
+.table th{font-size:11px!important;background:#f5f8fb!important;color:#536579!important}
+.table td{font-size:13px!important}
+.search{background:#f6f9fb!important;border-color:var(--corporate-border)!important}
+.nav a,.btn,.table td,.table th{overflow-wrap:anywhere}
+.grid,.form-grid,.report-grid,.automation-grid{min-width:0}
+.grid>*{min-width:0}
+.login-page{background:#fff!important;border-radius:14px!important}
+.login-art{background:linear-gradient(0deg,rgba(9,28,47,.83),rgba(9,28,47,.22)),url("https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1600&q=85") center/cover no-repeat!important}
+.login-art:before,.login-art:after{display:none!important}
+.login-copy .big{font-weight:750!important;letter-spacing:-.055em!important}
+.login-panel{background:#f7f9fc!important}
+.login-box{border-radius:12px!important;border-color:var(--corporate-border)!important}
+.login-box h1{color:var(--corporate-text);font-size:28px!important}
+.login-box .brand{color:var(--corporate-navy)!important}
+.login-box .brand-mark{border-color:var(--corporate-navy)!important}
+.login-box form .btn-primary{justify-content:center;width:100%;min-height:43px;font-size:13px!important}
+.login-box form .field{position:relative}
+.login-box form .field label{display:block}
+.login-password-toggle{position:absolute;right:8px;bottom:5px;border:0;background:transparent;color:#52687c;cursor:pointer;min-width:44px;min-height:30px}
+.login-box form .field input[type=password],.login-box form .field input[data-password-field]{padding-right:75px}
+@media(max-width:767px){
+ .sidebar{background:#fff!important;color:var(--corporate-text)!important;border-right:0!important;border-bottom:1px solid var(--corporate-border)!important}
+ .sidebar-mobile-brand{color:var(--corporate-navy)!important}
+ .sidebar-mobile-brand .brand-mark{border-color:var(--corporate-accent)!important}
+ .sidebar .nav{background:#fff!important;max-height:calc(100dvh - 54px);overflow-y:auto}
+ .sidebar .nav-title{color:#687a8b!important}
+ .sidebar .nav a{color:#283f52!important}
+ .sidebar .nav a:hover{background:#edf4f8!important;color:#173b54!important}
+ .sidebar .nav a.active{background:#e9f3f2!important;color:#10594f!important}
+ .topbar{position:relative!important}
+ .notification-popover{right:0;max-width:calc(100vw - 24px)}
+ .login-page{border-radius:0!important}
+}
+@media(prefers-reduced-motion:reduce){.sidebar .nav a{transition:none}}
