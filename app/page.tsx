@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {
   ArrowRight,
   Gauge,
-  Leaf,
+  Building2,
   ShieldCheck,
   UsersRound,
   Workflow
@@ -38,11 +38,11 @@ export default function Home() {
       <header className={styles.header}>
         <div className={styles.brand}>
           <span className={styles.logoMark} aria-hidden="true">
-            <Leaf size={22} strokeWidth={2.1} />
+            <Building2 size={22} strokeWidth={2.1} />
           </span>
           <div className={styles.brandText}>
-            <strong>ecojoi</strong>
-            <span>CRM • SEJA ECO COM ECOJOI</span>
+            <strong>CRM Corporativo</strong>
+            <span>PLATAFORMA MULTIEMPRESA</span>
           </div>
         </div>
 
@@ -67,7 +67,7 @@ export default function Home() {
           </Link>
         </section>
 
-        <section className={styles.features} aria-label="Recursos principais do Ecojoi CRM">
+        <section className={styles.features} aria-label="Recursos principais do CRM Corporativo">
           {features.map(({ icon: Icon, title, description }) => (
             <article className={styles.featureCard} key={title}>
               <span className={styles.featureIcon} aria-hidden="true">
