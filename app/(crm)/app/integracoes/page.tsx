@@ -48,6 +48,7 @@ export default function Integracoes() {
   const [busy,setBusy]=useState('');
 
   async function load() {
+    try {
     const [hr,tr,nr,ar,kr,ur,rr,er]=await Promise.all([
       fetch('/api/integrations/health',{cache:'no-store'}),
       fetch('/api/integrations/meta/templates',{cache:'no-store'}),
@@ -70,6 +71,11 @@ export default function Integracoes() {
     if(ur.ok) setAiUsage(ud?.data??aiUsage);
     if(rr.ok) setRetention(rd?.data??retention);
     if(er.ok) setExternal(ed?.data??external);
+    if(!hr.ok) setError('Não foi possível verificar a saúde das integrações. Confira a conexão e suas permissões.');
+    else setError(previous=>previous.startsWith('Não foi possível verificar a saúde')?'':previous);
+    } catch {
+      setError('Falha de comunicação ao consultar integrações. Verifique sua conexão e tente atualizar.');
+    }
   }
 
   useEffect(()=>{void load(); const timer=window.setInterval(()=>void load(),30000); return()=>window.clearInterval(timer);},[]);

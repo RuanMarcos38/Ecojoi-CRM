@@ -19,16 +19,16 @@ const groups:{title:string;items:Item[]}[]=[
     {href:'/app/agenda',label:'Agenda',Icon:CalendarClock,permission:'tasks.view'},
     {href:'/app/tarefas',label:'Tarefas',Icon:CheckSquare,permission:'tasks.view'}
   ]},
-  {title:'Inteligência',items:[
+  {title:'Operação e inteligência',items:[
     {href:'/app/campanhas',label:'Campanhas',Icon:Megaphone,permission:'reports.view',feature:'relatorios'},
     {href:'/app/captura',label:'Captura & Web',Icon:FormInput,permission:'settings.view'},
     {href:'/app/automacoes',label:'Automações',Icon:Bot,permission:'automations.view',feature:'automacoes'},
-    {href:'/app/integracoes',label:'Integrações',Icon:PlugZap,permission:'settings.view'},
     {href:'/app/relatorios',label:'Relatórios',Icon:BarChart3,permission:'reports.view',feature:'relatorios'}
   ]},
   {title:'Administração',items:[
     {href:'/app/equipe',label:'Equipe e Permissões',Icon:ShieldCheck,permission:'team.view'},
     {href:'/app/auditoria',label:'Auditoria',Icon:ScrollText,permission:'audit.view'},
+    {href:'/app/integracoes',label:'Integrações',Icon:PlugZap,permission:'settings.view'},
     {href:'/app/configuracoes',label:'Configurações',Icon:Settings,permission:'settings.view'}
   ]},
   {title:'Plataforma',items:[{href:'/app/admin/empresas',label:'Empresas SaaS',Icon:ShieldCheck,roles:['super_admin']}] }
@@ -38,5 +38,5 @@ export function Sidebar(){
   useEffect(()=>{fetch('/api/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>setMe(d?.data??null)).catch(()=>{})},[]);
   useEffect(()=>{setMenuOpen(false)},[pathname]);
   function allowed(i:Item){if(!me)return i.href==='/app';if(i.roles&&!i.roles.includes(me.role))return false;if(i.permission&&!me.permissions.includes(i.permission))return false;if(i.feature&&me.features[i.feature]!==true)return false;return true}
-  return <aside className={`sidebar${menuOpen?' mobile-open':''}`}><div className="sidebar-mobile-head"><div className="sidebar-mobile-brand"><div className="brand-mark"></div><span>ecojoi CRM</span></div><button type="button" className="sidebar-mobile-toggle" aria-label={menuOpen?'Fechar menu':'Abrir menu'} aria-expanded={menuOpen} aria-controls="crm-primary-nav" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?<X size={18}/>:<Menu size={18}/>}</button></div><div className="brand"><div className="brand-mark"></div><div><div className="brand-name">ecojoi</div><span className="brand-sub">CRM • SEJA ECO COM ECOJOI</span></div></div><nav className="nav" id="crm-primary-nav">{groups.map(g=>{const items=g.items.filter(allowed);return items.length?<div key={g.title}><div className="nav-title">{g.title}</div>{items.map(({href,label,Icon})=><Link className={pathname===href?'active':''} key={href} href={href}><Icon/>{label}</Link>)}</div>:null})}</nav></aside>
+  return <aside className={`sidebar${menuOpen?' mobile-open':''}`}><div className="sidebar-mobile-head"><div className="sidebar-mobile-brand"><div className="brand-mark"></div><span>ecojoi CRM</span></div><button type="button" className="sidebar-mobile-toggle" aria-label={menuOpen?'Fechar menu':'Abrir menu'} aria-expanded={menuOpen} aria-controls="crm-primary-nav" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?<X size={18}/>:<Menu size={18}/>}</button></div><div className="brand"><div className="brand-mark"></div><div><div className="brand-name">ecojoi</div><span className="brand-sub">CRM • SEJA ECO COM ECOJOI</span></div></div><nav className="nav" id="crm-primary-nav" aria-label="Navegação principal">{groups.map(g=>{const items=g.items.filter(allowed);return items.length?<div key={g.title}><div className="nav-title">{g.title}</div>{items.map(({href,label,Icon})=><Link className={pathname===href?'active':''} aria-current={pathname===href?'page':undefined} key={href} href={href}><Icon/>{label}</Link>)}</div>:null})}</nav></aside>
 }
