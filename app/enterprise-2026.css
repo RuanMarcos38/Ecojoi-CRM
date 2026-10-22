@@ -71,3 +71,20 @@ body{background:var(--corporate-bg);color:var(--corporate-text)}
  .login-page{border-radius:0!important}
 }
 @media(prefers-reduced-motion:reduce){.sidebar .nav a{transition:none}}
+
+/* Neutral multi-tenant visual identity; replaces former brand-specific leaf mark.
+   Keep existing backend identifiers and runtime environment contracts unchanged. */
+.brand-mark,.sidebar-mobile-brand .brand-mark,.login-box .brand-mark{
+  width:35px!important;height:35px!important;min-width:35px;
+  display:grid!important;place-items:center!important;
+  border:1px solid currentColor!important;border-radius:9px!important;
+  background:rgba(255,255,255,.08)!important;
+}
+.brand-mark::after,.sidebar-mobile-brand .brand-mark::after,.login-box .brand-mark::after{
+  content:"C"!important;width:auto!important;height:auto!important;
+  border-radius:0!important;background:none!important;transform:none!important;
+  color:inherit!important;font-weight:800!important;font-size:17px!important;line-height:1!important;
+}
+.sidebar .brand-name{font-size:17px!important;letter-spacing:-.03em!important;overflow-wrap:anywhere}
+.sidebar .brand-sub{font-size:9px!important;letter-spacing:.09em}
+.login-box .brand-name{font-size:19px!important;letter-spacing:-.03em}

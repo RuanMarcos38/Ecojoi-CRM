@@ -14,8 +14,8 @@ import { PwaRegister } from '@/components/PwaRegister';
 import { connection } from 'next/server';
 
 export const metadata: Metadata = {
-  title: 'Ecojoi CRM',
-  description: 'CRM multiempresa seguro para atendimento, vendas e gestão comercial.'
+  title: 'CRM Corporativo',
+  description: 'Plataforma de gestão comercial multiempresa, atendimento e relacionamento.'
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

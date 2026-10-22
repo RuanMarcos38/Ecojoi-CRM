@@ -50,7 +50,7 @@ export function Topbar(){
         .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`tenant_id=eq.${me.tenantId}`},()=>void loadNotifications())
         .subscribe();
     }catch(error){
-      console.warn('[Ecojoi CRM] Realtime indisponível; notificações seguem por atualização manual.',error);
+      console.warn('[CRM] Realtime indisponível; notificações seguem por atualização manual.',error);
     }
 
     return()=>{
@@ -113,7 +113,7 @@ export function Topbar(){
   }
 
   const unread=useMemo(()=>notifications.filter(n=>!n.read_at).length,[notifications]);
-  const initials=(me?.fullName??'Ecojoi').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]??'').join('').toUpperCase()||'EC';
+  const initials=(me?.fullName??'Usuário').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]??'').join('').toUpperCase()||'US';
 
   return <header className="topbar">
     <div className="search-wrap">
@@ -126,7 +126,7 @@ export function Topbar(){
     </div>
 
     <div className="top-actions">
-      <div className="user-meta"><strong>{me?.fullName??'Usuário'}</strong><small>{me?.companyName??'Ecojoi CRM'}</small></div>
+      <div className="user-meta"><strong>{me?.fullName??'Usuário'}</strong><small>{me?.companyName??'CRM Corporativo'}</small></div>
       <div className="notification-wrap">
         <button className="btn btn-secondary notification-button" aria-label="Notificações" onClick={()=>setNotificationsOpen(v=>!v)}>
           <Bell size={17}/>

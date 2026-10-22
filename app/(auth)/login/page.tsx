@@ -32,9 +32,9 @@ export default function LoginPage(){
   }
 
   return <div className="login-page">
-    <section className="login-art"><div className="login-copy"><small>SEU ATENDIMENTO E GESTÃO EM UM SÓ LUGAR</small><div className="big">ecojoi<br/>CRM</div><p>Atendimento, vendas, relacionamento, automações e gestão comercial com isolamento completo entre empresas.</p></div></section>
+    <section className="login-art"><div className="login-copy"><small>SEU ATENDIMENTO E GESTÃO EM UM SÓ LUGAR</small><div className="big">CRM<br/>Corporativo</div><p>Uma plataforma de relacionamento, atendimento e vendas para empresas de diferentes segmentos.</p></div></section>
     <section className="login-panel"><div className="login-box">
-      <div className="brand" style={{color:'#054735',padding:0}}><div className="brand-mark" style={{borderColor:'#054735'}}></div><div className="brand-name">ecojoi</div></div>
+      <div className="brand" style={{color:'#054735',padding:0}}><div className="brand-mark" style={{borderColor:'#054735'}}></div><div className="brand-name">CRM Corporativo</div></div>
       <h1>Acesse sua conta</h1><p className="muted">Entre com seu usuário corporativo.</p>
       <form onSubmit={submit}>
         {error&&<div className="error" role="alert">{error}</div>}
