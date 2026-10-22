@@ -9,6 +9,7 @@ export default function LoginPage(){
   const [password,setPassword]=useState('');
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(false);
+  const [showPassword,setShowPassword]=useState(false);
   const router=useRouter();
 
   async function submit(e:FormEvent){
@@ -36,9 +37,9 @@ export default function LoginPage(){
       <div className="brand" style={{color:'#054735',padding:0}}><div className="brand-mark" style={{borderColor:'#054735'}}></div><div className="brand-name">ecojoi</div></div>
       <h1>Acesse sua conta</h1><p className="muted">Entre com seu usuário corporativo.</p>
       <form onSubmit={submit}>
-        {error&&<div className="error">{error}</div>}
-        <div className="field"><label>E-mail</label><input className="input" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@empresa.com"/></div>
-        <div className="field"><label>Senha</label><input className="input" type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/></div>
+        {error&&<div className="error" role="alert">{error}</div>}
+        <div className="field"><label htmlFor="crm-login-email">E-mail</label><input id="crm-login-email" name="email" autoComplete="email" className="input" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@empresa.com"/></div>
+        <div className="field"><label htmlFor="crm-login-password">Senha</label><input id="crm-login-password" name="password" autoComplete="current-password" data-password-field className="input" type={showPassword?'text':'password'} required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/><button className="login-password-toggle" type="button" aria-label={showPassword?'Ocultar senha':'Mostrar senha'} aria-pressed={showPassword} onClick={()=>setShowPassword(v=>!v)}>{showPassword?'Ocultar':'Mostrar'}</button></div>
         <button className="btn btn-primary" disabled={loading}>{loading?'Entrando...':'Entrar no CRM'}</button>
       </form>
       <p className="muted auth-link">Primeiro acesso? <Link href="/register">Criar conta</Link></p>
