@@ -5,6 +5,16 @@ import { requirePermission } from '@/lib/auth/context';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { audit } from '@/lib/server/audit';
 
+function endpoint(value: string) {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null;
+    return url.href.replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
 const schema = z.object({
   api_url: z.string().trim().url().max(500),
   api_key: z.string().trim().min(12).max(512).optional()
@@ -43,6 +53,8 @@ export async function POST(request: Request) {
   try {
     const ctx = await requirePermission('settings.manage');
     const input = schema.parse(await request.json());
+    const apiUrl = endpoint(input.api_url);
+    if (!apiUrl) return NextResponse.json({ error: 'invalid_evolution_api_url' }, { status: 400 });
     const admin = createAdminClient();
 
     const { data: current, error: currentError } = await admin
@@ -56,7 +68,11 @@ export async function POST(request: Request) {
     const previous = (current?.config ?? {}) as Record<string, unknown>;
     const previousKey = String(previous.api_key ?? '').trim();
     const envKey = process.env.EVOLUTION_API_KEY?.trim() || '';
-    const apiKey = input.api_key?.trim() || previousKey || envKey;
+    const previousUrl = endpoint(String(previous.api_url ?? ''));
+    const envUrl = endpoint(process.env.EVOLUTION_API_URL?.trim() ?? '');
+    const apiKey = input.api_key?.trim()
+      || (apiUrl === previousUrl ? previousKey : '')
+      || (apiUrl === envUrl ? envKey : '');
 
     if (!apiKey) {
       return NextResponse.json({ error: 'evolution_api_key_required' }, { status: 400 });
@@ -72,7 +88,7 @@ export async function POST(request: Request) {
         tenant_id: ctx.tenantId,
         provider: 'evolution',
         config: {
-          api_url: input.api_url.replace(/\/$/, ''),
+          api_url: apiUrl,
           api_key: apiKey,
           webhook_token: webhookToken
         },
@@ -89,7 +105,7 @@ export async function POST(request: Request) {
       metadata: { api_url_changed: input.api_url !== String(previous.api_url ?? ''), api_key_changed: Boolean(input.api_key) }
     });
 
-    return NextResponse.json({ ok: true, data: { api_url: input.api_url.replace(/\/$/, ''), api_key_configured: true } });
+    return NextResponse.json({ ok: true, data: { api_url: apiUrl, api_key_configured: true } });
   } catch (error) {
     if (error instanceof Response) return error;
     if (error instanceof z.ZodError) {
