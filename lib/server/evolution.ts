@@ -71,6 +71,7 @@ async function evolutionRequest(runtime: EvolutionRuntime, path: string, init?: 
   const response = await fetch(`${runtime.baseUrl}/${path.replace(/^\//, '')}`, {
     ...init,
     headers,
+    redirect: 'error',
     cache: 'no-store'
   });
 
