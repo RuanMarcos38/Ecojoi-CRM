@@ -4,6 +4,9 @@ import { processEvolutionWebhook, verifyEvolutionWebhookToken } from '@/lib/serv
 export async function POST(request: Request) {
   try {
     const supplied = new URL(request.url).searchParams.get('token') || '';
+    if (!supplied) {
+      return NextResponse.json({ error: 'invalid_webhook_token' }, { status: 401 });
+    }
     const payload = await request.json();
     const instanceName = String(payload?.instance || payload?.instanceName || payload?.data?.instance || '');
 
