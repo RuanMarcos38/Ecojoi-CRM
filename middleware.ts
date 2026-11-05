@@ -36,6 +36,14 @@ export async function middleware(request:NextRequest){
   const path=request.nextUrl.pathname;
   if(usesOwnAuthentication(path))return response;
 
+  function redirectTo(pathname:string){
+    const target=request.nextUrl.clone();
+    target.pathname=pathname;
+    const redirect=NextResponse.redirect(target);
+    response.cookies.getAll().forEach(cookie=>redirect.cookies.set(cookie));
+    return redirect;
+  }
+
   const {data:{user}}=await supabase.auth.getUser();
   const isCrm=path.startsWith('/app');
   const isApi=path.startsWith('/api');
@@ -45,11 +53,11 @@ export async function middleware(request:NextRequest){
 
   if((isCrm||isApi||isSetup||isMfa)&&!user){
     if(isApi)return NextResponse.json({error:'unauthorized'},{status:401});
-    const login=request.nextUrl.clone();login.pathname='/login';return NextResponse.redirect(login);
+    return redirectTo('/login');
   }
 
   if(user){
-    const [{data:profile},{data:factors},{data:aal}]=await Promise.all([
+    const [{data:profile,error:profileError},{data:factors},{data:aal}]=await Promise.all([
       supabase.from('profiles').select('id').eq('id',user.id).maybeSingle(),
       supabase.auth.mfa.listFactors(),
       supabase.auth.mfa.getAuthenticatorAssuranceLevel()
@@ -60,20 +68,20 @@ export async function middleware(request:NextRequest){
 
     if(needsMfa&&(isCrm||isApi)){
       if(isApi)return NextResponse.json({error:'mfa_required'},{status:403});
-      const target=request.nextUrl.clone();target.pathname='/mfa';return NextResponse.redirect(target);
+      return redirectTo('/mfa');
     }
 
-    if(isMfa&&!needsMfa){
-      const target=request.nextUrl.clone();target.pathname=profile?'/app':'/setup';return NextResponse.redirect(target);
+    if(profileError&&(isCrm||isSetup||isAuth||isMfa)){
+      console.error('[CRM] Falha ao consultar o perfil para navegação.',profileError.code);
+      return new NextResponse('Não foi possível verificar o vínculo com sua empresa. Tente novamente em instantes.',{
+        status:503,headers:{'cache-control':'no-store','content-type':'text/plain; charset=utf-8'}
+      });
     }
 
-    if(isCrm&&!profile){const setup=request.nextUrl.clone();setup.pathname='/setup';return NextResponse.redirect(setup);}
-    if(isSetup&&profile){const app=request.nextUrl.clone();app.pathname='/app';return NextResponse.redirect(app);}
-    if(isAuth){
-      const target=request.nextUrl.clone();
-      target.pathname=needsMfa?'/mfa':profile?'/app':'/setup';
-      return NextResponse.redirect(target);
-    }
+    if(isMfa&&!needsMfa)return redirectTo(profile?'/app':'/setup');
+    if(isCrm&&!profile)return redirectTo('/setup');
+    if(isSetup&&profile)return redirectTo('/app');
+    if(isAuth)return redirectTo(needsMfa?'/mfa':profile?'/app':'/setup');
   }
 
   return response;
