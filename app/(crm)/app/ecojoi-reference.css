@@ -1,0 +1,361 @@
+/* Dashboard reference, scoped to the page and its surrounding CRM chrome. */
+body:has(.ecojoi-dashboard) {
+  padding: 0;
+  background: #0c0e0e;
+}
+
+.shell:has(.ecojoi-dashboard) {
+  --acid: #c6fb09;
+  --silver: #d1d3d1;
+  --edge: #41443d;
+  --panel: linear-gradient(158deg,#242625,#111314 54%,#181a1b);
+  min-height: 100dvh;
+  height: 100dvh;
+  grid-template-columns: 214px minmax(0,1fr);
+  border: 0;
+  border-radius: 0;
+  color: #f7f8f5;
+  background: #0c0e0e;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.shell:has(.ecojoi-dashboard) .main {
+  background: url('/ecojoi-dashboard-products.svg') 66% top / min(520px,45%) auto no-repeat,
+    radial-gradient(ellipse at 50% 20%,#2c3b0b,transparent 32%),#0c0e0e;
+}
+
+.shell:has(.ecojoi-dashboard) .sidebar {
+  top: 0;
+  height: 100%;
+  padding: 16px 12px 20px 15px;
+  border-color: #292c28 !important;
+  background:
+    linear-gradient(126deg,#bdf500 0,#a9db00 54%,transparent 55%) left top / 63px 87px no-repeat,
+    url('/ecojoi-dashboard-sidebar.svg') right bottom / 85px 70px no-repeat,
+    radial-gradient(ellipse at 100% 100%,#394d07,transparent 32%),
+    linear-gradient(110deg,#101212,#090b0b) !important;
+}
+
+.shell:has(.ecojoi-dashboard) .sidebar .brand {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 11px;
+  margin: 0 4px 4px 1px;
+  text-align: center;
+}
+
+.shell:has(.ecojoi-dashboard) .sidebar .brand-mark { display: none !important; }
+
+.ecojoi-wordmark {
+  color: #fff;
+  font-size: 41px;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -.075em;
+}
+
+.ecojoi-wordmark > span { color: var(--acid,#c6fb09); }
+.ecojoi-wordmark sup { font-size: 9px; letter-spacing: 0; vertical-align: top; }
+
+.shell:has(.ecojoi-dashboard) .sidebar .brand-sub {
+  max-width: 115px;
+  margin: 5px auto 0;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.shell:has(.ecojoi-dashboard) .nav,
+.shell:has(.ecojoi-dashboard) .nav > div { gap: 1px; }
+
+.shell:has(.ecojoi-dashboard) .nav > div + div { margin-top: 5px; }
+
+.shell:has(.ecojoi-dashboard) .sidebar .nav-title {
+  display: block;
+  padding: 6px 8px 5px;
+  font-size: 10px;
+  color: var(--silver) !important;
+}
+
+.shell:has(.ecojoi-dashboard) .sidebar .nav a {
+  min-height: 26px;
+  padding: 4px 10px;
+  gap: 12px;
+  font-size: 12px;
+  color: #f2f3ee !important;
+}
+
+.shell:has(.ecojoi-dashboard) .sidebar .nav a.active {
+  min-height: 32px;
+  background: linear-gradient(100deg,#273904,#4c6805) !important;
+  box-shadow: inset 4px 0 0 var(--acid), inset 0 0 0 1px #668314 !important;
+}
+
+.shell:has(.ecojoi-dashboard) .nav a.active::before { display: none; }
+.shell:has(.ecojoi-dashboard) .nav svg { width: 16px; height: 16px; }
+
+.shell:has(.ecojoi-dashboard) .topbar {
+  top: 0;
+  flex: 0 0 57px;
+  height: 57px;
+  min-height: 57px;
+  padding: 0 18px 0 12px;
+  background: #10111238 !important;
+  border-color: #292c28 !important;
+}
+
+.shell:has(.ecojoi-dashboard) .search-wrap { width: min(38vw,426px); }
+
+.shell:has(.ecojoi-dashboard) .search {
+  min-height: 35px;
+  padding: 6px 11px;
+  border-color: #3e403f !important;
+  background: #1c1d1e !important;
+  color: var(--silver);
+}
+
+.shell:has(.ecojoi-dashboard) .search input,
+.shell:has(.ecojoi-dashboard) .search input::placeholder { color: var(--silver); }
+.shell:has(.ecojoi-dashboard) .user-meta strong { color: #fff; font-size: 12px; }
+.shell:has(.ecojoi-dashboard) .user-meta small { color: var(--silver); font-size: 11px; }
+.shell:has(.ecojoi-dashboard) .top-actions { gap: 10px; }
+
+.shell:has(.ecojoi-dashboard) .avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 10px;
+  color: #111;
+  background: var(--acid);
+}
+
+.shell:has(.ecojoi-dashboard) .top-actions > .btn,
+.shell:has(.ecojoi-dashboard) .notification-button {
+  color: #fff;
+  background: #101112;
+  border-color: var(--edge);
+  width: 36px;
+  padding: 7px;
+  justify-content: center;
+}
+
+.shell:has(.ecojoi-dashboard) .notification-popover { color: #17211d; }
+
+.shell .main > .ecojoi-dashboard {
+  padding: 17px 18px 65px 24px;
+  background:
+    url('/ecojoi-dashboard-ribbons.svg') right bottom / min(565px,46%) 53px no-repeat,
+    radial-gradient(ellipse at 100% 100%,#293409,transparent 30%),
+    transparent !important;
+}
+
+.shell .ecojoi-dashboard .approved-greeting {
+  min-height: 60px;
+  margin-bottom: 16px;
+  position: relative;
+}
+
+.shell .ecojoi-dashboard .approved-greeting h1 {
+  color: #f8f9f6 !important;
+  font-weight: 800 !important;
+  font-size: 29px;
+  margin-bottom: 0;
+}
+
+.shell .ecojoi-dashboard .approved-greeting h1 span { color: var(--acid); }
+.shell .ecojoi-dashboard .approved-greeting p { color: #edece9; font-size: 14px; }
+
+.shell .ecojoi-dashboard .approved-greeting p::after {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 2px;
+  margin-top: 4px;
+  background: var(--acid);
+}
+
+.shell .ecojoi-dashboard .approved-greeting button {
+  margin-top: 6px;
+  min-height: 39px;
+  padding-inline: 18px;
+  border-color: #91ad21;
+  background: #0d0f0d;
+  color: #fff;
+}
+
+.shell .ecojoi-dashboard .approved-greeting button svg { color: var(--acid); }
+.shell .ecojoi-dashboard .approved-greeting button:hover { background: #273509; color: #fff; }
+.shell .ecojoi-dashboard .card { color: #17211d; }
+
+.shell .ecojoi-dashboard .approved-kpis { gap: 13px; }
+
+.shell .ecojoi-dashboard .approved-kpi,
+.shell .ecojoi-dashboard .approved-panel {
+  border-color: var(--edge) !important;
+  border-radius: 17px !important;
+  box-shadow: inset 0 1px 1px #ffffff16 !important;
+}
+
+.shell .ecojoi-dashboard .approved-kpi {
+  min-height: 119px;
+  padding: 9px 18px 11px;
+  background: radial-gradient(ellipse at 100% 100%,#3d5706,transparent 54%),var(--panel);
+}
+
+.shell .ecojoi-dashboard .approved-kpi:nth-child(2n) {
+  background: radial-gradient(ellipse at 100% 0%,#344c07,transparent 60%),var(--panel);
+}
+
+.shell .ecojoi-dashboard .approved-kpi-label { color: #f7f8f5; font-size: 13px; }
+.shell .ecojoi-dashboard .approved-kpi-icon,
+.shell .ecojoi-dashboard .approved-activity-list > div > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 33px;
+  border-radius: 10px;
+  background: linear-gradient(145deg,#445820,#202919);
+  color: var(--acid);
+}
+
+.shell .ecojoi-dashboard .approved-kpi-icon svg,
+.shell .ecojoi-dashboard .approved-activity-list > div > span svg { width: 22px; height: 22px; }
+
+.shell .ecojoi-dashboard .approved-kpi-value { color: #fff; margin-top: 5px; font-size: 31px; }
+.shell .ecojoi-dashboard .approved-kpi-foot { margin-top: 5px; padding-right: 0; gap: 11px; }
+.shell .ecojoi-dashboard .approved-kpi-foot > span {
+  background: var(--acid);
+  color: #101200;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+.shell .ecojoi-dashboard .approved-kpi-foot small { color: var(--silver); font-size: 11px; }
+
+.shell .ecojoi-dashboard .ecojoi-kpi-art,
+.shell .ecojoi-dashboard .approved-mini-chart {
+  position: absolute;
+  right: 26px;
+  top: 33px;
+  width: 39px;
+  height: 35px;
+  color: var(--acid);
+}
+
+.shell .ecojoi-dashboard .approved-mini-chart i {
+  background: linear-gradient(180deg,var(--acid),#4b6905);
+}
+.shell .ecojoi-dashboard .approved-mini-chart i:nth-child(1) { height: 37%; }
+.shell .ecojoi-dashboard .approved-mini-chart i:nth-child(2) { height: 58%; }
+.shell .ecojoi-dashboard .approved-mini-chart i:nth-child(3) { height: 77%; }
+.shell .ecojoi-dashboard .approved-mini-chart i:nth-child(4) { height: 100%; }
+
+.shell .ecojoi-dashboard .approved-mid-grid {
+  grid-template-columns: minmax(0,1.82fr) minmax(0,1fr);
+  gap: 15px;
+  margin-top: 12px;
+}
+
+.shell .ecojoi-dashboard .approved-bottom-grid {
+  grid-template-columns: minmax(0,2.23fr) minmax(0,1fr);
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.ecojoi-dashboard :is(.approved-mid-grid,.approved-bottom-grid):has(> :only-child) {
+  grid-template-columns: minmax(0,1fr);
+}
+
+.shell .ecojoi-dashboard .approved-panel { padding: 10px 18px 16px; background: var(--panel); }
+.shell .ecojoi-dashboard .approved-bottom-grid .approved-panel {
+  min-height: 150px;
+  background: radial-gradient(ellipse at bottom right,#28380a,transparent 34%),var(--panel);
+}
+
+.shell .ecojoi-dashboard .approved-panel-head { margin-bottom: 7px; }
+.shell .ecojoi-dashboard .approved-panel-head h3 { color: #fff; font-size: 19px; font-weight: 750; }
+.shell .ecojoi-dashboard .approved-panel-head p { color: var(--silver); font-size: 12px; margin-top: 0; }
+.shell .ecojoi-dashboard .approved-panel-head svg { color: var(--acid); margin-top: 3px; }
+
+.shell .ecojoi-dashboard .approved-activity-list > div {
+  display: grid;
+  grid-template-columns: 43px minmax(0,1fr) auto;
+  min-height: 45px;
+  padding: 4px 1px;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #3b3e3b;
+  color: #fff;
+}
+.shell .ecojoi-dashboard .approved-activity-list > div:last-child { border-bottom: 0; }
+.shell .ecojoi-dashboard .approved-activity-list > div b { color: #fff; font-size: 13px; }
+.shell .ecojoi-dashboard .approved-activity-list > div small,
+.shell .ecojoi-dashboard .approved-activity-list > div em { color: var(--silver); font-size: 11px; }
+
+.shell .ecojoi-dashboard .ecojoi-funnel > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 29.5px;
+  border-bottom: 1px solid #343735;
+  font-size: 12px;
+}
+.shell .ecojoi-dashboard .ecojoi-funnel > div::before {
+  content: "";
+  width: 4px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--acid);
+  flex-shrink: 0;
+}
+.shell .ecojoi-dashboard .ecojoi-funnel > div:last-child { border-bottom: 0; }
+.shell .ecojoi-dashboard .ecojoi-funnel > div span:last-child { margin-left: auto; color: var(--silver); }
+
+.shell .ecojoi-dashboard .approved-table-wrap {
+  border: 1px solid var(--edge);
+  border-radius: 11px;
+  background: #141617;
+}
+.shell .ecojoi-dashboard .approved-table-wrap th,
+.shell .ecojoi-dashboard .approved-table-wrap td {
+  color: #fff;
+  padding: 8px 16px;
+  font-size: 12px;
+  border-color: var(--edge);
+}
+.shell .ecojoi-dashboard .approved-table-wrap th {
+  text-transform: none;
+  background: linear-gradient(180deg,#3b5017,#304413);
+}
+.shell .ecojoi-dashboard .approved-table-wrap td { background: #141617; }
+
+@media (max-width: 1199px) {
+  .shell .ecojoi-dashboard .approved-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 900px) {
+  .shell .ecojoi-dashboard :is(.approved-mid-grid,.approved-bottom-grid) { grid-template-columns: 1fr; }
+}
+@media (max-width: 767px) {
+  .shell:has(.ecojoi-dashboard) .main { background: #0c0e0e; }
+  .shell:has(.ecojoi-dashboard) { display: flex; flex-direction: column; height: auto; }
+  .shell:has(.ecojoi-dashboard) .sidebar { height: auto; padding: 7px 12px; background: #101112 !important; }
+  .shell:has(.ecojoi-dashboard) .sidebar .brand { display: none; }
+  .shell:has(.ecojoi-dashboard) .sidebar .nav { background: #101112 !important; }
+  .shell:has(.ecojoi-dashboard) .sidebar-mobile-toggle { color: #fff; background: #20231d; }
+  .shell:has(.ecojoi-dashboard) .sidebar-mobile-brand .ecojoi-wordmark { font-size: 27px; }
+  .shell:has(.ecojoi-dashboard) .search-wrap { width: auto; flex: 1; min-width: 0; }
+  .shell .main > .ecojoi-dashboard { padding: 16px 12px 62px; background-size: 65% auto, auto !important; }
+  .shell .ecojoi-dashboard .approved-greeting h1 { font-size: 24px; }
+  .shell .ecojoi-dashboard .approved-greeting p { font-size: 12px; }
+}
+@media (max-width: 510px) {
+  .shell .ecojoi-dashboard .approved-kpis { grid-template-columns: 1fr; }
+  .shell .ecojoi-dashboard .approved-greeting button { padding-inline: 8px; }
+}
+
+.shell .ecojoi-dashboard .approved-table-wrap table { min-width: 0; table-layout: fixed; }
+.shell .ecojoi-dashboard .approved-table-wrap td { overflow-wrap: anywhere; }
+.shell .ecojoi-dashboard .approved-table-wrap td strong { color: inherit; font-size: inherit; }
+.shell .ecojoi-dashboard .approved-activity-list > div > span.warning { color: var(--acid); background: #435517; }
+@media (min-width: 768px) and (max-width: 1390px) {
+  .shell .ecojoi-dashboard .ecojoi-kpi-art,
+  .shell .ecojoi-dashboard .approved-mini-chart { right: 12px; width: 29px; }
+}

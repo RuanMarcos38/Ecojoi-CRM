@@ -42,6 +42,7 @@ export default function LoginPage(){
         <div className="field"><label htmlFor="crm-login-password">Senha</label><input id="crm-login-password" name="password" autoComplete="current-password" data-password-field className="input" type={showPassword?'text':'password'} required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/><button className="login-password-toggle" type="button" aria-label={showPassword?'Ocultar senha':'Mostrar senha'} aria-pressed={showPassword} onClick={()=>setShowPassword(v=>!v)}>{showPassword?'Ocultar':'Mostrar'}</button></div>
         <button className="btn btn-primary" disabled={loading}>{loading?'Entrando...':'Entrar no CRM'}</button>
       </form>
+      <p className="muted auth-link"><Link href="/recuperar-senha">Esqueci minha senha</Link></p>
       <p className="muted auth-link">Primeiro acesso? <Link href="/register">Criar conta</Link></p>
     </div></section>
   </div>;
