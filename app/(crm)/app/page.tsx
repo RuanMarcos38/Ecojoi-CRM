@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect,useMemo,useState } from 'react';
-import { CircleDollarSign, Clock3, Flame, ListChecks, MessageCircle, Settings2, Target, TrendingUp, X } from 'lucide-react';
+import { CircleDollarSign, Clock3, Database, Flame, Headset, ListChecks, MessageCircle, Settings2, Target, TrendingUp, X } from 'lucide-react';
 import styles from './dashboard.module.css';
+import './ecojoi-reference.css';
 
 type Dashboard={
   leads:number;hotLeads:number;openConversations:number;waitingConversations:number;slaBreached:number;
@@ -126,9 +127,9 @@ export default function Dashboard(){
     }
   }
 
-  return <div className={`content dashboard-page ${styles.root}`}>
+  return <div className={`content dashboard-page ecojoi-dashboard ${styles.root}`}>
     <div className="approved-greeting">
-      <div><h1>Meu dia</h1><p>Prioridades comerciais, atendimento e previsão de receita.</p></div>
+      <div><h1>Meu dia na <span>Ecojoi</span></h1><p>Prioridades comerciais, atendimento e previsão de receita.</p></div>
       <button className="btn btn-secondary" onClick={()=>setCustomizing(v=>!v)}>{customizing?<X size={15}/>:<Settings2 size={15}/>} {customizing?'Fechar':'Personalizar'}</button>
     </div>
 
@@ -149,10 +150,10 @@ export default function Dashboard(){
       </section>}
 
       <section className="approved-kpis">
-        {visible('hot_leads')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><Flame size={16}/></span>Leads quentes</div><div className="approved-kpi-value">{data.hotLeads}</div><div className="approved-kpi-foot"><span>{data.leads} leads</span><small>priorização automática</small></div></article>}
-        {visible('attendance')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><MessageCircle size={16}/></span>Atendimentos</div><div className="approved-kpi-value">{data.openConversations}</div><div className="approved-kpi-foot"><span>{data.waitingConversations} esperando</span><small>{data.slaBreached} fora do SLA</small></div></article>}
-        {visible('forecast')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><TrendingUp size={16}/></span>Forecast ponderado</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.weightedForecast)}</div><div className="approved-kpi-foot"><span>{money(data.openPipeline)}</span><small>pipeline aberto</small></div></article>}
-        {visible('won_revenue')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><CircleDollarSign size={16}/></span>Receita ganha</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.wonRevenue)}</div><div className="approved-kpi-foot"><span>{data.conversion}%</span><small>conversão fechados</small></div></article>}
+        {visible('hot_leads')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><Flame size={16}/></span>Leads quentes</div><div className="approved-kpi-value">{data.hotLeads}</div><div className="approved-kpi-foot"><span>{data.leads} leads</span><small>priorização automática</small></div><div className="approved-mini-chart" aria-hidden="true"><i/><i/><i/><i/></div></article>}
+        {visible('attendance')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><MessageCircle size={16}/></span>Atendimentos</div><div className="approved-kpi-value">{data.openConversations}</div><div className="approved-kpi-foot"><span>{data.waitingConversations} esperando</span><small>{data.slaBreached} fora do SLA</small></div><Headset className="ecojoi-kpi-art" aria-hidden="true"/></article>}
+        {visible('forecast')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><TrendingUp size={16}/></span>Forecast ponderado</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.weightedForecast)}</div><div className="approved-kpi-foot"><span>{money(data.openPipeline)}</span><small>pipeline aberto</small></div><div className="approved-mini-chart" aria-hidden="true"><i/><i/><i/><i/></div></article>}
+        {visible('won_revenue')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><CircleDollarSign size={16}/></span>Receita ganha</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.wonRevenue)}</div><div className="approved-kpi-foot"><span>{data.conversion}%</span><small>conversão fechados</small></div><Database className="ecojoi-kpi-art" aria-hidden="true"/></article>}
       </section>
 
       {(visible('priorities')||visible('funnel'))&&<section className="approved-mid-grid">
@@ -168,11 +169,11 @@ export default function Dashboard(){
 
         {visible('funnel')&&<div className="approved-panel">
           <div className="approved-panel-head"><div><h3>Funil comercial</h3><p>Volume e valor por etapa.</p></div></div>
-          <div style={{display:'grid',gap:8}}>
-            {data.stageBreakdown.length?data.stageBreakdown.map(s=><div key={s.stage} style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,padding:'8px 0',borderBottom:'1px solid #edf0ee'}}>
-              <span style={{fontSize:11}}>{stageLabel[s.stage]??s.stage}</span>
-              <span style={{fontSize:10,color:'#6f7a75'}}>{s.count} · {money(s.value)}</span>
-            </div>):<span className="muted">Sem negócios no período.</span>}
+          <div className="ecojoi-funnel">
+            {[...new Set([...Object.keys(stageLabel), ...data.stageBreakdown.map(item=>item.stage)])].map(stage=>{
+              const row=data.stageBreakdown.find(item=>item.stage===stage);
+              return <div key={stage}><span>{stageLabel[stage]??stage}</span><span>{row?.count??0} - {money(row?.value??0)}</span></div>;
+            })}
           </div>
         </div>}
       </section>}
@@ -188,7 +189,7 @@ export default function Dashboard(){
         {visible('sources')&&<div className="approved-panel">
           <div className="approved-panel-head"><div><h3>Origem da base</h3><p>Canais com mais entradas.</p></div><Target size={16}/></div>
           <div style={{display:'grid',gap:8}}>
-            {data.sourceBreakdown.length?data.sourceBreakdown.map((s,index)=><div key={`${s.source}-${index}`} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:10}}><span>{s.source}</span><strong>{s.count}</strong></div>):<span className="muted">Sem origens registradas.</span>}
+            {data.sourceBreakdown.length?data.sourceBreakdown.map((s,index)=><div key={`${s.source}-${index}`} style={{display:'flex',justifyContent:'space-between',gap:8,fontSize:12}}><span>{s.source}</span><strong>{s.count}</strong></div>):<span className="muted">Sem origens registradas.</span>}
           </div>
         </div>}
       </section>}
