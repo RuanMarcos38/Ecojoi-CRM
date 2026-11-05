@@ -9,6 +9,7 @@ function usesOwnAuthentication(path:string){
   return path.startsWith('/api/public/')
     || path.startsWith('/api/v1/')
     || path==='/api/integrations/meta/webhook'
+    || path==='/api/integrations/evolution/webhook'
     || path==='/api/ai-agent/reply'
     || path==='/api/workers/tick'
     || path==='/api/health';
