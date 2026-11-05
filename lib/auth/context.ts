@@ -13,10 +13,11 @@ export async function getRequestContext():Promise<RequestContext>{
     supabase.auth.mfa.listFactors(),
     supabase.auth.mfa.getAuthenticatorAssuranceLevel()
   ]);
-  if(!factorError&&!aalError){
-    const hasVerified=(factors?.totp??[]).some(f=>f.status==='verified')||(factors?.phone??[]).some(f=>f.status==='verified');
-    if(hasVerified&&aal?.currentLevel!=='aal2')throw new Response('MFA required',{status:403});
+  if(factorError||aalError||!factors||!aal){
+    throw new Response('MFA verification unavailable',{status:503,headers:{'cache-control':'no-store'}});
   }
+  const hasVerified=factors.totp.some(f=>f.status==='verified')||(factors.phone??[]).some(f=>f.status==='verified');
+  if(hasVerified&&aal.currentLevel!=='aal2')throw new Response('MFA required',{status:403});
 
   const {data:profile,error}=await supabase
     .from('profiles')

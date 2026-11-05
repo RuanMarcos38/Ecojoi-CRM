@@ -58,11 +58,15 @@ export async function middleware(request:NextRequest){
   }
 
   if(user){
-    const [{data:profile,error:profileError},{data:factors},{data:aal}]=await Promise.all([
+    const [{data:profile,error:profileError},{data:factors,error:factorError},{data:aal,error:aalError}]=await Promise.all([
       supabase.from('profiles').select('id').eq('id',user.id).maybeSingle(),
       supabase.auth.mfa.listFactors(),
       supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     ]);
+
+    if(factorError||aalError||!factors||!aal){
+      return NextResponse.json({error:'mfa_verification_unavailable'},{status:503,headers:{'cache-control':'no-store'}});
+    }
 
     const hasVerifiedMfa=(factors?.totp??[]).some(f=>f.status==='verified')||(factors?.phone??[]).some(f=>f.status==='verified');
     const needsMfa=hasVerifiedMfa&&aal?.currentLevel!=='aal2';
