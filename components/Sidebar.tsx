@@ -37,6 +37,18 @@ const groups:{title:string;items:Item[]}[]=[
 export function Sidebar(){
   const pathname=usePathname(); const [me,setMe]=useState<Me|null>(null); const [menuOpen,setMenuOpen]=useState(false);
   const [closedGroups,setClosedGroups]=useState<Record<string,boolean>>({});
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('ecojoi:sidebar:groups') || '{}');
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        setClosedGroups(Object.fromEntries(groups.map(group => [group.title, saved[group.title] === true])));
+      }
+    } catch {}
+  }, []);
+  function saveGroups(next: Record<string, boolean>) {
+    setClosedGroups(next);
+    try { localStorage.setItem('ecojoi:sidebar:groups', JSON.stringify(next)); } catch {}
+  }
   useEffect(()=>{fetch('/api/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>setMe(d?.data??null)).catch(()=>{})},[]);
   useEffect(()=>{setMenuOpen(false)},[pathname]);
   function allowed(i:Item){if(!me)return i.href==='/app';if(i.roles&&!i.roles.includes(me.role))return false;if(i.permission&&!me.permissions.includes(i.permission))return false;if(i.feature&&me.features[i.feature]!==true)return false;return true}
@@ -65,14 +77,18 @@ export function Sidebar(){
       {collapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}
       <span>{desktopLabel}</span>
     </button>
+    <div className="sidebar-group-actions" aria-label="Organizar categorias">
+      <button type="button" onClick={() => saveGroups(Object.fromEntries(groups.map(group => [group.title, true])))}>Recolher categorias</button>
+      <button type="button" onClick={() => saveGroups({})}>Expandir categorias</button>
+    </div>
     <nav className="nav" id="crm-primary-nav" aria-label="Navegação principal">
       {groups.map(group => {
         const items = group.items.filter(allowed);
         return items.length ? <div key={group.title} className="sidebar-nav-group">
-          <button type="button" className="nav-title nav-group-toggle" aria-expanded={!closedGroups[group.title]} aria-label={`${closedGroups[group.title] ? 'Expandir' : 'Recolher'} ${group.title}`} onClick={() => setClosedGroups(prev=>({...prev,[group.title]:!prev[group.title]}))}>
+          <button type="button" className="nav-title nav-group-toggle" aria-expanded={!closedGroups[group.title]} aria-label={`${closedGroups[group.title] ? 'Expandir' : 'Recolher'} ${group.title}`} title={`${closedGroups[group.title] ? 'Expandir' : 'Recolher'} categoria`} onClick={() => saveGroups({...closedGroups,[group.title]:!closedGroups[group.title]})}>
             <span>{group.title}</span><ChevronDown aria-hidden="true" size={14} className={closedGroups[group.title] ? 'nav-chevron is-closed' : 'nav-chevron'}/>
           </button>
-          {!closedGroups[group.title] && items.map(({href, label, Icon}) => <Link
+          {(collapsed || !closedGroups[group.title]) && items.map(({href, label, Icon}) => <Link
             className={pathname === href ? 'active' : ''}
             aria-current={pathname === href ? 'page' : undefined}
             aria-label={label}

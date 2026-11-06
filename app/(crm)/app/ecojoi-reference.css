@@ -480,3 +480,11 @@ body:has(.ecojoi-shell) {
 .profile-photo-feedback button { margin-left: 8px; color: inherit; background: transparent; border: 0; cursor: pointer; }
 .message-agent { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px; }
 .message-agent .agent-avatar { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%; background: var(--acid); color: #101500; font-size: 9px; }
+
+.sidebar-group-actions { display: flex; gap: 4px; flex-wrap: wrap; padding: 6px 0; }
+.sidebar-group-actions button { flex: 1; border: 1px solid #41443d; border-radius: 6px; padding: 7px 5px; background: transparent; color: #eef3e9; font: inherit; font-size: 11px; cursor: pointer; }
+.sidebar-group-actions button:hover { background: #293719; border-color: var(--acid); }
+.shell.ecojoi-shell .nav-group-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 6px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.shell.ecojoi-shell .nav-group-toggle:focus-visible { outline: 2px solid var(--acid); outline-offset: -2px; }
+@media(min-width:768px) { .sidebar[data-collapsed="true"] .sidebar-group-actions { display: none; } }
+@media(max-width:767px) { .sidebar:not(.mobile-open) .sidebar-group-actions { display: none; } }
