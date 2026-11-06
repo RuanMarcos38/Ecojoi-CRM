@@ -357,6 +357,9 @@ body {
   .main > [class*="whatsappShell"] {
     grid-template-columns: 320px minmax(0,1fr) 280px !important;
   }
+  .main > [class*="whatsappShell"][data-details-open="false"] {
+    grid-template-columns: 320px minmax(0,1fr) !important;
+  }
 }
 
 @media (min-width: 981px) and (max-width: 1360px) {
