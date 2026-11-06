@@ -27,6 +27,18 @@ if [[ -f "$app/DEPLOY_SOURCE_SHA" ]]; then
   cp -p -- "$app/DEPLOY_SOURCE_SHA" "$backup/DEPLOY_SOURCE_SHA"
 fi
 
+retire_runtime() {
+  local runtime="$1" proc cwd name
+  for proc in /proc/[0-9]*; do
+    [[ -O "$proc" ]] || continue
+    cwd=$(readlink "$proc/cwd" 2>/dev/null) || continue
+    [[ "$cwd" == "$runtime" ]] || continue
+    read -r name < "$proc/comm" || continue
+    [[ "$name" == next-server* ]] || continue
+    kill -TERM "${proc##*/}" 2>/dev/null || true
+  done
+}
+
 rollback() {
   status=$?
   trap - ERR INT TERM
@@ -42,6 +54,7 @@ rollback() {
       rm -f -- "$app/DEPLOY_SOURCE_SHA"
     fi
     touch "$app/tmp/restart.txt"
+    retire_runtime "$stage/failed-runtime"
   fi
   echo "Deploy interrompido. Backup: $backup" >&2
   exit "$(( status == 0 ? 1 : status ))"
@@ -53,12 +66,15 @@ mv -- "$stage/runtime" "$app/runtime"
 mv -- "$stage/server.js" "$app/server.js"
 mv -- "$stage/DEPLOY_SOURCE_SHA" "$app/DEPLOY_SOURCE_SHA"
 touch "$app/tmp/restart.txt"
+retire_runtime "$backup/runtime"
 
 healthy() {
-  local attempt
+  local attempt response
   for attempt in {1..9}; do
-    if curl -fsS --user-agent "Mozilla/5.0 (compatible; EcojoiCRMDeploy/1.0)" --max-time 15 \
-      https://crm.ecojoi.com.br/api/health | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'; then
+    if response=$(curl -fsS --user-agent "Mozilla/5.0 (compatible; EcojoiCRMDeploy/1.0)" --max-time 15 \
+      https://crm.ecojoi.com.br/api/health) &&
+      grep -Fq '"database":"ok"' <<< "$response" &&
+      grep -Fq "\"revision\":\"$revision\"" <<< "$response"; then
       return 0
     fi
     if (( attempt < 9 )); then

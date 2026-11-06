@@ -10,6 +10,7 @@ export async function GET(){
     return NextResponse.json({
       status:'ok',
       service:'ecojoi-crm',
+      revision:process.env.ECOJOI_RUNNING_REVISION??null,
       database:'ok',
       timestamp:new Date().toISOString(),
       response_ms:Date.now()-started
@@ -18,6 +19,7 @@ export async function GET(){
     return NextResponse.json({
       status:'degraded',
       service:'ecojoi-crm',
+      revision:process.env.ECOJOI_RUNNING_REVISION??null,
       database:'error',
       timestamp:new Date().toISOString(),
       response_ms:Date.now()-started
