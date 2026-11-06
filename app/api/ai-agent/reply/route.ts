@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isWhatsAppWindowOpen, sendWhatsAppText } from '@/lib/server/meta';
+import { canSendFreeformWhatsApp, sendWhatsAppText } from '@/lib/server/whatsapp';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
 const usageSchema=z.object({
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     if (conversation.attendance_state !== 'automatic') {
       return NextResponse.json({ error: 'conversation_not_in_automatic_mode' }, { status: 409 });
     }
-    if (conversation.channel === 'whatsapp' && !isWhatsAppWindowOpen(conversation.last_inbound_at)) {
+    if (conversation.channel === 'whatsapp' && !(await canSendFreeformWhatsApp(input.tenant_id, conversation.last_inbound_at))) {
       return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
     }
 
