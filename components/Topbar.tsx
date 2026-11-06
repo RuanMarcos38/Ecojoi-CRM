@@ -59,6 +59,7 @@ export function Topbar(){
         return;
       }
       setAvatarVersion(Date.now());
+      window.dispatchEvent(new Event('ecojoi:avatar-updated'));
       setAvatarFeedback('Foto atualizada.');
     } catch {
       setAvatarFeedback('Não foi possível salvar a foto.');

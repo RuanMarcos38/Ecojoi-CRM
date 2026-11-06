@@ -583,3 +583,17 @@ export async function processEvolutionWebhook(payload: any) {
     await processMessageUpdate(instanceName, payload?.data);
   }
 }
+
+// Read only: never changes the contact's WhatsApp profile or privacy settings.
+export async function getEvolutionContactPicture(tenantId: string, phone: string) {
+  const settings = await tenantEvolutionSettings(tenantId);
+  if (settings.provider !== 'evolution' || !settings.instanceName) return null;
+  const runtime = await tenantRuntime(tenantId);
+  if (!runtime) return null;
+  const number = phone.replace(/\D/g, '');
+  if (!number) return null;
+  const data = await evolutionRequest(runtime, `chat/fetchProfilePictureUrl/${encodeURIComponent(settings.instanceName)}`, {
+    method: 'POST', body: JSON.stringify({ number }), signal: AbortSignal.timeout(8000)
+  });
+  return typeof data?.profilePictureUrl === 'string' ? data.profilePictureUrl : null;
+}

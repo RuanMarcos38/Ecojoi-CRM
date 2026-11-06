@@ -1246,3 +1246,36 @@
   .root .composerIcon { width: 30px; }
   .root .messageInputWrap > input { padding-inline: 8px; }
 }
+
+/* Readable desktop controls and consistent contact/agent identity. */
+.root .avatar { width: 52px; height: 52px; font-size: 17px; overflow: hidden; }
+.root .bigAvatar { width: 96px; height: 96px; font-size: 28px; overflow: hidden; }
+.root .avatar img, .root .bigAvatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.root .assigneeIdentity { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.root .assigneeIdentity :global(.agent-avatar) { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; overflow: hidden; background: var(--chat-surface-soft); }
+.root .assigneeIdentity > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.root .conversationMeta { flex-wrap: wrap; row-gap: 6px; }
+.root .conversation { min-height: 106px; }
+.root .messageText { font-size: 16px; line-height: 1.6; }
+.root .messageMeta { font-size: 12px; }
+.root :global(.message-agent) { font-size: 14px; gap: 9px; margin-bottom: 8px; }
+.root :global(.message-agent .agent-avatar) { width: 36px; height: 36px; flex-basis: 36px; font-size: 13px; }
+.root .messageBubble { padding: 14px 16px 10px; min-width: 104px; }
+@media (min-width: 761px) {
+  .root .searchBox { min-height: 52px; }
+  .root .searchBox input, .root .messageInputWrap > input { font-size: 16px; }
+  .root .messageInputWrap > input { min-height: 58px; padding: 14px; }
+  .root .composer { min-height: 82px; padding: 12px 16px; }
+  .root .composer button { min-width: 42px; min-height: 42px; }
+  .root .queueTabs button { min-height: 42px; font-size: 13px; }
+  .root .conversationName b { font-size: 16px; }
+  .root .conversationName small, .root .conversationMeta { font-size: 12px; }
+  .root .lastMessage { font-size: 14px; line-height: 1.5; }
+  .root .contactIdentity strong { font-size: 17px; }
+  .root .contactIdentity span { font-size: 13px; }
+  .root .headerActions :global(.btn) { font-size: 14px; min-height: 42px; }
+  .root .details h3 { font-size: 18px; }
+  .root .details p, .root .ownerCard strong { font-size: 14px; }
+  .root .details > b, .root .ownerCard span { font-size: 12px; }
+  .root .details textarea { font-size: 16px; min-height: 100px; }
+}

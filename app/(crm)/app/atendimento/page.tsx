@@ -6,6 +6,7 @@ import {
   Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
+import { ContactAvatar } from '@/components/ContactAvatar';
 import { AgentAvatar } from '@/components/AgentAvatar';
 import { createClient } from '@/lib/supabase/client';
 
@@ -434,11 +435,11 @@ export default function Atendimento() {
           {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
             const last = conversation.messages?.[conversation.messages.length - 1];
             return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setMobileChatOpen(true); }}>
-              <span className={styles.avatar}>{initials(conversation.contact?.name)}</span>
+              <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} className={styles.avatar}/>
               <span className={styles.conversationCopy}>
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
                 <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
-                <span className={styles.conversationMeta}><i>{channelName(conversation.channel)}</i><span>{conversation.assignee?.full_name ? `Responsável: ${conversation.assignee.full_name}` : 'Sem responsável'}</span></span>
+                <span className={styles.conversationMeta}><i>{channelName(conversation.channel)}</i><span className={styles.assigneeIdentity}>{conversation.assignee&&<AgentAvatar name={conversation.assignee.full_name} userId={conversation.assignee.id}/>}<span>{conversation.assignee?.full_name ? `Responsável: ${conversation.assignee.full_name}` : 'Sem responsável'}</span></span></span>
               </span>
             </button>;
           })}
@@ -449,7 +450,7 @@ export default function Atendimento() {
         {active ? <>
           <header className={styles.chatHeader}>
             <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
-            <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(active.contact?.name)}</span><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)} · {active.contact?.phone ?? active.contact?.email ?? 'sem identificação'} · {active.assignee?.full_name ?? 'sem responsável'}</span></div></div>
+            <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)} · {active.contact?.phone ?? active.contact?.email ?? 'sem identificação'} · {active.assignee?.full_name ?? 'sem responsável'}</span></div></div>
             <div className={styles.headerActions}>
               {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
               {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
@@ -487,7 +488,7 @@ export default function Atendimento() {
       <aside className={styles.details} id="attendance-contact-details" aria-label="Detalhes do contato" hidden={!detailsOpen || !active}>
         <div className={styles.detailsHeading}><strong>Detalhes do contato</strong><button type="button" className={styles.roundButton} aria-label="Fechar detalhes do contato" title="Fechar detalhes do contato" onClick={() => toggleDetails(false)}><X size={18}/></button></div>
         {active && <>
-          <span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span>
+          <ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.bigAvatar}/>
           <h3>{active.contact?.name}</h3>
           <p>{active.contact?.phone || 'Telefone não informado'}</p>
           <p>{active.contact?.email || 'E-mail não informado'}</p>

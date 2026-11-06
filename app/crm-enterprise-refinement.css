@@ -355,10 +355,10 @@ body {
 
 @media (min-width: 1361px) {
   .main > [class*="whatsappShell"] {
-    grid-template-columns: 320px minmax(0,1fr) 280px !important;
+    grid-template-columns: 360px minmax(0,1fr) 280px !important;
   }
   .main > [class*="whatsappShell"][data-details-open="false"] {
-    grid-template-columns: 320px minmax(0,1fr) !important;
+    grid-template-columns: 360px minmax(0,1fr) !important;
   }
 }
 
