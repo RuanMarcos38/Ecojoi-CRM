@@ -1,3 +1,4 @@
+import { sendAccessEmail } from '@/lib/server/access-email';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
@@ -51,7 +52,7 @@ export async function POST(req:Request){
       const {data,error}=await admin.auth.admin.generateLink({type:'invite',email:body.email,options:{data:{full_name:body.full_name},redirectTo}});
       if(error||!data.user||!data.properties?.hashed_token)return reply({error:'invite_link_failed'},400);
       userId=data.user.id;
-      const url=new URL('/auth/confirm',getPublicAppUrl());
+      const url=new URL('/acessar-convite',getPublicAppUrl());
       url.searchParams.set('token_hash',data.properties.hashed_token);
       url.searchParams.set('type','invite');
       url.searchParams.set('next','/redefinir-senha?convite=1');
@@ -66,6 +67,7 @@ export async function POST(req:Request){
       // Retain the Auth identity on failure so a retry can repair its missing profile.
       if(error)return reply({error:'profile_create_failed'},500);
     }
+    if(delivery==='link' && inviteUrl && body.delivery==='email' && await sendAccessEmail(body.email,body.full_name,inviteUrl)){delivery='email';inviteUrl=null;}
     await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'team.invite',entity:'profile',entityId:userId,metadata:{role:body.role,delivery,reissued:!!existingId}});
     return reply({data:{id:userId,email:body.email,full_name:body.full_name,role:body.role,delivery,invite_url:inviteUrl,email_error:mailError}},201);
   }catch(e){if(e instanceof Response)return e;if(e instanceof z.ZodError)return reply({error:'invalid_payload'},400);return reply({error:'team_invite_failed'},500)}
