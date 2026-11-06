@@ -55,8 +55,17 @@ mv -- "$stage/DEPLOY_SOURCE_SHA" "$app/DEPLOY_SOURCE_SHA"
 touch "$app/tmp/restart.txt"
 
 healthy() {
-  curl -fsS --user-agent "Mozilla/5.0 (compatible; EcojoiCRMDeploy/1.0)" --retry 8 --retry-all-errors --retry-delay 4 --max-time 15 \
-    https://crm.ecojoi.com.br/api/health | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'
+  local attempt
+  for attempt in {1..9}; do
+    if curl -fsS --user-agent "Mozilla/5.0 (compatible; EcojoiCRMDeploy/1.0)" --max-time 15 \
+      https://crm.ecojoi.com.br/api/health | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'; then
+      return 0
+    fi
+    if (( attempt < 9 )); then
+      sleep 4
+    fi
+  done
+  return 1
 }
 healthy
 trap - ERR INT TERM
