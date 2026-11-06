@@ -6,6 +6,8 @@
 -- message RLS and cross-tenant validation remain unchanged.
 ALTER FUNCTION public.webhook_event_message_insert() SECURITY DEFINER;
 ALTER FUNCTION public.webhook_event_message_insert() SET search_path = pg_catalog, public;
+-- This is a trigger-only function; no direct invocation by API clients.
+REVOKE EXECUTE ON FUNCTION public.webhook_event_message_insert() FROM PUBLIC, anon, authenticated;
 
 -- Rollback if ever required (restores the original invoker behavior,
 -- but also reinstates the HTTP 500 for authenticated sends):
