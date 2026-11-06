@@ -1216,3 +1216,33 @@
   .root .composer { gap: 6px; padding: 9px; }
   .root .headerActions :global(.btn) { min-width: 32px; }
 }
+
+/* Reserve space for the composer regardless of optional banners and notices. */
+.root.whatsappShell { position: relative; flex: 1 1 0; height: auto; min-height: 0; }
+.root .chatPanel { display: flex; flex-direction: column; }
+.root .chatHeader, .root .modeBanner, .root .composer, .root .lockedComposer,
+.root .errorBar, .root .noticeBar { flex: 0 0 auto; }
+.root .messages { flex: 1 1 0; min-height: 0; }
+.root .chatPlaceholder { flex: 1; }
+.composerActions { display: flex; align-items: center; gap: 4px; }
+.root .composer { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+.root .details[hidden] { display: none; }
+.detailsHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; font-size: 12px; }
+.root.whatsappShell[data-details-open="false"] { grid-template-columns: clamp(270px, 23vw, 340px) minmax(0, 1fr); }
+:global(.shell.ecojoi-shell):has(.root) { height: 100dvh; min-height: 0; overflow: hidden; }
+:global(.shell.ecojoi-shell > .main):has(> .root) { flex: 1; min-height: 0; }
+@media(max-width:1360px) {
+  .root.whatsappShell[data-details-open] { grid-template-columns: minmax(245px, 29%) minmax(0, 1fr); }
+  .root .details:not([hidden]) { display: block; position: absolute; top: 0; right: 0; bottom: 0; z-index: 40; width: min(320px, 100%); box-shadow: -8px 0 24px rgba(0,0,0,.2); }
+}
+@media(max-width:767px) {
+  :global(.shell.ecojoi-shell > .main):has(> .root) { height: 0; overflow: hidden; }
+  .root.whatsappShell { display: flex; flex-direction: column; height: auto; min-height: 0; }
+  .root .sidebar, .root .chatPanel { flex: 1; min-height: 0; height: auto; }
+  .root .chatHeader { flex-wrap: wrap; }
+  .root .contactIdentity { flex: 1; }
+  .root .headerActions { margin-left: auto; }
+  .root .composer { gap: 4px; padding-inline: 6px; }
+  .root .composerIcon { width: 30px; }
+  .root .messageInputWrap > input { padding-inline: 8px; }
+}

@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
-  Mic, MoreVertical, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
+  Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
 import { AgentAvatar } from '@/components/AgentAvatar';
@@ -86,6 +86,17 @@ export default function Atendimento() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ecojoi:attendance:details');
+      setDetailsOpen(saved === null ? window.matchMedia('(min-width: 1361px)').matches : saved === 'open');
+    } catch { setDetailsOpen(window.matchMedia('(min-width: 1361px)').matches); }
+  }, []);
+  function toggleDetails(open: boolean) {
+    setDetailsOpen(open);
+    try { localStorage.setItem('ecojoi:attendance:details', open ? 'open' : 'closed'); } catch {}
+  }
   const [queue, setQueue] = useState<AttendanceState>('waiting');
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
@@ -402,7 +413,7 @@ export default function Atendimento() {
   }
 
   return (
-    <div className={`${styles.root} ${styles.whatsappShell}`} data-mobile-chat={mobileChatOpen ? "open" : "list"}>
+    <div className={`${styles.root} ${styles.whatsappShell}`} data-mobile-chat={mobileChatOpen ? "open" : "list"} data-details-open={detailsOpen && !!active}>
       <aside className={styles.sidebar}>
         <div className={styles.sidebarTop}>
           <div><strong>Conversas</strong><span>WhatsApp e canais conectados</span></div>
@@ -444,7 +455,7 @@ export default function Atendimento() {
               {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
               {active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
               {active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
-              <button className={styles.roundButton} aria-label="Mais opções"><MoreVertical size={18}/></button>
+              <button type="button" className={styles.roundButton} onClick={() => toggleDetails(!detailsOpen)} aria-label={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} title={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} aria-expanded={detailsOpen} aria-controls="attendance-contact-details">{detailsOpen ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}</button>
             </div>
           </header>
 
@@ -458,19 +469,23 @@ export default function Atendimento() {
             {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
             <form className={styles.composer} onSubmit={send}>
               <div className={styles.composerTools}>
-                <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} aria-label="Emoji"><Smile size={22}/></button>
-                <button type="button" className={styles.composerIcon} onClick={() => fileInput.current?.click()} disabled={sendingMedia} aria-label="Anexar arquivo"><Paperclip size={22}/></button>
+                <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} title="Emojis" aria-label="Emoji" aria-expanded={emojiOpen}><Smile size={22}/></button>
+                <button type="button" className={styles.composerIcon} onClick={() => fileInput.current?.click()} disabled={sendingMedia} title="Anexar arquivo" aria-label="Anexar arquivo"><Paperclip size={22}/></button>
                 <input ref={fileInput} type="file" hidden onChange={onFileChange} accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
               </div>
               {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<input value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem ou /atalho" /></div>}
-              {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} aria-label="Parar gravação"><Square size={18}/></button> : text.trim() ? <button className={styles.sendButton} type="submit" aria-label="Enviar"><Send size={19}/></button> : <button type="button" className={styles.sendButton} onClick={startRecording} disabled={sendingMedia} aria-label="Gravar áudio"><Mic size={20}/></button>}
+              <div className={styles.composerActions}>
+                {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} title="Parar e enviar áudio" aria-label="Parar gravação"><Square size={18}/></button> : <button type="button" className={styles.composerIcon} onClick={startRecording} disabled={sendingMedia} title="Gravar áudio" aria-label="Gravar áudio"><Mic size={20}/></button>}
+                <button className={styles.sendButton} type="submit" disabled={!text.trim() || recording || sendingMedia} title="Enviar mensagem" aria-label="Enviar"><Send size={19}/></button>
+              </div>
             </form>
           </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
         </> : <div className={styles.chatPlaceholder}><div className={styles.placeholderIcon}><ImageIcon size={28}/></div><h3>Ecojoi Atendimento</h3><p>Selecione uma conversa para iniciar.</p></div>}
       </main>
 
-      <aside className={styles.details}>
+      <aside className={styles.details} id="attendance-contact-details" aria-label="Detalhes do contato" hidden={!detailsOpen || !active}>
+        <div className={styles.detailsHeading}><strong>Detalhes do contato</strong><button type="button" className={styles.roundButton} aria-label="Fechar detalhes do contato" title="Fechar detalhes do contato" onClick={() => toggleDetails(false)}><X size={18}/></button></div>
         {active && <>
           <span className={`${styles.bigAvatar}`}>{initials(active.contact?.name)}</span>
           <h3>{active.contact?.name}</h3>
