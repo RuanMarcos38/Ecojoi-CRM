@@ -5,9 +5,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 const id = z.string().uuid();
 const quantity = z.number().int().min(1).max(999_999_999_999);
+const item = z.object({ product_id: id, quantity_milli: quantity, unit_price_cents: z.number().int().min(1).max(99_999_999_999) });
 const actions = z.discriminatedUnion('action', [
   z.object({ action: z.literal('supplier'), id, legal_name: z.string().trim().min(2).max(160), tax_document: z.string().regex(/^(?:\d{11}|\d{14})$/).nullable() }),
-  z.object({ action: z.literal('order'), id, supplier_id: id, product_id: id, quantity_milli: quantity, unit_price_cents: z.number().int().min(1).max(99_999_999_999) }),
+  z.object({ action: z.literal('order'), id, supplier_id: id, ...item.shape }),
+  z.object({ action: z.literal('order_items'), id, supplier_id: id, items: z.array(item).min(1).max(50) }),
   z.object({ action: z.literal('approve'), order_id: id }),
   z.object({ action: z.literal('receive'), id, order_id: id, line_id: id, quantity_milli: quantity, due_date: z.string().date() })
 ]);
@@ -57,12 +59,15 @@ export async function POST(request: Request) {
           p_tenant: tenantId, p_order: input.id, p_supplier: input.supplier_id, p_product: input.product_id,
           p_quantity: input.quantity_milli, p_price: input.unit_price_cents, p_actor: userId
         })
-        : await admin.rpc('receive_erp_purchase_line', {
+        : input.action === 'order_items' ? await admin.rpc('create_erp_purchase_order_items', {
+          p_tenant: tenantId, p_order: input.id, p_supplier: input.supplier_id, p_items: input.items, p_actor: userId
+        }) : await admin.rpc('receive_erp_purchase_line', {
           p_tenant: tenantId, p_order: input.order_id, p_line: input.line_id, p_operation: input.id,
           p_quantity: input.quantity_milli, p_due_date: input.due_date, p_actor: userId
         });
       if (result.error) throw result.error;
       if (result.data === 'not_found') return NextResponse.json({ error: 'Fornecedor, produto ou pedido indisponível.' }, { status: 404 });
+      if (result.data === 'invalid_items') return NextResponse.json({ error: 'Informe de 1 a 50 produtos distintos com quantidade e preço válidos.' }, { status: 400 });
       if (result.data !== 'ok') return NextResponse.json({ error: 'Operação já utilizada, pedido não aprovado ou quantidade acima do saldo.' }, { status: 409 });
     }
     return NextResponse.json({ ok: true });

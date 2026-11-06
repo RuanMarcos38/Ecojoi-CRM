@@ -25,6 +25,8 @@ export default function PurchasesPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [rows, setRows] = useState([0]);
+  const nextRow = useRef(1);
   const [receipt, setReceipt] = useState<{ order: Order; line: Line } | null>(null);
   const pending = useRef<{ key: string; id: string } | null>(null);
   const submitting = useRef(false);
@@ -66,6 +68,7 @@ export default function PurchasesPage() {
       }
       pending.current = null;
       form?.reset();
+      if (input.action === 'order_items') setRows([0]);
       if (input.action === 'receive') setReceipt(null);
       setNotice(message);
       setRefresh(current => current + 1);
@@ -88,13 +91,20 @@ export default function PurchasesPage() {
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
-    const quantity_milli = milli(values.get('quantity'));
-    const unit_price_cents = parseAmountCents(String(values.get('price') ?? ''));
-    if (!quantity_milli || unit_price_cents === null) {
-      setError('Informe quantidade positiva e preço unitário válido.');
+    const items = rows.map(row => ({
+      product_id: String(values.get(`product-${row}`) ?? ''),
+      quantity_milli: milli(values.get(`quantity-${row}`)),
+      unit_price_cents: parseAmountCents(String(values.get(`price-${row}`) ?? ''))
+    }));
+    if (items.some(item => !item.product_id || !item.quantity_milli || item.unit_price_cents === null)) {
+      setError('Informe produto, quantidade positiva e preço válido em cada item.');
       return;
     }
-    void save({ action: 'order', supplier_id: values.get('supplier'), product_id: values.get('product'), quantity_milli, unit_price_cents }, 'Pedido criado como rascunho.', form);
+    if (new Set(items.map(item => item.product_id)).size !== items.length) {
+      setError('Informe cada produto apenas uma vez e some as quantidades.');
+      return;
+    }
+    void save({ action: 'order_items', supplier_id: values.get('supplier'), items }, 'Pedido criado como rascunho.', form);
   }
 
   function receive(event: FormEvent<HTMLFormElement>) {
@@ -132,11 +142,19 @@ export default function PurchasesPage() {
         <label className="field">Fornecedor<select className="select" name="supplier" defaultValue="" required>
           <option value="">Selecione</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.legal_name}</option>)}
         </select></label>
-        <label className="field">Produto<select className="select" name="product" defaultValue="" required>
-          <option value="">Selecione</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select></label>
-        <label className="field">Quantidade<input className="input" name="quantity" inputMode="decimal" required/></label>
-        <label className="field">Preço unitário em reais<input className="input" name="price" inputMode="decimal" required/></label>
+        {rows.map((row, index) => <fieldset className="form-grid" key={row} style={{ gridColumn: '1 / -1', border: '1px solid var(--line)', borderRadius: 8, minWidth: 0 }}>
+          <legend>Item {index + 1}</legend>
+          <label className="field">Produto<select className="select" name={`product-${row}`} defaultValue="" required>
+            <option value="">Selecione</option>{products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></label>
+          <label className="field">Quantidade<input className="input" name={`quantity-${row}`} inputMode="decimal" required/></label>
+          <label className="field">Preço unitário em reais<input className="input" name={`price-${row}`} inputMode="decimal" required/></label>
+          {rows.length > 1 && <div><button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRows(current => current.filter(id => id !== row))}>Remover item {index + 1}</button></div>}
+        </fieldset>)}
+        <div><button type="button" className="btn btn-secondary" disabled={busy || rows.length >= 50} onClick={() => {
+          const row = nextRow.current++;
+          setRows(current => [...current, row]);
+        }}>Adicionar item</button></div>
         <div><button className="btn btn-primary" disabled={busy || loading || !suppliers.length || !products.length}>Criar pedido</button></div>
       </form>
     </section>
