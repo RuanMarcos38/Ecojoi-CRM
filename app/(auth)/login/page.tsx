@@ -40,7 +40,7 @@ export default function LoginPage(){
       <div className={styles.intro}>
         <p className={styles.eyebrow}>GESTÃO DE RELACIONAMENTO</p>
         <p className={styles.headline}>Conecte atendimento <span>e vendas.</span></p>
-        <p>Gerencie conversas, acompanhe leads e organize suas oportunidades em um só lugar.</p>
+        <p>Centralize seus contatos, acompanhe oportunidades e organize sua operação comercial em um só lugar.</p>
       </div>
     </section>
 
@@ -48,7 +48,7 @@ export default function LoginPage(){
       <div className={styles.box}>
         <p className={styles.eyebrow}>ECOJOI CRM</p>
         <h1 id="login-title">Acesse sua conta</h1>
-        <p className={styles.description}>Entre com seu e-mail e sua senha.</p>
+        <p className={styles.description}>Entre com suas credenciais para acessar o Ecojoi CRM.</p>
         <form onSubmit={submit} aria-busy={loading}>
           {error&&<div className={styles.error} role="alert">{error}</div>}
           <div className={styles.field}>
