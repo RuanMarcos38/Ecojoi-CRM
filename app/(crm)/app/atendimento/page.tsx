@@ -2,7 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot, CheckCheck, Clock3, Download, FileText, Headphones, Image as ImageIcon,
+  Bot, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
   Mic, MoreVertical, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
@@ -85,6 +85,7 @@ export default function Atendimento() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [queue, setQueue] = useState<AttendanceState>('waiting');
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
@@ -195,6 +196,11 @@ export default function Atendimento() {
   },[activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
+  const messagesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container=messagesRef.current;
+    if(container) container.scrollTop=container.scrollHeight;
+  }, [activeId, active?.messages?.length]);
   const aiAgentEnabled = me?.features?.ai_agent === true;
   const quickMatches = useMemo(() => {
     if (!text.startsWith('/')) return [];
@@ -396,7 +402,7 @@ export default function Atendimento() {
   }
 
   return (
-    <div className={`${styles.root} ${styles.whatsappShell}`}>
+    <div className={`${styles.root} ${styles.whatsappShell}`} data-mobile-chat={mobileChatOpen ? "open" : "list"}>
       <aside className={styles.sidebar}>
         <div className={styles.sidebarTop}>
           <div><strong>Conversas</strong><span>WhatsApp e canais conectados</span></div>
@@ -416,7 +422,7 @@ export default function Atendimento() {
         <div className={styles.conversationList}>
           {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
             const last = conversation.messages?.[conversation.messages.length - 1];
-            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => setActiveId(conversation.id)}>
+            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setMobileChatOpen(true); }}>
               <span className={styles.avatar}>{initials(conversation.contact?.name)}</span>
               <span className={styles.conversationCopy}>
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
@@ -431,6 +437,7 @@ export default function Atendimento() {
       <main className={styles.chatPanel}>
         {active ? <>
           <header className={styles.chatHeader}>
+            <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
             <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(active.contact?.name)}</span><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)} · {active.contact?.phone ?? active.contact?.email ?? 'sem identificação'} · {active.assignee?.full_name ?? 'sem responsável'}</span></div></div>
             <div className={styles.headerActions}>
               {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
@@ -445,7 +452,7 @@ export default function Atendimento() {
           {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
           {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
 
-          <div className={styles.messages}>{active.messages?.length ? active.messages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
+          <div className={styles.messages} ref={messagesRef}>{active.messages?.length ? active.messages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
 
           {active.attendance_state === 'in_service' ? <>
             {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}

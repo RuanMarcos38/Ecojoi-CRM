@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
-import { Search, Bell, LogOut, CheckCheck } from 'lucide-react';
+import { Search, Bell, LogOut, CheckCheck, Sun, Moon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { AgentAvatar } from './AgentAvatar';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,23 @@ type Notification={id:string;type:string;title:string;body?:string|null;entity_t
 
 export function Topbar(){
   const [me,setMe]=useState<Me|null>(null);
+  const [theme,setTheme]=useState<'dark'|'light'>('dark');
+  useEffect(()=>{
+    try {
+      const stored=window.localStorage.getItem('ecojoi-ui-theme');
+      const next=stored==='light'?'light':'dark';
+      setTheme(next);
+      document.documentElement.setAttribute('data-ecojoi-theme',next);
+    } catch {
+      document.documentElement.setAttribute('data-ecojoi-theme','dark');
+    }
+  },[]);
+  function toggleTheme(){
+    const next=theme==='dark'?'light':'dark';
+    setTheme(next);
+    document.documentElement.setAttribute('data-ecojoi-theme',next);
+    try { window.localStorage.setItem('ecojoi-ui-theme',next); } catch {}
+  }
   const [q,setQ]=useState('');
   const [results,setResults]=useState<Result[]>([]);
   const [notificationsOpen,setNotificationsOpen]=useState(false);
@@ -160,6 +177,9 @@ export function Topbar(){
     </div>
 
     <div className="top-actions">
+      <button type="button" className="btn btn-secondary theme-toggle" onClick={toggleTheme} aria-label={theme==='dark'?'Ativar modo claro':'Ativar modo escuro'} title={theme==='dark'?'Modo claro':'Modo escuro'}>
+        {theme==='dark'?<Sun size={17}/>:<Moon size={17}/>}
+      </button>
       <div className="user-meta"><strong>{me?.fullName??'Usuário'}</strong><small>{me?.companyName??'CRM Corporativo'}</small></div>
       <div className="notification-wrap">
         <button className="btn btn-secondary notification-button" aria-label="Notificações" onClick={()=>setNotificationsOpen(v=>!v)}>
