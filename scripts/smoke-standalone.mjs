@@ -38,6 +38,10 @@ async function verify(configured) {
       assert.equal(new URL(app.headers.get('location'), origin).pathname, '/login');
       const api = await fetch(`${origin}/api/contacts`, { redirect: 'manual' });
       assert.equal(api.status, 401);
+      assert.ok(login.headers.get('permissions-policy')?.includes('microphone=(self)'));
+      const health = await fetch(`${origin}/api/health`);
+      assert.equal(health.status, 503); // No admin credentials: degraded, never a runtime 500.
+      assert.equal((await health.json()).status, 'degraded');
     }
     console.log(`Standalone smoke passed (${configured ? 'runtime configuration' : 'missing configuration'}).`);
   } finally {
