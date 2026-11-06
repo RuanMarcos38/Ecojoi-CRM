@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, PanelLeftClose, PanelLeftOpen, Wallet, Package, X } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, PanelLeftClose, PanelLeftOpen, Wallet, Package, X, ChevronDown } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -36,6 +36,7 @@ const groups:{title:string;items:Item[]}[]=[
 ];
 export function Sidebar(){
   const pathname=usePathname(); const [me,setMe]=useState<Me|null>(null); const [menuOpen,setMenuOpen]=useState(false);
+  const [closedGroups,setClosedGroups]=useState<Record<string,boolean>>({});
   useEffect(()=>{fetch('/api/me',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>setMe(d?.data??null)).catch(()=>{})},[]);
   useEffect(()=>{setMenuOpen(false)},[pathname]);
   function allowed(i:Item){if(!me)return i.href==='/app';if(i.roles&&!i.roles.includes(me.role))return false;if(i.permission&&!me.permissions.includes(i.permission))return false;if(i.feature&&me.features[i.feature]!==true)return false;return true}
@@ -67,9 +68,11 @@ export function Sidebar(){
     <nav className="nav" id="crm-primary-nav" aria-label="Navegação principal">
       {groups.map(group => {
         const items = group.items.filter(allowed);
-        return items.length ? <div key={group.title}>
-          <div className="nav-title">{group.title}</div>
-          {items.map(({href, label, Icon}) => <Link
+        return items.length ? <div key={group.title} className="sidebar-nav-group">
+          <button type="button" className="nav-title nav-group-toggle" aria-expanded={!closedGroups[group.title]} aria-label={`${closedGroups[group.title] ? 'Expandir' : 'Recolher'} ${group.title}`} onClick={() => setClosedGroups(prev=>({...prev,[group.title]:!prev[group.title]}))}>
+            <span>{group.title}</span><ChevronDown aria-hidden="true" size={14} className={closedGroups[group.title] ? 'nav-chevron is-closed' : 'nav-chevron'}/>
+          </button>
+          {!closedGroups[group.title] && items.map(({href, label, Icon}) => <Link
             className={pathname === href ? 'active' : ''}
             aria-current={pathname === href ? 'page' : undefined}
             aria-label={label}
