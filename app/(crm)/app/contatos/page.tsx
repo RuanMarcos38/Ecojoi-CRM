@@ -1,16 +1,18 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   BriefcaseBusiness, Building2, Download, Filter, GitMerge, Mail, MessageSquare,
   Phone, Plus, Search, Tag, Trash2, Upload, UserCheck, UsersRound, UserX, X
 } from 'lucide-react';
 import styles from '../commercial.module.css';
+import ContactImport from '@/components/ContactImport';
 
 type ContactStatus='lead'|'active'|'inactive';
 type TagItem={id:string;name:string;color?:string|null};
 type Organization={id:string;name:string;document?:string|null;segment?:string|null};
 type Contact={
+  attribution?:{import_source?:string;previous_agent?:string;previous_status?:string;import_notes?:string};
   id:string;name:string;email?:string|null;phone?:string|null;source?:string|null;status:ContactStatus;
   lead_score?:number;lead_temperature?:'cold'|'warm'|'hot';organization_id?:string|null;
   organization?:Organization|null;contact_tags?:Array<{tag:TagItem}>;created_at?:string;
@@ -46,7 +48,7 @@ export default function Contatos(){
   const [notice,setNotice]=useState('');
   const [query,setQuery]=useState('');
   const [statusFilter,setStatusFilter]=useState<'all'|ContactStatus>('all');
-  const importRef=useRef<HTMLInputElement>(null);
+
 
   async function load(){
     const [cr,or,tr,dr,cfr]=await Promise.all([
@@ -174,17 +176,6 @@ export default function Contatos(){
     if(response.ok)await load();else setError('Não foi possível adicionar a tag.');
   }
 
-  async function importContacts(e:ChangeEvent<HTMLInputElement>){
-    const file=e.target.files?.[0];if(!file)return;
-    setNotice('');setError('');
-    const form=new FormData();form.append('file',file);
-    const r=await fetch('/api/contacts/import',{method:'POST',body:form});
-    const d=await r.json().catch(()=>null);
-    e.target.value='';
-    if(r.ok){setNotice(`Importação concluída: ${d?.data?.processed??0} processados, ${d?.data?.failed??0} com erro.`);await load();}
-    else setError('Não foi possível importar a planilha.');
-  }
-
   async function merge(group:DuplicateGroup){
     if(group.items.length<2)return;
     const target=group.items[0];const source=group.items[group.items.length-1];
@@ -197,8 +188,7 @@ export default function Contatos(){
     <div className={styles.hero}>
       <div><h1 className="page-title">Contatos</h1><p className="page-sub">Clientes, leads, empresas e histórico comercial em uma única base.</p></div>
       <div className={styles.heroActions}>
-        <input ref={importRef} type="file" hidden accept=".xlsx,.xls,.csv" onChange={importContacts}/>
-        <button type="button" className="btn btn-secondary" onClick={()=>importRef.current?.click()}><Upload size={15}/>Importar</button>
+        <ContactImport onComplete={load}/>
         <button type="button" className="btn btn-secondary" onClick={()=>{window.location.href='/api/contacts/export';}}><Download size={15}/>Exportar</button>
         <button type="button" className="btn btn-secondary" onClick={()=>setOpenOrg(value=>!value)}><Building2 size={15}/>{openOrg?'Fechar empresa':'Nova empresa'}</button>
         <button type="button" className="btn btn-primary" onClick={()=>setOpen(value=>!value)}>{open?<X size={17}/>:<Plus size={17}/>} {open?'Fechar':'Novo contato'}</button>
@@ -282,6 +272,7 @@ export default function Contatos(){
               {(row.contact_tags??[]).map(item=>item.tag&&<span className={styles.statusBadge} key={item.tag.id}><Tag size={10}/>{item.tag.name}</span>)}
             </div>
             <div className={styles.metaList}><div className={styles.metaLine}><Mail size={15}/><span>{row.email||'E-mail não informado'}</span></div><div className={styles.metaLine}><Phone size={15}/><span>{row.phone||'Telefone não informado'}</span></div></div>
+            {row.attribution?.import_source&&<details><summary>Dados da importação — {row.attribution.import_source}</summary><p>Atendente anterior: {row.attribution.previous_agent||'Não informado'}</p><p>Situação anterior: {row.attribution.previous_status||'Não informada'}</p>{row.attribution.import_notes&&<p>{row.attribution.import_notes}</p>}</details>}
             <div className={styles.cardActions}>
               <select className="select compact-select" value={row.status} onChange={event=>void status(row.id,event.target.value as ContactStatus)}><option value="lead">Lead</option><option value="active">Ativo</option><option value="inactive">Inativo</option></select>
               {tags.length>0&&<select className="select compact-select" defaultValue="" onChange={e=>{void addTag(row.id,e.target.value);e.target.value='';}}><option value="">+ Tag</option>{tags.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>}

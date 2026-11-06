@@ -1,3 +1,4 @@
+import { getAgentName, signAgentMessage } from '@/lib/server/agent-signature';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -35,6 +36,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
     }
 
+    const outgoingBody = conversation.channel === 'whatsapp'
+      ? signAgentMessage(await getAgentName(ctx.tenantId, ctx.userId), body.body) : body.body;
+
     const initialStatus = conversation.channel === 'internal' ? 'sent' : 'queued';
     const { data, error } = await supabase
       .from('messages')
@@ -42,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         tenant_id: ctx.tenantId,
         conversation_id: id,
         direction: 'outbound',
-        body: body.body,
+        body: outgoingBody,
         sender_user_id: ctx.userId,
         status: initialStatus,
         message_type: 'text'
@@ -58,7 +62,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (conversation.channel === 'whatsapp') {
       const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
-      const sent = await sendWhatsAppText(ctx.tenantId, contact?.phone, body.body);
+      const sent = await sendWhatsAppText(ctx.tenantId, contact?.phone, outgoingBody);
       if (sent.delivered) {
         delivery = 'sent';
         providerMessageId = sent.providerMessageId ?? null;
@@ -73,7 +77,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           conversationId: id,
           messageId: data.id,
           channel: 'whatsapp',
-          payload: { kind: 'text', to: contact?.phone ?? '', body: body.body },
+          payload: { kind: 'text', to: contact?.phone ?? '', body: outgoingBody },
           error: sent.reason ?? null
         });
       }

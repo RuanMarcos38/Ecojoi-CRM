@@ -21,6 +21,8 @@ export default function Equipe(){
   const [open,setOpen]=useState(false);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
+  const [inviteUrl,setInviteUrl]=useState('');
+  const [inviting,setInviting]=useState(false);
 
   async function load(){
     const r=await fetch('/api/team',{cache:'no-store'});
@@ -38,30 +40,34 @@ export default function Equipe(){
   }
 
   async function invite(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();setError('');setNotice('');
+    e.preventDefault();setError('');setNotice('');setInviteUrl('');setInviting(true);
     const fd=new FormData(e.currentTarget);
+    try {
     const r=await fetch('/api/team/invite',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))});
     const d=await r.json();
-    if(r.ok){setOpen(false);setNotice('Convite enviado. O colaborador deve abrir o e-mail, criar sua senha e entrar no CRM Ecojoi. Não é necessário cadastrar outra empresa.');await load();return;}
-    setError(d.error==='admin_key_not_configured'?'Convites exigem SUPABASE_SERVICE_ROLE_KEY configurada somente no servidor.':d.error==='user_already_registered'?'Este e-mail já possui cadastro. Para definir ou recuperar a senha, utilize Recuperar senha na tela de login.':'Não foi possível enviar o convite. Confira a configuração de e-mails e redirecionamento no Supabase.');
+    if(r.ok){setOpen(false);setInviteUrl(d.data?.invite_url??'');setNotice(d.data?.delivery==='link'?'Convite criado por link. O e-mail não foi enviado. Copie e compartilhe o link somente com o colaborador informado.':'Convite enviado. O colaborador deve abrir o e-mail, criar sua senha e entrar no CRM Ecojoi. Não é necessário cadastrar outra empresa.');await load();return;}
+    setError(d.error==='email_unavailable'?'Este e-mail não está disponível para esta empresa.':d.error==='profile_create_failed'?'Não foi possível vincular o colaborador. Tente novamente sem alterar o e-mail.':d.error==='admin_key_not_configured'?'Convites exigem SUPABASE_SERVICE_ROLE_KEY configurada somente no servidor.':d.error==='user_already_registered'?'Este e-mail já possui cadastro. Para definir ou recuperar a senha, utilize Recuperar senha na tela de login.':'Não foi possível enviar o convite. Confira a configuração de e-mails e redirecionamento no Supabase.');
+    } catch {setError('Falha de conexão ao criar convite. Tente novamente.');} finally {setInviting(false);}
   }
 
   return <div className="content">
     <div className="page-head">
-      <div><h1 className="page-title">Equipe e Permissões</h1><p className="page-sub">Perfis, disponibilidade e capacidade de atendimento.</p></div>
+      <div><h1 className="page-title">Equipe e Permissões</h1><p className="page-sub">Usuários sem limite de quantidade no CRM. Perfis e capacidade de atendimento por colaborador.</p></div>
       <button className="btn btn-primary" onClick={()=>setOpen(v=>!v)}>{open?<X size={17}/>:<Plus size={17}/>} {open?'Fechar':'Convidar usuário'}</button>
     </div>
 
     {error&&<div className="error">{error}</div>}
     {notice&&<div className="success">{notice}</div>}
 
+    {inviteUrl&&<div className="card section"><label htmlFor="invite-link">Link individual de primeiro acesso</label><input id="invite-link" className="input" value={inviteUrl} readOnly/><button type="button" className="btn btn-secondary" onClick={async()=>{try{await navigator.clipboard.writeText(inviteUrl);setNotice('Link copiado. Compartilhe somente com o colaborador convidado.');}catch{setError('Selecione e copie o link acima.');}}}>Copiar convite</button><p>O link expira conforme a configuração de autenticação. Não publique em grupos.</p></div>}
     {open&&<form className="card section" onSubmit={invite}>
       <div className="form-grid">
         <div className="field"><label>Nome</label><input className="input" name="full_name" required/></div>
         <div className="field"><label>E-mail</label><input className="input" type="email" name="email" required/></div>
         <div className="field"><label>Perfil</label><select className="select" name="role"><option value="user">Usuário</option><option value="manager">Gestor</option><option value="company_admin">Administrador da Empresa</option></select></div>
       </div>
-      <button className="btn btn-primary" style={{marginTop:14}}>Enviar convite</button>
+      <div className="field"><label htmlFor="invite-delivery">Entrega do convite</label><select id="invite-delivery" className="select" name="delivery"><option value="email">Enviar e-mail (gerar link se indisponível)</option><option value="link">Gerar link para compartilhar</option></select></div>
+      <button className="btn btn-primary" disabled={inviting} style={{marginTop:14}}>{inviting?'Criando convite...':'Criar convite'}</button>
     </form>}
 
     <div className="card table-wrap">

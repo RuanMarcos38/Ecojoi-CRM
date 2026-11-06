@@ -24,6 +24,7 @@ type IngestLeadInput = {
     size?: number | null;
   } | null;
   createConversation?: boolean;
+  preserveExisting?: boolean;
 };
 
 function clean(value?: string | null) {
@@ -157,7 +158,7 @@ export async function ingestLead(input: IngestLeadInput) {
     if (currentError) throw currentError;
 
     ownerId = current.owner_id ?? null;
-    if (!ownerId) ownerId = await nextAssignee(admin, input.tenantId);
+    if (!ownerId && !input.preserveExisting) ownerId = await nextAssignee(admin, input.tenantId);
 
     const mergedAttribution = {
       ...(current.attribution && typeof current.attribution === 'object' ? current.attribution : {}),
@@ -167,9 +168,9 @@ export async function ingestLead(input: IngestLeadInput) {
     const { error: updateError } = await admin
       .from('contacts')
       .update({
-        name: name || current.name,
-        email: email ?? current.email,
-        phone: phone ?? current.phone,
+        name: input.preserveExisting ? current.name : name || current.name,
+        email: input.preserveExisting ? current.email || email : email ?? current.email,
+        phone: input.preserveExisting ? current.phone || phone : phone ?? current.phone,
         source: current.source || source,
         attribution: mergedAttribution,
         owner_id: ownerId,
@@ -223,7 +224,7 @@ export async function ingestLead(input: IngestLeadInput) {
 
   if (shouldCreateConversation) {
     const crmChannel = channel === 'external' ? 'internal' : channel;
-    const { data: openConversation } = await admin
+    const { data: openConversation, error: openConversationError } = await admin
       .from('conversations')
       .select('id,assigned_to,attendance_state')
       .eq('tenant_id', input.tenantId)
@@ -234,6 +235,7 @@ export async function ingestLead(input: IngestLeadInput) {
       .limit(1)
       .maybeSingle();
 
+    if (openConversationError) throw openConversationError;
     if (openConversation?.id) {
       conversationId = openConversation.id;
       if (!openConversation.assigned_to && ownerId) {

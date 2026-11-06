@@ -1,3 +1,4 @@
+import { getAgentName, signAgentMessage } from '@/lib/server/agent-signature';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
@@ -60,6 +61,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
     }
 
+    const outgoingCaption = conversation.channel === 'whatsapp' && !file.type.startsWith('audio/')
+      ? signAgentMessage(await getAgentName(ctx.tenantId, ctx.userId), caption || file.name) : caption;
+
     const path = `${ctx.tenantId}/${id}/${crypto.randomUUID()}-${safeName(file.name)}`;
     const bytes = await file.arrayBuffer();
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, bytes, {
@@ -74,7 +78,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       tenant_id: ctx.tenantId,
       conversation_id: id,
       direction: 'outbound',
-      body: caption || (type === 'audio' ? 'Mensagem de voz' : file.name),
+      body: outgoingCaption || (type === 'audio' ? 'Mensagem de voz' : file.name),
       status: initialStatus,
       sender_user_id: ctx.userId,
       message_type: type,
@@ -96,7 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (conversation.channel === 'whatsapp') {
       const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
-      const sent = await sendWhatsAppMedia(ctx.tenantId, contact?.phone, file, caption || null);
+      const sent = await sendWhatsAppMedia(ctx.tenantId, contact?.phone, file, outgoingCaption || null);
       if (sent.delivered) {
         delivery = 'sent';
         providerMessageId = sent.providerMessageId ?? null;
@@ -117,7 +121,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             storagePath: path,
             fileName: file.name,
             mime: file.type,
-            caption: caption || null
+            caption: outgoingCaption || null
           },
           error: sent.reason ?? null
         });
