@@ -55,7 +55,7 @@ mv -- "$stage/DEPLOY_SOURCE_SHA" "$app/DEPLOY_SOURCE_SHA"
 touch "$app/tmp/restart.txt"
 
 healthy() {
-  curl -fsS --retry 8 --retry-all-errors --retry-delay 4 --max-time 15 \
+  curl -fsS --user-agent "Mozilla/5.0 (compatible; EcojoiCRMDeploy/1.0)" --retry 8 --retry-all-errors --retry-delay 4 --max-time 15 \
     https://crm.ecojoi.com.br/api/health | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'
 }
 healthy
