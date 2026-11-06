@@ -25,8 +25,8 @@
 }
 
 .kpi {
-  background: #fff;
-  border: 1px solid #e4e8e5;
+  background: var(--eco-surface);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 11px 12px;
   display: grid;
@@ -51,12 +51,12 @@
 
 .kpi span,
 .kpi small {
-  color: #6b756f;
+  color: var(--muted);
   font-size: 12px;
 }
 
 .kpi strong {
-  color: #17211d;
+  color: var(--ink);
   font-size: 21px;
   line-height: 1;
 }
@@ -74,10 +74,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid #e4e8e5;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
-  color: #6b756f;
+  background: var(--eco-surface);
+  color: var(--muted);
   padding: 0 12px;
   min-width: 0;
 }
@@ -89,13 +89,13 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: #17211d;
+  color: var(--ink);
   font-size: 13px;
 }
 
 .formPanel {
-  background: #fff;
-  border: 1px solid #e4e8e5;
+  background: var(--eco-surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
   display: grid;
@@ -140,8 +140,8 @@
 }
 
 .recordCard {
-  background: #fff;
-  border: 1px solid #e4e8e5;
+  background: var(--eco-surface);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 11px;
   display: grid;
@@ -169,7 +169,7 @@
   border-radius: 8px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--ink);
   background: #054735;
   font-weight: 800;
   flex: 0 0 auto;
@@ -202,7 +202,7 @@
 .metaLine,
 .recordNote,
 .sideHint {
-  color: #6b756f;
+  color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
 }
@@ -271,8 +271,8 @@
 .sidePanel {
   position: sticky;
   top: 72px;
-  background: #fff;
-  border: 1px solid #e4e8e5;
+  background: var(--eco-surface);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 11px;
   display: grid;
@@ -291,7 +291,7 @@
 .sideMetric {
   border-radius: 8px;
   padding: 11px;
-  background: #f7f9f7;
+  background: var(--eco-raised);
   border: 1px solid #e8ece9;
   display: flex;
   justify-content: space-between;
@@ -300,7 +300,7 @@
 }
 
 .sideMetric span {
-  color: #6b756f;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -321,7 +321,7 @@
   border: 1px solid #e8ece9;
   border-radius: 8px;
   padding: 10px;
-  background: #fff;
+  background: var(--eco-surface);
 }
 
 .sourceItemTop,
@@ -336,7 +336,7 @@
 .progressTrack {
   height: 7px;
   border-radius: 999px;
-  background: #eef2ef;
+  background: var(--eco-raised);
   overflow: hidden;
 }
 
@@ -357,7 +357,7 @@
 
 .taskLane {
   min-height: 420px;
-  background: #f1f4f2;
+  background: var(--eco-raised);
   border-radius: 8px;
   padding: 10px;
 }
@@ -373,15 +373,15 @@
 
 .taskLaneHead small {
   display: block;
-  color: #6b756f;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   margin-top: 3px;
 }
 
 .taskCard {
-  background: #fff;
-  border: 1px solid #e4e8e5;
+  background: var(--eco-surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px;
   display: grid;
@@ -409,14 +409,14 @@
   border-radius: 8px;
   padding: 22px 12px;
   text-align: center;
-  color: #819089;
-  background: rgba(255, 255, 255, .6);
+  color: var(--muted);
+  background: var(--eco-raised);
   font-size: 13px;
 }
 
 .tableShell {
-  background: #fff;
-  border: 1px solid #e4e8e5;
+  background: var(--eco-surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   overflow: auto;
 }

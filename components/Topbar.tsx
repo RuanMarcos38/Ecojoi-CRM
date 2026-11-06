@@ -134,7 +134,7 @@ export function Topbar(){
         </button>
         {notificationsOpen&&<div className="notification-popover" style={{width:340,maxHeight:430,overflow:'auto'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}><strong>Notificações</strong>{unread>0&&<button className="btn btn-secondary" style={{minHeight:28,padding:'5px 7px',fontSize:10}} onClick={()=>void markRead()}><CheckCheck size={13}/>Marcar lidas</button>}</div>
-          <div style={{display:'grid',gap:3,marginTop:8}}>{notifications.length?notifications.map(n=><button type="button" key={n.id} onClick={()=>void markRead(n.id)} style={{display:'grid',gap:2,textAlign:'left',border:0,borderBottom:'1px solid #edf0ee',background:n.read_at?'transparent':'#f2f8f5',padding:'9px 7px',cursor:'pointer',borderRadius:4}}>
+          <div style={{display:'grid',gap:3,marginTop:8}}>{notifications.length?notifications.map(n=><button type="button" key={n.id} onClick={()=>void markRead(n.id)} style={{display:'grid',gap:2,textAlign:'left',border:0,borderBottom:'1px solid var(--line)',background:n.read_at?'transparent':'var(--eco-raised)',padding:'9px 7px',cursor:'pointer',borderRadius:4}}>
             <strong style={{fontSize:11}}>{n.title}</strong>{n.body&&<span style={{fontSize:10,color:'#6f7a75',lineHeight:1.35}}>{n.body}</span>}<small style={{fontSize:9,color:'#8a948f'}}>{Number.isNaN(new Date(n.created_at).getTime())?'':new Date(n.created_at).toLocaleString('pt-BR')}</small>
           </button>):<span>Nenhuma nova notificação.</span>}</div>
         </div>}

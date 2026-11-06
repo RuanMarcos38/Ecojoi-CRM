@@ -27,7 +27,7 @@
 }
 
 .root :global(.pipeline-summary-card) {
-  background: #fff;
+  background: var(--eco-surface);
   border: 1px solid #e4e8e5;
   border-radius: 8px;
   padding: 14px;
@@ -39,12 +39,12 @@
 
 .root :global(.pipeline-summary-card span),
 .root :global(.pipeline-summary-card small) {
-  color: #6b756f;
+  color: var(--muted);
   font-size: 12px;
 }
 
 .root :global(.pipeline-summary-card strong) {
-  color: #17211d;
+  color: var(--ink);
   font-size: 24px;
   line-height: 1;
 }
@@ -79,8 +79,8 @@
   gap: 8px;
   border: 1px solid #e4e8e5;
   border-radius: 8px;
-  background: #fff;
-  color: #6b756f;
+  background: var(--eco-surface);
+  color: var(--muted);
   padding: 0 12px;
 }
 
@@ -91,7 +91,7 @@
   width: 100%;
   min-width: 0;
   background: transparent;
-  color: #17211d;
+  color: var(--ink);
   font-size: 13px;
 }
 
@@ -113,7 +113,7 @@
   margin-bottom: 14px;
 }
 .root :global(.section-head h3) { margin: 0; font-size: 15px; letter-spacing: 0; }
-.root :global(.section-head p) { margin: 4px 0 0; color: #78847f; font-size: 12px; }
+.root :global(.section-head p) { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 
 .root :global(.pipeline-form-grid) {
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -128,7 +128,7 @@
 .root :global(.automation-rule-form) {
   padding: 14px;
   border-radius: 8px;
-  background: #f7f9f7;
+  background: var(--eco-raised);
   border: 1px solid #e8ece9;
   margin-bottom: 15px;
   display: grid;
@@ -142,14 +142,14 @@
 }
 
 .root :global(.template-help) {
-  color: #7c8882;
+  color: var(--muted);
   font-size: 11px;
 }
 .root :global(.template-help code) {
   padding: 2px 5px;
   border-radius: 5px;
-  background: #edf2ee;
-  color: #34423c;
+  background: var(--eco-muted-surface);
+  color: var(--ink);
   margin-right: 4px;
 }
 
@@ -166,7 +166,7 @@
   padding: 11px;
   border: 1px solid #e8ece9;
   border-radius: 8px;
-  background: #fff;
+  background: var(--eco-surface);
 }
 .root :global(.automation-rule-off) { opacity: .6; }
 .root :global(.automation-rule-icon) {
@@ -175,20 +175,20 @@
   border-radius: 8px;
   display: grid;
   place-items: center;
-  color: #0b6d4c;
-  background: #eaf6ed;
+  color: var(--acid);
+  background: #293719;
 }
 .root :global(.automation-rule-copy) { min-width: 0; display: grid; gap: 3px; }
 .root :global(.automation-rule-copy strong) { font-size: 12px; }
-.root :global(.automation-rule-copy span) { font-size: 11px; color: #6f7d77; text-transform: capitalize; }
-.root :global(.automation-rule-copy p) { margin: 2px 0 0; color: #78847f; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.root :global(.automation-rule-copy span) { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.root :global(.automation-rule-copy p) { margin: 2px 0 0; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .root :global(.automation-rule-actions) { display: flex; gap: 6px; align-items: center; }
 .root :global(.automation-note) {
   margin: 12px 0 0;
   padding: 9px 11px;
   border-radius: 8px;
-  background: #f6f8f6;
-  color: #748079;
+  background: var(--eco-raised);
+  color: var(--muted);
   font-size: 11px;
   display: flex;
   gap: 6px;
@@ -212,7 +212,7 @@
 .root :global(.pipeline-kanban .column) {
   min-height: 570px;
   border-radius: 10px;
-  background: #f1f4f2;
+  background: var(--eco-raised);
   padding: 10px;
 }
 
@@ -234,7 +234,7 @@
 }
 
 .root :global(.pipeline-kanban .column-head small) {
-  color: #6b756f;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
 }
@@ -256,10 +256,10 @@
   padding: 18px 8px;
   border: 1px dashed #d7ded9;
   border-radius: 8px;
-  color: #819089;
+  color: var(--muted);
   text-align: center;
   font-size: 12px;
-  background: rgba(255, 255, 255, .55);
+  background: var(--eco-raised);
 }
 
 .root :global(.pipeline-deal) {
@@ -294,7 +294,7 @@
 
 .root :global(.deal-contact) {
   margin-top: 4px;
-  color: #78847f;
+  color: var(--muted);
   font-size: 11px;
 }
 
@@ -307,19 +307,19 @@
 .root :global(.deal-kpis span) {
   padding: 7px;
   border-radius: 7px;
-  background: #f7f9f7;
-  color: #7a8680;
+  background: var(--eco-raised);
+  color: var(--muted);
   font-size: 10px;
   display: grid;
   gap: 1px;
 }
-.root :global(.deal-kpis b) { color: #2e3d37; font-size: 11px; }
+.root :global(.deal-kpis b) { color: var(--ink); font-size: 11px; }
 
 .root :global(.deal-value) {
   margin-top: 9px;
   font-size: 14px;
   font-weight: 800;
-  color: #19362b;
+  color: var(--ink);
 }
 
 .root :global(.deal-alert),
@@ -352,7 +352,7 @@
   top: 92px;
   max-height: calc(100vh - 112px);
   overflow: auto;
-  background: #fff;
+  background: var(--eco-surface);
   border: 1px solid #e4e8e5;
   border-radius: 8px;
   padding: 14px;
@@ -373,7 +373,7 @@
 .root :global(.inspector-value-card small),
 .root :global(.inspector-stage-control label),
 .root :global(.inspector-rules p) {
-  color: #6b756f;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -386,7 +386,7 @@
 .root :global(.inspector-value-card) {
   border-radius: 8px;
   padding: 13px;
-  background: #f7f9f7;
+  background: var(--eco-raised);
   border: 1px solid #e8ece9;
   display: grid;
   gap: 5px;
@@ -395,7 +395,7 @@
 .root :global(.inspector-value-card strong) {
   font-size: 24px;
   line-height: 1;
-  color: #19362b;
+  color: var(--ink);
 }
 
 .root :global(.inspector-meta-list) {
@@ -407,7 +407,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #43514b;
+  color: var(--muted);
   font-size: 13px;
   min-width: 0;
 }
@@ -446,7 +446,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #17211d;
+  color: var(--ink);
   font-size: 13px;
 }
 
@@ -454,7 +454,7 @@
 .root :global(.inspector-next) {
   border-radius: 8px;
   padding: 10px;
-  background: #f7f9f7;
+  background: var(--eco-raised);
   border: 1px solid #e8ece9;
   display: grid;
   gap: 3px;
@@ -462,7 +462,7 @@
 }
 
 .root :global(.inspector-rule span) {
-  color: #6b756f;
+  color: var(--muted);
   text-transform: capitalize;
 }
 
@@ -482,11 +482,11 @@
   align-content: center;
   gap: 8px;
   text-align: center;
-  color: #6b756f;
+  color: var(--muted);
 }
 
 .root :global(.inspector-empty strong) {
-  color: #17211d;
+  color: var(--ink);
 }
 
 .root :global(.inspector-empty-icon) {
@@ -495,8 +495,8 @@
   border-radius: 8px;
   display: grid;
   place-items: center;
-  background: #f1f4f2;
-  color: #0b6d4c;
+  background: var(--eco-raised);
+  color: var(--acid);
 }
 
 @media (max-width: 1360px) {
