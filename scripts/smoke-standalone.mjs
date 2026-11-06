@@ -29,7 +29,10 @@ async function verify(configured) {
     assert.equal(login.status, configured ? 200 : 503);
     if (configured) {
       const html = await login.text();
-      assert.ok(html.includes('window.__ECOJOI_PUBLIC_ENV__={"supabaseUrl":"https://runtime-smoke.supabase.co","supabaseAnonKey":"public-smoke-key"}'), 'Runtime public configuration missing from HTML');
+      assert.ok(html.includes('window.__ECOJOI_PUBLIC_ENV__='));
+      assert.ok(html.includes('"supabaseUrl":"https://runtime-smoke.supabase.co"'));
+      assert.ok(html.includes('"supabaseAnonKey":"public-smoke-key"'));
+      assert.ok(html.includes('"appUrl":"https://crm.ecojoi.com.br"'));
       const app = await fetch(`${origin}/app`, { redirect: 'manual' });
       assert.equal(app.status, 307);
       assert.equal(new URL(app.headers.get('location'), origin).pathname, '/login');
