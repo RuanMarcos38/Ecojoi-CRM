@@ -25,7 +25,7 @@ const groups:{title:string;items:Item[]}[]=[
     {href:'/app/automacoes',label:'Automações',Icon:Bot,permission:'automations.view',feature:'automacoes'},
     {href:'/app/relatorios',label:'Relatórios',Icon:BarChart3,permission:'reports.view',feature:'relatorios'}
   ]},
-  {title:'Gestão',items:[{href:'/app/financeiro',label:'Financeiro',Icon:Wallet,permission:'finance.view'},{href:'/app/erp/estoque',label:'ERP · Estoque',Icon:Package,permission:'erp.stock.view'},{href:'/app/erp/compras',label:'ERP · Compras',Icon:FileText,permission:'erp.purchases.view'}]},
+  {title:'Gestão',items:[{href:'/app/financeiro',label:'Financeiro',Icon:Wallet,permission:'finance.view'},{href:'/app/erp',label:'ERP · Dashboard',Icon:LayoutDashboard,permission:'erp.stock.view'},{href:'/app/erp/estoque',label:'ERP · Estoque',Icon:Package,permission:'erp.stock.view'},{href:'/app/erp/compras',label:'ERP · Compras',Icon:FileText,permission:'erp.purchases.view'}]},
   {title:'Administração',items:[
     {href:'/app/equipe',label:'Equipe e Permissões',Icon:ShieldCheck,permission:'team.view'},
     {href:'/app/auditoria',label:'Auditoria',Icon:ScrollText,permission:'audit.view'},
