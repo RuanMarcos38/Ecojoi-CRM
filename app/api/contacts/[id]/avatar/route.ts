@@ -1,17 +1,10 @@
+import { safeContactPicture } from '@/lib/contact-picture';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
 import { getEvolutionContactPicture } from '@/lib/server/evolution';
 
 const cache = new Map<string, { expires: number; url: string | null }>();
-export function safeContactPicture(value: string | null) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port==='443') &&
-      ['whatsapp.net', 'fbcdn.net'].some(domain => url.hostname === domain || url.hostname.endsWith(`.${domain}`)) ? url.href : null;
-  } catch { return null; }
-}
 export async function GET(_request: Request, { params }: { params: Promise<{id:string}> }) {
   try {
     const ctx = await requirePermission('conversations.view');

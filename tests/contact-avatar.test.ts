@@ -1,5 +1,6 @@
+import {safeContactPicture} from '../lib/contact-picture';
 import {beforeEach,describe,it,expect,vi} from 'vitest';
-import {GET,safeContactPicture} from '../app/api/contacts/[id]/avatar/route';
+import {GET} from '../app/api/contacts/[id]/avatar/route';
 const m=vi.hoisted(()=>({contact:vi.fn(),picture:vi.fn(),eq:vi.fn()}));
 vi.mock('../lib/auth/context',()=>({requirePermission:async()=>({tenantId:'tenant-a'})}));
 vi.mock('../lib/server/evolution',()=>({getEvolutionContactPicture:m.picture}));
