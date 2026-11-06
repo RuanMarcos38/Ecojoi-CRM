@@ -13,6 +13,14 @@ mkdir -p "$state" "$app/tmp"
 exec 9>"$state/deploy.lock"
 flock -n 9
 
+probe_token_file="$state/health-probe-token"
+if [[ ! -s "$probe_token_file" ]]; then
+  openssl rand -hex 32 > "$probe_token_file"
+fi
+chmod 600 "$probe_token_file"
+probe_token=$(cat "$probe_token_file")
+[[ "$probe_token" =~ ^[0-9a-f]{64}$ ]]
+
 stage=$(mktemp -d "$state/stage.XXXXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 tar --no-same-owner -xzf - -C "$stage"
@@ -72,8 +80,8 @@ healthy() {
   local attempt response
   for attempt in {1..9}; do
     if response=$(curl -fsS --user-agent "Mozilla/5.0 (compatible; EcojoiCRMDeploy/1.0)" --max-time 15 \
-      https://crm.ecojoi.com.br/api/health) &&
-      grep -Fq '"database":"ok"' <<< "$response" &&
+      --config - https://crm.ecojoi.com.br/api/health <<< "header = \"x-ecojoi-health-probe: $probe_token\"") &&
+      grep -Fq '"status":"ok"' <<< "$response" &&
       grep -Fq "\"revision\":\"$revision\"" <<< "$response"; then
       return 0
     fi

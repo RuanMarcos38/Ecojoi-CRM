@@ -90,6 +90,5 @@ export function ApiKeysPanel({enabled}:{enabled:boolean}){
       {!items.some(item=>item.active)&&<p className="muted">Nenhuma chave ativa.</p>}
     </div>
 
-    <p className="muted" style={{fontSize:12,marginTop:14}}>Documentação OpenAPI: <code>/api/v1/openapi</code>.</p>
   </section>;
 }
