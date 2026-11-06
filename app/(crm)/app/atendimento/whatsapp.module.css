@@ -1083,3 +1083,136 @@
     min-width: 220px;
   }
 }
+
+
+/* Workspace readability refinement: presentation only, retains all messaging APIs. */
+.root.whatsappShell {
+  grid-template-columns: clamp(270px, 23vw, 340px) minmax(0, 1fr) clamp(240px, 20vw, 294px);
+  background: #17201d;
+}
+.root .sidebarTop { min-height: 70px; }
+.root .searchBox { min-height: 43px; }
+.root .searchBox input,
+.root .messageInputWrap > input { font-size: 13px; }
+.root .queueTabs button { min-height: 36px; font-size: 11.5px; }
+.root .conversation { min-height: 82px; padding: 12px 14px; }
+.root .conversationName b { font-size: 14px; }
+.root .lastMessage { font-size: 12px; }
+.root .conversationMeta { font-size: 10.5px; }
+.root .chatHeader { min-height: 74px; padding: 11px 17px; }
+.root .contactIdentity strong { font-size: 14px; }
+.root .contactIdentity span { font-size: 11px; color: var(--chat-muted); }
+.root .messages {
+  padding: 22px clamp(18px, 4.2vw, 62px) 30px;
+  background: #17201d;
+  scrollbar-gutter: stable;
+}
+.root .messageRow { margin: 10px 0; }
+.root .messageBubble {
+  max-width: min(79%, 630px);
+  min-width: 84px;
+  padding: 10px 12px 8px;
+  border-radius: 11px;
+  background: #25302b;
+  border-color: #3b4a41;
+  box-shadow: 0 1px 2px rgba(0,0,0,.12);
+}
+.root .inbound .messageBubble {
+  border-top-left-radius: 3px;
+  background: #25302b;
+}
+.root .outbound .messageBubble {
+  border-top-right-radius: 3px;
+  background: #365024;
+  border-color: #52673a;
+}
+.root .messageText { font-size: 13.5px; line-height: 1.55; color: #f4f7f1; }
+.root .messageMeta { font-size: 10px; color: #c4d4c6; margin-top: 6px; }
+.root .messageMeta svg { color: #7cc9f5; }
+.root .composer { min-height: 70px; padding: 11px 16px; }
+.root .messageInputWrap > input { min-height: 46px; }
+.root .details { padding: 22px 17px; }
+.root .details h3 { font-size: 15px; }
+.root .details p { font-size: 12px; line-height: 1.5; }
+.root .details > b { font-size: 10.5px; }
+.root .ownerCard { padding: 13px; }
+.root .ownerCard strong { font-size: 12px; }
+.root .ownerCard span { font-size: 10.5px; }
+.mobileBack { display: none; }
+
+/* Light theme uses the same layout and original Ecojoi lime accent. */
+:global(html[data-ecojoi-theme="light"]) .root {
+  --chat-bg: #efeae2;
+  --chat-surface: #fff;
+  --chat-surface-soft: #f5f7f6;
+  --chat-border: #dce3df;
+  --chat-border-strong: #bfc9c2;
+  --chat-text: #17231b;
+  --chat-muted: #57645c;
+  --chat-secondary: #54645b;
+  --chat-green: #376d17;
+  --chat-green-dark: #b4e600;
+  --chat-green-soft: #e4efd8;
+  --chat-message-out: #d9f7c4;
+  --chat-warning-bg: #fff5d9;
+  --chat-warning-text: #795514;
+}
+:global(html[data-ecojoi-theme="light"]) .root.whatsappShell,
+:global(html[data-ecojoi-theme="light"]) .root .messages {
+  background: #efeae2;
+}
+:global(html[data-ecojoi-theme="light"]) .root .messageBubble,
+:global(html[data-ecojoi-theme="light"]) .root .inbound .messageBubble {
+  background: #fff;
+  border-color: #e1e6e2;
+}
+:global(html[data-ecojoi-theme="light"]) .root .outbound .messageBubble {
+  background: #d9f7c4;
+  border-color: #c1e9b5;
+}
+:global(html[data-ecojoi-theme="light"]) .root .messageText { color: #18221b; }
+:global(html[data-ecojoi-theme="light"]) .root .messageMeta { color: #5d6a62; }
+:global(html[data-ecojoi-theme="light"]) .root .messageMeta svg { color: #2283b4; }
+:global(html[data-ecojoi-theme="light"]) .root .conversation { border-bottom-color: #e6ebe7; }
+:global(html[data-ecojoi-theme="light"]) .root .conversationActive { background: #e6f4da; }
+:global(html[data-ecojoi-theme="light"]) .root .searchBox,
+:global(html[data-ecojoi-theme="light"]) .root .messageInputWrap > input {
+  border-color: #d1d9d3;
+}
+:global(html[data-ecojoi-theme="light"]) .root .chatPanel { background: #efeae2; }
+.root .messageText, .root .conversationCopy, .root .contactIdentity, .root .messageInputWrap {
+  min-width: 0;
+}
+.root .messageBubble img, .root .messageBubble audio { max-width: 100%; }
+@media(max-width:1360px) {
+  .root.whatsappShell { grid-template-columns: clamp(255px, 29vw, 320px) minmax(0, 1fr); }
+}
+@media(max-width:1050px) {
+  .root.whatsappShell { grid-template-columns: minmax(245px, 33%) minmax(0, 1fr); }
+  .root .contactIdentity span { max-width: 33vw; }
+  .root .headerActions { flex-wrap: wrap; justify-content: flex-end; }
+  .root .chatHeader { min-height: 80px; }
+}
+@media(max-width:767px) {
+  .root.whatsappShell {
+    width: 100%;
+    height: calc(100dvh - 118px);
+    min-height: 450px;
+    display: block;
+    overflow: hidden;
+  }
+  .root .sidebar, .root .chatPanel { height: 100%; width: 100%; }
+  .root.whatsappShell[data-mobile-chat="list"] .chatPanel { display: none; }
+  .root.whatsappShell[data-mobile-chat="open"] .sidebar { display: none; }
+  .root .chatHeader { gap: 8px; padding: 10px 12px; min-height: 64px; }
+  .root .mobileBack {
+    flex: 0 0 auto; display: grid; place-items: center;
+    width: 30px; height: 34px; padding: 0; border: 0;
+    color: var(--chat-text); background: transparent; cursor: pointer;
+  }
+  .root .contactIdentity span { max-width: 42vw; }
+  .root .messageBubble { max-width: 90%; }
+  .root .messages { padding: 18px 12px 24px; }
+  .root .composer { gap: 6px; padding: 9px; }
+  .root .headerActions :global(.btn) { min-width: 32px; }
+}
