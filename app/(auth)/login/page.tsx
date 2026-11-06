@@ -65,7 +65,7 @@ export default function LoginPage(){
           <button className={styles.submit} disabled={loading}>{loading?'Entrando...':'Entrar no CRM'}</button>
         </form>
         <p className={styles.link}><Link href="/recuperar-senha">Esqueci minha senha</Link></p>
-        <p className={styles.link}>Primeiro acesso? <Link href="/register">Criar conta</Link></p>
+        <p className={styles.link}>Primeiro acesso? Use o convite enviado pelo administrador. <Link href="/recuperar-senha">Definir senha</Link></p>
       </div>
     </section>
   </main>;

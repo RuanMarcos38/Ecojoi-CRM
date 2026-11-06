@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 
-function getSafeNext(path: string | null, origin: string) {
-  const fallback = new URL('/setup', origin);
+function getSafeNext(path: string | null, origin: string, type: EmailOtpType | null) {
+  const fallback = new URL(type === 'invite' ? '/redefinir-senha?convite=1' : '/setup', origin);
   if (!path?.startsWith('/')) return fallback;
   try {
     const target = new URL(path, origin);
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const flowId = requestUrl.searchParams.get('sb_flow_id');
   const tokenHash = requestUrl.searchParams.get('token_hash');
   const type = requestUrl.searchParams.get('type') as EmailOtpType | null;
-  const next = getSafeNext(requestUrl.searchParams.get('next'), requestUrl.origin);
+  const next = getSafeNext(requestUrl.searchParams.get('next'), requestUrl.origin, type);
   const supabase = await createClient();
 
   if (code) {
