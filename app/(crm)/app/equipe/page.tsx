@@ -42,8 +42,8 @@ export default function Equipe(){
     const fd=new FormData(e.currentTarget);
     const r=await fetch('/api/team/invite',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(fd.entries()))});
     const d=await r.json();
-    if(r.ok){setOpen(false);setNotice('Convite enviado.');await load();return;}
-    setError(d.error==='admin_key_not_configured'?'Convites exigem SUPABASE_SERVICE_ROLE_KEY configurada somente no servidor.':'Não foi possível enviar o convite.');
+    if(r.ok){setOpen(false);setNotice('Convite enviado. O colaborador deve abrir o e-mail, criar sua senha e entrar no CRM Ecojoi. Não é necessário cadastrar outra empresa.');await load();return;}
+    setError(d.error==='admin_key_not_configured'?'Convites exigem SUPABASE_SERVICE_ROLE_KEY configurada somente no servidor.':d.error==='user_already_registered'?'Este e-mail já possui cadastro. Para definir ou recuperar a senha, utilize Recuperar senha na tela de login.':'Não foi possível enviar o convite. Confira a configuração de e-mails e redirecionamento no Supabase.');
   }
 
   return <div className="content">
