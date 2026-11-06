@@ -67,6 +67,6 @@ healthy() {
   done
   return 1
 }
-healthy
+healthy || rollback
 trap - ERR INT TERM
 echo "Revisão $revision aplicada. Backup do aplicativo: $backup"
