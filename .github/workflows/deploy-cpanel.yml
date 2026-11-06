@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ecojoi-crm-cpanel-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -114,3 +114,26 @@ jobs:
           git add -A
           git commit -m "Deploy ${GITHUB_SHA}" || true
           git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" cpanel-deploy
+
+      - name: Deploy to cPanel over SSH
+        if: ${{ vars.CPANEL_AUTO_DEPLOY == 'true' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        env:
+          CPANEL_SSH_KEY: ${{ secrets.CPANEL_SSH_KEY }}
+          CPANEL_KNOWN_HOSTS: ${{ secrets.CPANEL_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          : "${CPANEL_SSH_KEY:?Configure CPANEL_SSH_KEY}"
+          : "${CPANEL_KNOWN_HOSTS:?Configure CPANEL_KNOWN_HOSTS}"
+          umask 077
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf -- "$ssh_dir"' EXIT
+          printf '%s\n' "$CPANEL_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$CPANEL_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          ssh_cmd=(ssh -T -i "$ssh_dir/key" -p 5451
+            -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ssh_dir/known_hosts"
+            ecojoi@ecojoi.com.br)
+          tar -czf "$ssh_dir/release.tar.gz" -C deploy runtime server.js DEPLOY_SOURCE_SHA
+          encoded_script=$(base64 -w0 scripts/deploy-cpanel-ssh.sh)
+          "${ssh_cmd[@]}" "bash -c \"\$(printf '%s' '$encoded_script' | base64 -d)\" -- '$GITHUB_SHA'" < "$ssh_dir/release.tar.gz"
