@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Search, Bell, LogOut, CheckCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { AgentAvatar } from './AgentAvatar';
 import { useRouter } from 'next/navigation';
 
 type Me={fullName:string;companyName:string;role:string;tenantId:string;userId:string};
@@ -16,6 +17,39 @@ export function Topbar(){
   const [notificationsOpen,setNotificationsOpen]=useState(false);
   const [notifications,setNotifications]=useState<Notification[]>([]);
   const router=useRouter();
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarFeedback, setAvatarFeedback] = useState('');
+
+  async function updateAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      setAvatarFeedback('A foto deve ter até 1 MB.');
+      return;
+    }
+    setAvatarBusy(true);
+    setAvatarFeedback('');
+    try {
+      const form = new FormData();
+      form.set('avatar', file);
+      const response = await fetch('/api/me/avatar', { method: 'POST', body: form });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        setAvatarFeedback(payload?.error || 'Não foi possível salvar a foto.');
+        return;
+      }
+      setAvatarVersion(Date.now());
+      setAvatarFeedback('Foto atualizada.');
+    } catch {
+      setAvatarFeedback('Não foi possível salvar a foto.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
   const searchInput=useRef<HTMLInputElement>(null);
 
   async function loadNotifications(){
@@ -139,7 +173,13 @@ export function Topbar(){
           </button>):<span>Nenhuma nova notificação.</span>}</div>
         </div>}
       </div>
-      <div className="avatar" title={me?.role}>{initials}</div>
+      <div className="profile-photo-control">
+        <input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => void updateAvatar(event)}/>
+        <button type="button" className="avatar profile-photo-button" aria-label="Alterar minha foto" title="Alterar minha foto" disabled={!me || avatarBusy} onClick={() => avatarInput.current?.click()}>
+          {me ? <AgentAvatar name={me.fullName} userId={me.userId} version={avatarVersion}/> : initials}
+        </button>
+        {avatarFeedback && <div className="profile-photo-feedback" role="status">{avatarFeedback}<button type="button" aria-label="Dispensar aviso" onClick={() => setAvatarFeedback('')}>×</button></div>}
+      </div>
       <button className="btn btn-secondary icon-btn" onClick={logout} aria-label="Sair"><LogOut size={17}/></button>
     </div>
   </header>;

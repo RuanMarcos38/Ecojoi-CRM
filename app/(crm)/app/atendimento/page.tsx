@@ -6,11 +6,14 @@ import {
   Mic, MoreVertical, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
+import { AgentAvatar } from '@/components/AgentAvatar';
 import { createClient } from '@/lib/supabase/client';
 
 type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = {
   id: string;
+  sender_user_id?: string | null;
+  sender_name?: string | null;
   direction: string;
   body: string;
   status: string;
@@ -369,6 +372,9 @@ export default function Atendimento() {
     return (
       <div key={message.id} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
         <div className={styles.messageBubble}>
+          {message.direction === 'outbound' && message.sender_user_id && message.sender_name && (
+            <div className="message-agent"><AgentAvatar name={message.sender_name} userId={message.sender_user_id}/><strong>{message.sender_name}</strong></div>
+          )}
           {message.message_type === 'image' && message.attachment_url && (
             <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.imageMessage}><img src={message.attachment_url} alt={message.attachment_name ?? 'Imagem'} /></a>
           )}

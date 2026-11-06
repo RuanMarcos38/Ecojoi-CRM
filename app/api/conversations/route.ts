@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { requireFeature } from '@/lib/server/feature';
 
 const BUCKET = 'ecojoi-message-attachments';
@@ -17,17 +18,31 @@ export async function GET() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('conversations')
-      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,ai_summary,ai_next_action,ai_summary_updated_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution,lead_score,lead_temperature),messages(id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
+      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,ai_summary,ai_next_action,ai_summary_updated_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution,lead_score,lead_temperature),messages(id,sender_user_id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
       .eq('tenant_id', ctx.tenantId)
       .order('updated_at', { ascending: false })
       .limit(100);
 
     if (error) throw error;
+    const senderIds = [...new Set((data ?? []).flatMap(conversation =>
+      (conversation.messages ?? []).flatMap(message => message.sender_user_id ? [String(message.sender_user_id)] : [])
+    ))];
+    const names = new Map<string, string>();
+    if (senderIds.length) {
+      const admin = createAdminClient();
+      for (let start = 0; start < senderIds.length; start += 100) {
+        const { data: senders } = await admin.from('profiles').select('id,full_name')
+          .eq('tenant_id', ctx.tenantId).in('id', senderIds.slice(start, start + 100));
+        for (const sender of senders ?? []) names.set(sender.id, sender.full_name);
+      }
+    }
+
     const hydrated = await Promise.all((data ?? []).map(async conversation => {
       const messages = await Promise.all((conversation.messages ?? []).map(async (message: any) => {
-        if (!message.attachment_path) return { ...message, attachment_url: null };
+        const sender_name = names.get(message.sender_user_id) ?? null;
+        if (!message.attachment_path) return { ...message, sender_name, attachment_url: null };
         const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(message.attachment_path, 3600);
-        return { ...message, attachment_url: signed?.signedUrl ?? null };
+        return { ...message, sender_name, attachment_url: signed?.signedUrl ?? null };
       }));
       messages.sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
       return { ...conversation, messages };
