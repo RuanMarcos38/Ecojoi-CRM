@@ -1,0 +1,9 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/ecojoi/repositories/Ecojoi-CRM/
+    - /bin/test -f runtime/server.js
+    - /bin/test -f runtime/.next/BUILD_ID
+    - /usr/bin/rsync -a --exclude=/.git --exclude='/.env*' --exclude=/node_modules --exclude=/tmp ./ "$DEPLOYPATH"
+    - /bin/mkdir -p "$DEPLOYPATH/tmp"
+    - /usr/bin/touch "$DEPLOYPATH/tmp/restart.txt"
