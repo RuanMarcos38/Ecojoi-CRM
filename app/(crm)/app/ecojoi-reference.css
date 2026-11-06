@@ -417,3 +417,45 @@ body:has(.ecojoi-shell) {
   .shell .ecojoi-dashboard .ecojoi-kpi-art,
   .shell .ecojoi-dashboard .approved-mini-chart { right: 12px; width: 29px; }
 }
+
+.sidebar-desktop-toggle { display: none; }
+
+@media (min-width: 768px) {
+  .shell.ecojoi-shell:has(> .sidebar[data-collapsed="true"]) {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .shell.ecojoi-shell .sidebar-desktop-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 8px;
+    margin: 5px 0;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--eco-raised);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .shell.ecojoi-shell .sidebar-desktop-toggle:hover {
+    border-color: var(--acid);
+  }
+
+  .shell.ecojoi-shell .sidebar[data-collapsed="true"] {
+    padding: 12px 7px;
+  }
+
+  .shell.ecojoi-shell .sidebar[data-collapsed="true"] :is(.brand, .nav-title, .sidebar-nav-label, .sidebar-desktop-toggle span) {
+    display: none;
+  }
+
+  .shell.ecojoi-shell .sidebar[data-collapsed="true"] :is(.nav a, .sidebar-desktop-toggle) {
+    justify-content: center;
+    min-height: 36px;
+    padding-inline: 0;
+  }
+}
