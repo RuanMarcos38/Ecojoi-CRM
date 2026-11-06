@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/auth/context';
 
 const security=[{bearerApiKey:[]}];
 
 export async function GET(request:Request){
+  try {
+    await requirePermission('settings.manage');
+  } catch (error) {
+    if (error instanceof Response) return error;
+    return NextResponse.json({ error: 'unavailable' }, { status: 503 });
+  }
+
   const base=new URL(request.url).origin;
   return NextResponse.json({
     openapi:'3.1.0',
@@ -70,5 +78,5 @@ export async function GET(request:Request){
         post:{summary:'Registrar transcrição e próximos passos',security,responses:{'201':{description:'Criado'}}}
       }
     }
-  });
+  }, { headers: { 'cache-control': 'private, no-store' } });
 }

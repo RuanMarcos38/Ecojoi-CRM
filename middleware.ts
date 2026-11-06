@@ -7,7 +7,7 @@ type CookieToSet={name:string;value:string;options:CookieOptions};
 
 function usesOwnAuthentication(path:string){
   return path.startsWith('/api/public/')
-    || path.startsWith('/api/v1/')
+    || (path.startsWith('/api/v1/') && path!=='/api/v1/openapi')
     || path==='/api/integrations/meta/webhook'
     || path==='/api/integrations/evolution/webhook'
     || path==='/api/ai-agent/reply'
