@@ -3,6 +3,7 @@ import { FormEvent, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import styles from './login.module.css';
 
 export default function LoginPage(){
   const [email,setEmail]=useState('');
@@ -27,23 +28,45 @@ export default function LoginPage(){
       router.push(hasVerified&&aal?.currentLevel!=='aal2'?'/mfa':'/app');
       router.refresh();
     }catch(err){
-      setError(err instanceof Error?err.message:'Falha ao entrar');
+      setError(err instanceof Error && 'code' in err && err.code==='invalid_credentials'
+        ? 'E-mail ou senha inválidos.'
+        : 'Não foi possível entrar. Verifique seus dados e tente novamente.');
     }finally{setLoading(false);}
   }
 
-  return <div className="login-page">
-    <section className="login-art"><div className="login-copy"><small>SEU ATENDIMENTO E GESTÃO EM UM SÓ LUGAR</small><div className="big">CRM<br/>Corporativo</div><p>Uma plataforma de relacionamento, atendimento e vendas para empresas de diferentes segmentos.</p></div></section>
-    <section className="login-panel"><div className="login-box">
-      <div className="brand" style={{color:'#054735',padding:0}}><div className="brand-mark" style={{borderColor:'#054735'}}></div><div className="brand-name">CRM Corporativo</div></div>
-      <h1>Acesse sua conta</h1><p className="muted">Entre com seu usuário corporativo.</p>
-      <form onSubmit={submit}>
-        {error&&<div className="error" role="alert">{error}</div>}
-        <div className="field"><label htmlFor="crm-login-email">E-mail</label><input id="crm-login-email" name="email" autoComplete="email" className="input" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@empresa.com"/></div>
-        <div className="field"><label htmlFor="crm-login-password">Senha</label><input id="crm-login-password" name="password" autoComplete="current-password" data-password-field className="input" type={showPassword?'text':'password'} required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/><button className="login-password-toggle" type="button" aria-label={showPassword?'Ocultar senha':'Mostrar senha'} aria-pressed={showPassword} onClick={()=>setShowPassword(v=>!v)}>{showPassword?'Ocultar':'Mostrar'}</button></div>
-        <button className="btn btn-primary" disabled={loading}>{loading?'Entrando...':'Entrar no CRM'}</button>
-      </form>
-      <p className="muted auth-link"><Link href="/recuperar-senha">Esqueci minha senha</Link></p>
-      <p className="muted auth-link">Primeiro acesso? <Link href="/register">Criar conta</Link></p>
-    </div></section>
-  </div>;
+  return <main className={styles.page}>
+    <section className={styles.hero} aria-label="Ecojoi CRM">
+      <span className={styles.wordmark}>Eco<span>joi</span><sup>®</sup></span>
+      <div className={styles.intro}>
+        <p className={styles.eyebrow}>GESTÃO DE RELACIONAMENTO</p>
+        <p className={styles.headline}>Conecte atendimento <span>e vendas.</span></p>
+        <p>Gerencie conversas, acompanhe leads e organize suas oportunidades em um só lugar.</p>
+      </div>
+    </section>
+
+    <section className={styles.panel} aria-labelledby="login-title">
+      <div className={styles.box}>
+        <p className={styles.eyebrow}>ECOJOI CRM</p>
+        <h1 id="login-title">Acesse sua conta</h1>
+        <p className={styles.description}>Entre com seu e-mail e sua senha.</p>
+        <form onSubmit={submit} aria-busy={loading}>
+          {error&&<div className={styles.error} role="alert">{error}</div>}
+          <div className={styles.field}>
+            <label htmlFor="crm-login-email">E-mail</label>
+            <input id="crm-login-email" name="email" autoComplete="username" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="voce@empresa.com"/>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="crm-login-password">Senha</label>
+            <div className={styles.password}>
+              <input id="crm-login-password" name="password" autoComplete="current-password" type={showPassword?'text':'password'} required value={password} onChange={e=>setPassword(e.target.value)}/>
+              <button type="button" aria-label={showPassword?'Ocultar senha':'Mostrar senha'} aria-pressed={showPassword} onClick={()=>setShowPassword(v=>!v)}>{showPassword?'Ocultar':'Mostrar'}</button>
+            </div>
+          </div>
+          <button className={styles.submit} disabled={loading}>{loading?'Entrando...':'Entrar no CRM'}</button>
+        </form>
+        <p className={styles.link}><Link href="/recuperar-senha">Esqueci minha senha</Link></p>
+        <p className={styles.link}>Primeiro acesso? <Link href="/register">Criar conta</Link></p>
+      </div>
+    </section>
+  </main>;
 }
