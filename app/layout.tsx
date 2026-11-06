@@ -9,7 +9,7 @@ import './reference-theme.css';
 import './professional-ui.css';
 import './enterprise-2026.css';
 import type { Metadata } from 'next';
-import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
+import { getPublicAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/lib/supabase/env';
 import { PwaRegister } from '@/components/PwaRegister';
 import { connection } from 'next/server';
 
@@ -23,9 +23,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   await connection();
   const runtimeEnv = {
     supabaseUrl: getSupabaseUrl(),
-    supabaseAnonKey: getSupabaseAnonKey()
+    supabaseAnonKey: getSupabaseAnonKey(),
+    appUrl: getPublicAppUrl()
   };
-  const runtimeEnvScript = `window.__ECOJOI_PUBLIC_ENV__=${JSON.stringify(runtimeEnv).replace(/</g, '\\u003c')};`;
+  const runtimeEnvScript = 'window.__ECOJOI_PUBLIC_ENV__=' + JSON.stringify(runtimeEnv).replace(/</g, '\\u003c') + ';';
 
   return <html lang="pt-BR"><body><script dangerouslySetInnerHTML={{ __html: runtimeEnvScript }} /><PwaRegister/>{children}</body></html>;
 }
