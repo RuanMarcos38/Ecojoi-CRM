@@ -99,6 +99,42 @@ export function WhatsAppConnectionPanel() {
     void load();
   }, []);
 
+  useEffect(() => {
+    if (provider !== 'evolution') return;
+
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+
+    async function checkConnection() {
+      try {
+        const response = await fetch('/api/integrations/whatsapp/status', {
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        if (!response.ok || controller.signal.aborted) return;
+        const { data } = await response.json() as { data?: WhatsAppStatus };
+        if (controller.signal.aborted || data?.provider !== 'evolution') return;
+
+        setStatus(data);
+        if (data.ok && (qrCode || pairingCode)) {
+          setQrCode(null);
+          setPairingCode(null);
+          setNotice('WhatsApp conectado pela Evolution API.');
+        }
+      } catch {
+        // Keep the last confirmed status while the server is temporarily unavailable.
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(checkConnection, 6000);
+      }
+    }
+
+    timer = setTimeout(checkConnection, 6000);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [provider, qrCode, pairingCode]);
+
   async function saveProvider(nextProvider: Provider) {
     setProvider(nextProvider);
     setError('');
@@ -201,7 +237,7 @@ export function WhatsAppConnectionPanel() {
       } else if (data.pairingCode) {
         setNotice('Código de pareamento gerado. Você pode usá-lo no WhatsApp se preferir ao QR Code.');
       } else {
-        setNotice('Conexão iniciada. Clique em “Verificar status” em alguns segundos.');
+        setNotice('Conexão iniciada. O status será atualizado automaticamente.');
       }
 
       await load();
