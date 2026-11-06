@@ -50,7 +50,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('[whatsapp-outbound] message_insert_failed', {
+        tenantId: ctx.tenantId,
+        conversationId: id,
+        code: error.code,
+        hint: error.hint,
+        details: error.details
+      });
+      return NextResponse.json({ error: 'message_persistence_failed', code: error.code }, { status: 500 });
+    }
 
     let delivery = initialStatus;
     let providerMessageId: string | null = null;
@@ -59,6 +68,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (conversation.channel === 'whatsapp') {
       const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
       const sent = await sendWhatsAppText(ctx.tenantId, contact?.phone, body.body);
+      if (!sent.delivered) {
+        console.warn('[whatsapp-outbound] provider_send_failed', {
+          tenantId: ctx.tenantId,
+          conversationId: id,
+          reason: sent.reason ?? 'unknown'
+        });
+      }
       if (sent.delivered) {
         delivery = 'sent';
         providerMessageId = sent.providerMessageId ?? null;
@@ -107,6 +123,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (e) {
     if (e instanceof Response) return e;
     if (e instanceof z.ZodError) return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
+    console.error('[whatsapp-outbound] unexpected_message_send_error', {
+      type: e instanceof Error ? e.name : typeof e,
+      message: e instanceof Error ? e.message : 'unknown',
+      code: typeof e === 'object' && e !== null && 'code' in e ? String(e.code) : null
+    });
     return NextResponse.json({ error: 'message_send_failed' }, { status: 500 });
   }
 }
