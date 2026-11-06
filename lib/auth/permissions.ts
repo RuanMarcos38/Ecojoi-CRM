@@ -6,7 +6,7 @@ export type Permission =
   | 'tasks.view' | 'tasks.create' | 'tasks.update' | 'tasks.delete'
   | 'automations.view' | 'automations.manage'
   | 'reports.view' | 'team.view' | 'team.manage' | 'settings.view' | 'settings.manage'
-  | 'features.manage' | 'audit.view' | 'finance.view' | 'finance.manage';
+  | 'features.manage' | 'audit.view' | 'finance.view' | 'finance.manage' | 'erp.stock.view' | 'erp.stock.manage';
 
 const all: Permission[] = [
   'contacts.view','contacts.create','contacts.update','contacts.delete',
@@ -14,13 +14,13 @@ const all: Permission[] = [
   'deals.view','deals.create','deals.update','deals.delete',
   'tasks.view','tasks.create','tasks.update','tasks.delete',
   'automations.view','automations.manage',
-  'reports.view','team.view','team.manage','settings.view','settings.manage','features.manage','audit.view','finance.view','finance.manage'
+  'reports.view','team.view','team.manage','settings.view','settings.manage','features.manage','audit.view','finance.view','finance.manage','erp.stock.view','erp.stock.manage'
 ];
 
 export const rolePermissions: Record<Role, Permission[]> = {
   super_admin: all,
   company_admin: all,
-  manager: all.filter(p => !['features.manage','settings.manage','team.manage','audit.view','finance.view','finance.manage'].includes(p)),
+  manager: all.filter(p => !['features.manage','settings.manage','team.manage','audit.view','finance.view','finance.manage','erp.stock.view','erp.stock.manage'].includes(p)),
   user: ['contacts.view','contacts.create','contacts.update','conversations.view','conversations.create','conversations.send','conversations.manage','deals.view','deals.create','deals.update','tasks.view','tasks.create','tasks.update']
 };
 

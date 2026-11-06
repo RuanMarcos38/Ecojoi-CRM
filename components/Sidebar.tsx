@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, PanelLeftClose, PanelLeftOpen, Wallet, X } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, PanelLeftClose, PanelLeftOpen, Wallet, Package, X } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -25,7 +25,7 @@ const groups:{title:string;items:Item[]}[]=[
     {href:'/app/automacoes',label:'Automações',Icon:Bot,permission:'automations.view',feature:'automacoes'},
     {href:'/app/relatorios',label:'Relatórios',Icon:BarChart3,permission:'reports.view',feature:'relatorios'}
   ]},
-  {title:'Gestão',items:[{href:'/app/financeiro',label:'Financeiro',Icon:Wallet,permission:'finance.view'}]},
+  {title:'Gestão',items:[{href:'/app/financeiro',label:'Financeiro',Icon:Wallet,permission:'finance.view'},{href:'/app/erp/estoque',label:'ERP · Estoque',Icon:Package,permission:'erp.stock.view'}]},
   {title:'Administração',items:[
     {href:'/app/equipe',label:'Equipe e Permissões',Icon:ShieldCheck,permission:'team.view'},
     {href:'/app/auditoria',label:'Auditoria',Icon:ScrollText,permission:'audit.view'},
