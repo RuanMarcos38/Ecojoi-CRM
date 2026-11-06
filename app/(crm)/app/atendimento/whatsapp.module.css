@@ -151,13 +151,8 @@
   padding: 2px 12px 10px;
   display: flex;
   gap: 6px;
-  overflow-x: auto;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--chat-border);
-  scrollbar-width: none;
-}
-
-.queueTabs::-webkit-scrollbar {
-  display: none;
 }
 
 .queueTabs button {
@@ -167,7 +162,7 @@
   align-items: center;
   gap: 5px;
   white-space: nowrap;
-  border: 1px solid #e2e7e4;
+  border: 1px solid var(--chat-border);
   border-radius: 6px;
   background: var(--chat-surface);
   color: var(--chat-text);
@@ -232,7 +227,7 @@
 }
 
 .conversationActive {
-  background: #eef5f1 !important;
+  background: var(--chat-green-soft);
 }
 
 .conversationActive::before {
@@ -952,7 +947,7 @@
 
 .channelLabel {
   padding-top: 6px;
-  color: #35433b !important;
+  color: var(--chat-secondary);
   font-weight: 600;
   text-align: left;
   text-transform: none;

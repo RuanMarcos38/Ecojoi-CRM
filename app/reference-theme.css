@@ -613,18 +613,6 @@ body {
   letter-spacing: -.03em;
 }
 
-/* Keep attendance aligned with the CRM brand without touching its logic */
-[class*="whatsappShell"] {
-  border-color: var(--ref-border) !important;
-  background: #fff !important;
-}
-
-[class*="sidebarTop"],
-[class*="chatHeader"] {
-  background: #f8faf9 !important;
-  border-color: var(--ref-border) !important;
-}
-
 [class*="queueTabs"] button,
 [class*="modeBanner"],
 [class*="ownerCard"] {
