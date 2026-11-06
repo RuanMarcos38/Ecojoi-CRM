@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, getPublicAppUrl } from '@/lib/supabase/client';
 
 export default function RecoverPasswordPage(){
   const [pending,setPending]=useState(false);
@@ -13,7 +13,7 @@ export default function RecoverPasswordPage(){
     const email=String(new FormData(event.currentTarget).get('email')??'').trim();
     setPending(true);
     try{
-      const redirectTo=new URL('/auth/confirm',window.location.origin);
+      const redirectTo=new URL('/auth/confirm',getPublicAppUrl());
       redirectTo.searchParams.set('next','/redefinir-senha');
       await createClient().auth.resetPasswordForEmail(email,{redirectTo:redirectTo.href});
     }catch{
