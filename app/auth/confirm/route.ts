@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { EmailOtpType } from '@supabase/supabase-js';
+import { getPublicAppUrl } from '@/lib/supabase/env';
 import { createClient } from '@/lib/supabase/server';
 
 function getSafeNext(path: string | null, origin: string, type: EmailOtpType | null) {
@@ -15,11 +16,12 @@ function getSafeNext(path: string | null, origin: string, type: EmailOtpType | n
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  const publicOrigin = getPublicAppUrl(requestUrl.origin);
   const code = requestUrl.searchParams.get('code');
   const flowId = requestUrl.searchParams.get('sb_flow_id');
   const tokenHash = requestUrl.searchParams.get('token_hash');
   const type = requestUrl.searchParams.get('type') as EmailOtpType | null;
-  const next = getSafeNext(requestUrl.searchParams.get('next'), requestUrl.origin, type);
+  const next = getSafeNext(requestUrl.searchParams.get('next'), publicOrigin, type);
   const supabase = await createClient();
 
   if (code) {
@@ -40,5 +42,5 @@ export async function GET(request: NextRequest) {
     if (!error) return NextResponse.redirect(next);
   }
 
-  return NextResponse.redirect(new URL('/login?auth_error=confirmacao', requestUrl.origin));
+  return NextResponse.redirect(new URL('/login?auth_error=confirmacao', publicOrigin));
 }
