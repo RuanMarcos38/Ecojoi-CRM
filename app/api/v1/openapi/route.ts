@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/auth/context';
+const security = [{ bearerApiKey: [] }];
 
-const security=[{bearerApiKey:[]}];
+const commonResponses = {
+  '401': { description: 'Chave ausente, inválida, revogada ou expirada' },
+  '403': { description: 'Chave sem permissão para a operação' },
+  '429': { description: 'Limite de requisições excedido' },
+  '503': { description: 'Serviço temporariamente indisponível' }
+};
 
-export async function GET(request:Request){
-  try {
-    await requirePermission('settings.manage');
-  } catch (error) {
-    if (error instanceof Response) return error;
-    return NextResponse.json({ error: 'unavailable' }, { status: 503 });
-  }
-
-  const base=new URL(request.url).origin;
+export async function GET() {
   return NextResponse.json({
     openapi:'3.1.0',
     info:{
@@ -19,7 +16,7 @@ export async function GET(request:Request){
       version:'2.1.0',
       description:'API multiempresa do Ecojoi CRM com autenticação Bearer, escopos e rate limit por chave.'
     },
-    servers:[{url:base}],
+    servers:[{url:'/'}],
     components:{
       securitySchemes:{bearerApiKey:{type:'http',scheme:'bearer',bearerFormat:'Ecojoi API Key'}},
       schemas:{
@@ -39,44 +36,44 @@ export async function GET(request:Request){
     },
     paths:{
       '/api/v1/leads':{
-        get:{summary:'Listar leads',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Criar ou atualizar lead',security,responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar leads',description:'Escopo exigido: `leads:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Criar ou atualizar lead',description:'Escopo exigido: `leads:write`.',security,responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/contacts':{
-        get:{summary:'Listar contatos',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Criar ou atualizar contato',security,requestBody:{required:true,content:{'application/json':{schema:{$ref:'#/components/schemas/ContactInput'}}}},responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar contatos',description:'Escopo exigido: `contacts:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Criar ou atualizar contato',description:'Escopo exigido: `contacts:write`.',security,requestBody:{required:true,content:{'application/json':{schema:{$ref:'#/components/schemas/ContactInput'}}}},responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/deals':{
-        get:{summary:'Listar negócios',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Criar negócio',security,requestBody:{required:true,content:{'application/json':{schema:{$ref:'#/components/schemas/DealInput'}}}},responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar negócios',description:'Escopo exigido: `deals:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Criar negócio',description:'Escopo exigido: `deals:write`.',security,requestBody:{required:true,content:{'application/json':{schema:{$ref:'#/components/schemas/DealInput'}}}},responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/tasks':{
-        get:{summary:'Listar tarefas',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Criar tarefa',security,requestBody:{required:true,content:{'application/json':{schema:{$ref:'#/components/schemas/TaskInput'}}}},responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar tarefas',description:'Escopo exigido: `tasks:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Criar tarefa',description:'Escopo exigido: `tasks:write`.',security,requestBody:{required:true,content:{'application/json':{schema:{$ref:'#/components/schemas/TaskInput'}}}},responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/conversations':{
-        get:{summary:'Listar conversas',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Criar conversa',security,responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar conversas',description:'Escopo exigido: `conversations:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Criar conversa',description:'Escopo exigido: `conversations:write`.',security,responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/conversations/{id}/messages':{
-        get:{summary:'Listar mensagens',security,parameters:[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'OK'}}},
-        post:{summary:'Enviar mensagem',security,parameters:[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'201':{description:'Enviada ou enfileirada'}}}
+        get:{summary:'Listar mensagens',description:'Escopo exigido: `conversations:read`.',security,parameters:[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Enviar mensagem',description:'Escopo exigido: `messages:write`.',security,parameters:[{name:'id',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{...commonResponses,'201':{description:'Enviada ou enfileirada'}}}
       },
       '/api/v1/reports':{
-        get:{summary:'Resumo de indicadores comerciais',security,responses:{'200':{description:'OK'}}}
+        get:{summary:'Resumo de indicadores comerciais',description:'Escopo exigido: `reports:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}}
       },
       '/api/v1/emails':{
-        get:{summary:'Listar e-mails sincronizados',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Sincronizar e-mail externo',security,responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar e-mails sincronizados',description:'Escopo exigido: `emails:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Sincronizar e-mail externo',description:'Escopo exigido: `emails:write`.',security,responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/calendar-events':{
-        get:{summary:'Listar eventos de calendário',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Sincronizar evento de calendário',security,responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar eventos de calendário',description:'Escopo exigido: `calendar:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Sincronizar evento de calendário',description:'Escopo exigido: `calendar:write`.',security,responses:{...commonResponses,'201':{description:'Criado'}}}
       },
       '/api/v1/transcripts':{
-        get:{summary:'Listar resumos/transcrições',security,responses:{'200':{description:'OK'}}},
-        post:{summary:'Registrar transcrição e próximos passos',security,responses:{'201':{description:'Criado'}}}
+        get:{summary:'Listar resumos/transcrições',description:'Escopo exigido: `transcripts:read`.',security,responses:{...commonResponses,'200':{description:'OK'}}},
+        post:{summary:'Registrar transcrição e próximos passos',description:'Escopo exigido: `transcripts:write`.',security,responses:{...commonResponses,'201':{description:'Criado'}}}
       }
     }
-  }, { headers: { 'cache-control': 'private, no-store' } });
+  }, { headers: { 'cache-control': 'public, max-age=300' } });
 }
