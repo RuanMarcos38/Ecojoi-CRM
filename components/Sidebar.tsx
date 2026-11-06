@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, Kanban, CheckSquare, Bot, BarChart3, ShieldCheck, Settings, ScrollText, CalendarClock, Megaphone, MessageCircle, PlugZap, FileText, FormInput, HeartHandshake, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import type { Permission, Role } from '@/lib/auth/permissions';
 
 type Item={href:string;label:string;Icon:typeof LayoutDashboard;permission?:Permission;feature?:string;roles?:Role[]};
@@ -39,5 +39,49 @@ export function Sidebar(){
   useEffect(()=>{setMenuOpen(false)},[pathname]);
   function allowed(i:Item){if(!me)return i.href==='/app';if(i.roles&&!i.roles.includes(me.role))return false;if(i.permission&&!me.permissions.includes(i.permission))return false;if(i.feature&&me.features[i.feature]!==true)return false;return true}
   const ecojoiBrand=me?.companyName?.trim().toLowerCase()==='ecojoi'?<span className="ecojoi-wordmark">Eco<span>joi</span><sup>®</sup></span>:null;
-  return <aside className={`sidebar${menuOpen?' mobile-open':''}`}><div className="sidebar-mobile-head"><div className="sidebar-mobile-brand"><div className="brand-mark"></div><span>{ecojoiBrand??(me?.companyName||'CRM Corporativo')}</span></div><button type="button" className="sidebar-mobile-toggle" aria-label={menuOpen?'Fechar menu':'Abrir menu'} aria-expanded={menuOpen} aria-controls="crm-primary-nav" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?<X size={18}/>:<Menu size={18}/>}</button></div><div className="brand"><div className="brand-mark"></div><div><div className="brand-name">{ecojoiBrand??(me?.companyName||'CRM Corporativo')}</div><span className="brand-sub">GESTÃO DE RELACIONAMENTO</span></div></div><nav className="nav" id="crm-primary-nav" aria-label="Navegação principal">{groups.map(g=>{const items=g.items.filter(allowed);return items.length?<div key={g.title}><div className="nav-title">{g.title}</div>{items.map(({href,label,Icon})=><Link className={pathname===href?'active':''} aria-current={pathname===href?'page':undefined} key={href} href={href}><Icon/>{label}</Link>)}</div>:null})}</nav></aside>
+  const [collapsed, setCollapsed] = useState(false);
+  const desktopLabel = collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral';
+
+  return <aside className={`sidebar${menuOpen ? ' mobile-open' : ''}`} data-collapsed={collapsed}>
+    <div className="sidebar-mobile-head">
+      <div className="sidebar-mobile-brand">
+        <div className="brand-mark"/>
+        <span>{ecojoiBrand ?? (me?.companyName || 'CRM Corporativo')}</span>
+      </div>
+      <button type="button" className="sidebar-mobile-toggle" aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={menuOpen} aria-controls="crm-primary-nav" onClick={() => setMenuOpen(v => !v)}>
+        {menuOpen ? <X size={18}/> : <Menu size={18}/>}
+      </button>
+    </div>
+    <div className="brand">
+      <div className="brand-mark"/>
+      <div>
+        <div className="brand-name">{ecojoiBrand ?? (me?.companyName || 'CRM Corporativo')}</div>
+        <span className="brand-sub">GESTÃO DE RELACIONAMENTO</span>
+      </div>
+    </div>
+    <button type="button" className="sidebar-desktop-toggle" aria-label={desktopLabel} title={desktopLabel} aria-expanded={!collapsed} aria-controls="crm-primary-nav" onClick={() => setCollapsed(v => !v)}>
+      {collapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}
+      <span>{desktopLabel}</span>
+    </button>
+    <nav className="nav" id="crm-primary-nav" aria-label="Navegação principal">
+      {groups.map(group => {
+        const items = group.items.filter(allowed);
+        return items.length ? <div key={group.title}>
+          <div className="nav-title">{group.title}</div>
+          {items.map(({href, label, Icon}) => <Link
+            className={pathname === href ? 'active' : ''}
+            aria-current={pathname === href ? 'page' : undefined}
+            aria-label={label}
+            title={collapsed ? label : undefined}
+            key={href}
+            href={href}
+            onClick={() => setMenuOpen(false)}
+          >
+            <Icon aria-hidden="true"/>
+            <span className="sidebar-nav-label">{label}</span>
+          </Link>)}
+        </div> : null;
+      })}
+    </nav>
+  </aside>;
 }
