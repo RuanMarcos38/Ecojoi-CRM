@@ -52,7 +52,7 @@ export default function ResetPasswordPage(){
   }
 
   return <div className="setup-page"><section className="setup-card card">
-    <h1>Redefinir senha</h1>
+    <h1>Definir ou redefinir senha</h1><p className="muted">Se este é seu primeiro acesso ao CRM Ecojoi, escolha sua senha para entrar na empresa à qual você foi convidado. Você não precisa cadastrar uma nova empresa.</p>
     {error&&<p role="alert" className="error">{error}</p>}
     {done?<p role="status">Senha alterada.</p>:<form onSubmit={submit}>
       <div className="field"><label htmlFor="new-password">Nova senha</label><input className="input" id="new-password" name="password" type="password" autoComplete="new-password" minLength={8} required/></div>
