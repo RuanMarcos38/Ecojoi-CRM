@@ -287,7 +287,7 @@ export function WhatsAppConnectionPanel() {
           </a>
         </div>
       ) : (
-        <div style={{ marginTop: 16, padding: 14, border: '1px solid #e5e9e7', borderRadius: 10, background: '#fafcfb' }}>
+        <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--line)', borderRadius: 10, background: 'var(--eco-raised)' }}>
           <div className="form-grid settings-form">
             <div className="field">
               <label>URL da Evolution API</label>
@@ -360,7 +360,7 @@ export function WhatsAppConnectionPanel() {
           )}
 
           {(qrCode || pairingCode) && (
-            <div style={{ marginTop: 14, display: 'grid', gap: 12, justifyItems: 'center', padding: 16, background: '#fff', border: '1px solid #e5e9e7', borderRadius: 10 }}>
+            <div style={{ marginTop: 14, display: 'grid', gap: 12, justifyItems: 'center', padding: 16, background: 'var(--eco-raised)', border: '1px solid var(--line)', borderRadius: 10 }}>
               {qrCode && (
                 <>
                   <Image

@@ -3,7 +3,6 @@
 import { useEffect,useMemo,useState } from 'react';
 import { CircleDollarSign, Clock3, Database, Flame, Headset, ListChecks, MessageCircle, Settings2, Target, TrendingUp, X } from 'lucide-react';
 import styles from './dashboard.module.css';
-import './ecojoi-reference.css';
 
 type Dashboard={
   leads:number;hotLeads:number;openConversations:number;waitingConversations:number;slaBreached:number;

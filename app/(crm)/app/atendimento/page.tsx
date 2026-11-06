@@ -475,11 +475,11 @@ export default function Atendimento() {
           {(active.ai_summary||active.ai_next_action)&&<>
             <hr/>
             <b>Inteligência da conversa</b>
-            {active.ai_summary&&<div style={{marginTop:9,padding:10,border:'1px solid #e5e9e7',borderRadius:7,textAlign:'left',background:'#f8faf9'}}>
+            {active.ai_summary&&<div style={{marginTop:9,padding:10,border:'1px solid var(--line)',borderRadius:7,textAlign:'left',background:'var(--eco-raised)'}}>
               <strong style={{fontSize:11}}>Resumo IA</strong>
               <p style={{marginTop:5,lineHeight:1.45,whiteSpace:'pre-wrap'}}>{active.ai_summary}</p>
             </div>}
-            {active.ai_next_action&&<div style={{marginTop:7,padding:10,border:'1px solid #d8e8df',borderRadius:7,textAlign:'left',background:'#f0f8f4'}}>
+            {active.ai_next_action&&<div style={{marginTop:7,padding:10,border:'1px solid var(--line)',borderRadius:7,textAlign:'left',background:'var(--eco-raised)'}}>
               <strong style={{fontSize:11}}>Próxima ação</strong>
               <p style={{marginTop:5,lineHeight:1.45,whiteSpace:'pre-wrap'}}>{active.ai_next_action}</p>
             </div>}
@@ -492,7 +492,7 @@ export default function Atendimento() {
             <button className="btn btn-secondary" disabled={savingNote||!noteText.trim()}>{savingNote?'Salvando...':'Adicionar nota'}</button>
           </form>
           <div style={{display:'grid',gap:6,marginTop:9,maxHeight:190,overflow:'auto',textAlign:'left'}}>
-            {notes.length?notes.map(note=><div key={note.id} style={{padding:'8px 9px',border:'1px solid #e8ece9',borderRadius:6,background:'#fff'}}>
+            {notes.length?notes.map(note=><div key={note.id} style={{padding:'8px 9px',border:'1px solid var(--line)',borderRadius:6,background:'var(--eco-surface)'}}>
               <p style={{margin:0,whiteSpace:'pre-wrap',lineHeight:1.4}}>{note.body}</p>
               <small className="muted">{Array.isArray(note.user)?note.user[0]?.full_name:note.user?.full_name||'Equipe'} · {new Date(note.created_at).toLocaleString('pt-BR')}</small>
             </div>):<p className="muted">Nenhuma nota interna.</p>}
