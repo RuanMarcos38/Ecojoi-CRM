@@ -8,8 +8,17 @@ export async function POST(req:Request){
   try{
     const ctx=await requirePermission('team.manage');const body=schema.parse(await req.json());
     let admin;try{admin=createAdminClient()}catch{return NextResponse.json({error:'admin_key_not_configured'},{status:503})}
-    const {data:invite,error:inviteError}=await admin.auth.admin.inviteUserByEmail(body.email,{data:{full_name:body.full_name}});
-    if(inviteError||!invite.user) return NextResponse.json({error:'invite_failed',message:inviteError?.message},{status:400});
+    // Invited staff are joining the existing tenant. Never send them to /register or /setup.
+    // The invite URL must also be allowlisted in Supabase Auth -> URL Configuration.
+    const redirectTo='https://crm.ecojoi.com.br/redefinir-senha?convite=1';
+    const {data:invite,error:inviteError}=await admin.auth.admin.inviteUserByEmail(body.email,{
+      data:{full_name:body.full_name},
+      redirectTo
+    });
+    if(inviteError||!invite.user){
+      const alreadyRegistered=Boolean(inviteError?.message && /already (registered|exists)|already been registered/i.test(inviteError.message));
+      return NextResponse.json({error:alreadyRegistered?'user_already_registered':'invite_failed'},{status:alreadyRegistered?409:400});
+    }
     const {error:profileError}=await admin.from('profiles').insert({id:invite.user.id,tenant_id:ctx.tenantId,full_name:body.full_name,role:body.role,active:true});
     if(profileError){await admin.auth.admin.deleteUser(invite.user.id);return NextResponse.json({error:'profile_create_failed'},{status:400})}
     await audit({tenantId:ctx.tenantId,userId:ctx.userId,action:'team.invite',entity:'profile',entityId:invite.user.id,metadata:{role:body.role}});
