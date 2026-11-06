@@ -432,10 +432,10 @@ export default function Atendimento() {
           {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={queue === state ? styles.queueActive : ''} onClick={() => setQueue(state)}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
         </div>
         <div className={styles.conversationList}>
-          {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
+          {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map((conversation, index) => {
             const last = conversation.messages?.[conversation.messages.length - 1];
             return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setMobileChatOpen(true); }}>
-              <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} className={styles.avatar}/>
+              <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} priority={index < 12} className={styles.avatar}/>
               <span className={styles.conversationCopy}>
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
                 <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
