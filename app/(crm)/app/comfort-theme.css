@@ -1,0 +1,127 @@
+/* Ecojoi accessible theme and independent navigation groups.
+ * Visual-only: no changes to routes, permissions, data or integrations. */
+.shell.ecojoi-shell .sidebar:not([data-collapsed="true"]) .nav-group-toggle {
+  width: 100%;
+  min-height: 34px;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  padding: 7px 9px !important;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #d1d3d1 !important;
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.shell.ecojoi-shell .sidebar .nav-group-toggle:hover {
+  background: #273218;
+  color: #f8f9f4 !important;
+}
+.shell.ecojoi-shell .sidebar .nav-group-toggle:focus-visible {
+  outline: 2px solid var(--acid);
+  outline-offset: 2px;
+}
+.shell.ecojoi-shell .nav-chevron {
+  transition: transform .16s ease;
+  flex: 0 0 auto;
+}
+.shell.ecojoi-shell .nav-chevron.is-closed { transform: rotate(-90deg); }
+.shell.ecojoi-shell .sidebar .nav a { min-height: 33px; line-height: 1.3; }
+.shell.ecojoi-shell .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  height: 36px;
+  padding: 7px;
+  color: #e5ebde;
+}
+.shell.ecojoi-shell .theme-toggle:focus-visible { outline: 2px solid var(--acid); outline-offset: 2px; }
+
+/* Alternate scheme; the existing Ecojoi brand accent remains lime. */
+html[data-ecojoi-theme="light"] body:has(.ecojoi-shell) { background: #f1f4f0; color: #1d291f; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell {
+  --eco-surface:#fff;
+  --eco-raised:#f5f7f4;
+  --eco-muted-surface:#ecf0e9;
+  --ink:#1d291f;
+  --muted:#526458;
+  --line:#dce4dc;
+  --edge:#dce4dc;
+  --corporate-bg:#f1f4f0;
+  --corporate-surface:#fff;
+  --corporate-border:#dce4dc;
+  --corporate-text:#1d291f;
+  --corporate-muted:#526458;
+  --ui-bg:#f1f4f0;
+  --ui-text:#1d291f;
+  --ui-surface:#fff;
+  --ui-surface-soft:#f5f7f4;
+  --ui-border:#dce4dc;
+  --panel:#fff;
+  background:#f1f4f0;
+  color:#1d291f;
+  color-scheme:light;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .main { background:#f1f4f0; color:#1d291f; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .topbar {
+  background:#fff !important;
+  border-color:#dce4dc !important;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .search {
+  background:#f5f7f4 !important;
+  border-color:#dce4dc !important;
+  color:#263a29;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .search input,
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .search input::placeholder {
+  color:#46584b;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .user-meta strong { color:#17271b; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .user-meta small { color:#526458; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .notification-button,
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .top-actions > .btn {
+  background:#fff; color:#1d291f; border-color:#dce4dc;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell :is(.card,.section,.notification-popover,.search-results,.setting-row,.table-wrap,.tableShell) {
+  background:#fff !important; color:#1d291f; border-color:#dce4dc !important;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell :is(.input,.textarea,.select,.btn-secondary) {
+  background:#fff; color:#1d291f; border-color:#cdd9cf;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell :is(.page-title,.page-head h1,.section h3,.card h3) { color:#1d291f; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell :is(.page-sub,.muted,.section p) { color:#526458; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .main:has(> .ecojoi-dashboard) {
+  background:#f1f4f0 !important;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard {
+  background:#f1f4f0 !important;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard :is(.approved-kpi,.approved-panel,.approved-table-wrap) {
+  background:#fff !important;
+  border-color:#dce4dc !important;
+  color:#1d291f;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard :is(.approved-greeting h1,.approved-greeting p,.approved-kpi-label,.approved-kpi-value,.approved-panel-head h3,.approved-panel-head p,.approved-activity-list b,.approved-activity-list small,.approved-activity-list em) {
+  color:#1d291f !important;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard .approved-table-wrap :is(th,td) {
+  background:#fff !important;
+  color:#1d291f;
+  border-color:#dce4dc;
+}
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard .approved-activity-list > div { color:#1d291f; border-color:#dce4dc; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard .ecojoi-funnel > div { border-color:#dce4dc; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .ecojoi-dashboard .ecojoi-funnel > div span:last-child { color:#526458; }
+html[data-ecojoi-theme="light"] .shell.ecojoi-shell .sidebar .brand-name { color:#f7f8f5 !important; }
+@media(max-width:767px) {
+  .shell.ecojoi-shell .top-actions { gap:5px; }
+  .shell.ecojoi-shell .theme-toggle { width:34px; flex-basis:34px; }
+  .shell.ecojoi-shell .sidebar .nav-group-toggle { width:100%; }
+}
