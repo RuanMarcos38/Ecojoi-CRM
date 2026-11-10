@@ -1,6 +1,7 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Bot, CheckCircle2, FileUp, Link2, Plus, Power, RefreshCw, Trash2 } from 'lucide-react';
 
 type Automation = {
@@ -167,6 +168,7 @@ export default function Automacoes() {
           <h1 className="page-title">Automações</h1>
           <p className="page-sub">Regras comerciais e orquestração do atendimento.</p>
         </div>
+        <Link className="btn btn-secondary" href="/app/automacoes/follow-up">Follow-up WhatsApp</Link>
         <button className="btn btn-primary" onClick={() => setOpen(value => !value)}>
           <Plus size={16}/>Nova automação
         </button>
