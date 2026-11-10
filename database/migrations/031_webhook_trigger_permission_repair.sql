@@ -14,3 +14,11 @@ ALTER FUNCTION public.webhook_event_contact_update() SET search_path = pg_catalo
 ALTER FUNCTION public.webhook_event_deal_insert() SET search_path = pg_catalog, public, pg_temp;
 ALTER FUNCTION public.webhook_event_deal_won() SET search_path = pg_catalog, public, pg_temp;
 ALTER FUNCTION public.webhook_event_task_insert() SET search_path = pg_catalog, public, pg_temp;
+
+-- Funções de gatilho são chamadas pelo mecanismo de triggers, nunca via Data API.
+-- Impede chamadas diretas a funções SECURITY DEFINER por anon/authenticated.
+REVOKE EXECUTE ON FUNCTION public.webhook_event_contact_insert() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.webhook_event_contact_update() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.webhook_event_deal_insert() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.webhook_event_deal_won() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.webhook_event_task_insert() FROM PUBLIC, anon, authenticated;
