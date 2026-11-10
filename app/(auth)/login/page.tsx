@@ -1,5 +1,5 @@
 'use client';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,15 @@ export default function LoginPage(){
   const [loading,setLoading]=useState(false);
   const [showPassword,setShowPassword]=useState(false);
   const router=useRouter();
+
+  useEffect(()=>{
+    // Limpa somente o navegador invalidado, sem desconectar o login novo.
+    if(new URLSearchParams(window.location.search).get('session')==='expired'){
+      setError('Sua sessao foi encerrada porque sua conta entrou em outro dispositivo.');
+      void createClient().auth.signOut({scope:'local'});
+    }
+  },[]);
+
 
   async function submit(e:FormEvent){
     e.preventDefault();setError('');setLoading(true);
