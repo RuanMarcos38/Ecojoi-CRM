@@ -39,7 +39,9 @@ export async function middleware(request:NextRequest){
 
   function redirectTo(pathname:string){
     const target=request.nextUrl.clone();
-    target.pathname=pathname;
+    const [route,query]=pathname.split('?');
+    target.pathname=route;
+    target.search=query?'?'+query:'';
     const redirect=NextResponse.redirect(target);
     response.cookies.getAll().forEach(cookie=>redirect.cookies.set(cookie));
     return redirect;
@@ -58,6 +60,19 @@ export async function middleware(request:NextRequest){
   }
 
   if(user){
+    // Valida no servidor antes de acessar paginas ou APIs protegidas.
+    // A sessao mais recente prevalece, sem depender do refresh do JWT.
+    const {data:latestSession,error:sessionError}=await supabase.rpc('is_latest_crm_session');
+    if(sessionError){
+      console.error('[CRM] Falha ao validar sessao ativa.',sessionError.code);
+      return NextResponse.json({error:'session_validation_unavailable'},{status:503,headers:{'cache-control':'no-store'}});
+    }
+    if(latestSession!==true){
+      if(isApi)return NextResponse.json({error:'session_replaced'},{status:401,headers:{'cache-control':'no-store'}});
+      if(isAuth)return response; // Nao redirecionar de volta ao CRM em loop.
+      return redirectTo('/login?session=expired');
+    }
+
     const [{data:profile,error:profileError},{data:factors,error:factorError},{data:aal,error:aalError}]=await Promise.all([
       supabase.from('profiles').select('id').eq('id',user.id).maybeSingle(),
       supabase.auth.mfa.listFactors(),
