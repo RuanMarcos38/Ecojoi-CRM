@@ -39,7 +39,9 @@ export async function middleware(request:NextRequest){
 
   function redirectTo(pathname:string){
     const target=request.nextUrl.clone();
-    target.pathname=pathname;
+    const [route,query]=pathname.split('?');
+    target.pathname=route;
+    target.search=query?'?'+query:'';
     const redirect=NextResponse.redirect(target);
     response.cookies.getAll().forEach(cookie=>redirect.cookies.set(cookie));
     return redirect;
