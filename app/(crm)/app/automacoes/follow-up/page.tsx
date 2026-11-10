@@ -12,7 +12,7 @@ export default function FollowUp() {
   const [contactId,setContactId]=useState('');
   const [sequenceId,setSequenceId]=useState('');
   const [name,setName]=useState('Reativação de contatos inativos');
-  const [message,setMessage]=useState('Olá, {{nome}}! Tudo bem? Podemos retomar nossa conversa?');
+  const [message,setMessage]=useState('Olá! Tudo bem? Podemos retomar nossa conversa?');
   const [hours,setHours]=useState(24);
   const [loading,setLoading]=useState(false);
   const [notice,setNotice]=useState('');
