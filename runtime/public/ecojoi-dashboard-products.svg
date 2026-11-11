@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 155">
+  <defs>
+    <linearGradient id="lime"><stop stop-color="#85aa00"/><stop offset=".25" stop-color="#c6fb00"/><stop offset=".72" stop-color="#baf000"/><stop offset="1" stop-color="#789c00"/></linearGradient>
+    <linearGradient id="black"><stop stop-color="#292a26"/><stop offset=".26" stop-color="#090b09"/><stop offset=".78" stop-color="#111311"/><stop offset="1" stop-color="#3e4137"/></linearGradient>
+    <linearGradient id="white"><stop stop-color="#888d87"/><stop offset=".27" stop-color="#f1f3ee"/><stop offset=".72" stop-color="#d5d9d1"/><stop offset="1" stop-color="#a1a59f"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#bfff00" stop-opacity=".48"/><stop offset="1" stop-color="#9de500" stop-opacity="0"/></radialGradient>
+    <linearGradient id="line"><stop stop-color="#a9d800"/><stop offset="1" stop-color="#e3ff78"/></linearGradient>
+  </defs>
+  <ellipse cx="210" cy="153" rx="209" ry="52" fill="url(#glow)"/>
+  <path d="M1 154l23-30q16-22 43-22h119m169 52 20-24q17-23 40-23h51q38 0 38 37v10" fill="none" stroke="url(#line)" stroke-width="1.5"/>
+  <g transform="translate(116 51) rotate(-4 51 52)">
+    <path d="M1 4h101L88 118H17Z" fill="url(#lime)"/>
+    <ellipse cx="51" cy="4" rx="53" ry="4.5" fill="#d0ff42"/>
+    <ellipse cx="51" cy="5" rx="49" ry="2.6" fill="#8ab600"/>
+    <text x="51" y="57" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" letter-spacing="-1.5" font-size="23" fill="#111600">Ecojoi</text>
+  </g>
+  <g transform="translate(217 16) rotate(4 42 65)">
+    <path d="M15 24h54v8c0 8 11 10 12 25l1 89H2V57c1-15 13-17 13-25Z" fill="url(#black)" stroke="#43463d"/>
+    <path d="M16 7q1-6 27-6t26 6v17q-26 5-53 0Z" fill="url(#lime)"/>
+    <ellipse cx="43" cy="6" rx="25" ry="5" fill="#c9f541"/>
+    <text x="42" y="94" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" letter-spacing="-1.5" font-size="24" fill="#e8ebe3">Eco<tspan fill="#bdf400">joi</tspan></text>
+  </g>
+  <g transform="translate(301 56) rotate(11 45 45)">
+    <path d="M0 3h95L79 118H15Z" fill="url(#white)"/>
+    <ellipse cx="47.5" cy="4" rx="50" ry="5" fill="#f3f5f0"/>
+    <ellipse cx="47.5" cy="5" rx="46" ry="3" fill="#c6cbc3"/>
+    <text x="47" y="54" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" letter-spacing="-1.5" font-size="23" fill="#171916">Ecojoi</text>
+  </g>
+</svg>

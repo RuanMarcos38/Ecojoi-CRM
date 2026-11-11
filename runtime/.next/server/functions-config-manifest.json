@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/integrations/meta/diagnostics": {},
+    "/api/integrations/meta/webhook": {},
+    "/api/workers/tick": {}
+  }
+}
