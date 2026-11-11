@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
 import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
+import { metaWhatsAppAttribution } from '@/lib/server/meta-attribution';
 
 const BUCKET = 'ecojoi-message-attachments';
 
@@ -354,8 +355,7 @@ async function processWhatsAppValue(value: any) {
       externalName: displayName,
       name: displayName,
       phone: message.from,
-      source: 'WhatsApp',
-      attribution: { meta_phone_number_id: phoneNumberId },
+      ...metaWhatsAppAttribution(String(phoneNumberId), message.referral),
       createConversation: true
     });
 
