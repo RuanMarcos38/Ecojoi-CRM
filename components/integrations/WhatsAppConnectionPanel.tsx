@@ -53,6 +53,7 @@ export function WhatsAppConnectionPanel() {
   const [apiKey, setApiKey] = useState('');
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
+  const [metaCheck, setMetaCheck] = useState<{ connected: boolean; credentialsConfigured: boolean; identifiersConfigured: boolean; webhookConfigured: boolean; reason?: string | null; phoneDisplay?: string; businessName?: string } | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
@@ -159,6 +160,24 @@ export function WhatsAppConnectionPanel() {
       ? 'Evolution API selecionada. Preencha os dados abaixo para conectar.'
       : 'Meta Cloud API selecionada.');
     await load();
+  }
+
+  async function checkMetaConnection() {
+    setBusy('meta');
+    setError('');
+    try {
+      const response = await fetch('/api/integrations/meta/diagnostics', { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.data) {
+        setError('Não foi possível validar a integração com a Meta.');
+        return;
+      }
+      setMetaCheck(payload.data);
+    } catch {
+      setError('Falha de comunicação ao verificar a Meta Cloud API.');
+    } finally {
+      setBusy('');
+    }
   }
 
   async function connectEvolution() {
@@ -318,9 +337,21 @@ export function WhatsAppConnectionPanel() {
               {status?.ok ? 'Operacional' : 'Pendente'}
             </span>
           </div>
-          <a className="btn btn-secondary" href="/app/configuracoes" style={{ marginTop: 10 }}>
-            Configurar IDs da Meta
-          </a>
+          <div className="inlineActions" style={{ marginTop: 10, flexWrap: 'wrap' }}>
+            <a className="btn btn-secondary" href="/app/configuracoes">Configurar IDs da Meta</a>
+            <button type="button" className="btn btn-secondary" onClick={() => void checkMetaConnection()} disabled={busy === 'meta'}>
+              <RefreshCw size={15}/> {busy === 'meta' ? 'Verificando...' : 'Testar conexão oficial'}
+            </button>
+          </div>
+          {metaCheck && (
+            <div style={{ marginTop: 12 }} role="status" className={metaCheck.connected && metaCheck.webhookConfigured ? 'success' : 'muted'}>
+              <strong>{metaCheck.connected ? 'Token e ativos Meta válidos' : 'Conexão ainda não validada'}</strong>
+              <div>Token: {metaCheck.credentialsConfigured ? 'configurado' : 'pendente'} · IDs: {metaCheck.identifiersConfigured ? 'configurados' : 'pendentes'} · Segredos do webhook: {metaCheck.webhookConfigured ? 'configurados' : 'pendentes'}</div>
+              {metaCheck.connected && <div>{metaCheck.businessName} {metaCheck.phoneDisplay}</div>}
+              {!metaCheck.connected && <div>{metaCheck.reason === 'missing_identifiers' ? 'Preencha WABA ID e Phone Number ID nas configurações.' : metaCheck.reason === 'missing_access_token' ? 'Configure META_GRAPH_ACCESS_TOKEN no servidor.' : 'Revise o token, as permissões e os IDs dos ativos no Gerenciador da Meta.'}</div>}
+              <small>Verificação de leitura: não confirma inscrição do webhook nem envio/recebimento real de mensagens.</small>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--line)', borderRadius: 10, background: 'var(--eco-raised)' }}>
