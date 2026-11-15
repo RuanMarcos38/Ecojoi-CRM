@@ -68,7 +68,18 @@ export async function GET(request: Request) {
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
 
-    if (status && ['lead', 'active', 'inactive'].includes(status)) query = query.eq('status', status);
+    if (status === 'lead') {
+      // Pré-vendas também inclui contatos com atendimento WhatsApp,
+      // sem modificar o status comercial que já possuíam.
+      const { data: conversations, error: conversationsError } = await supabase
+        .from('conversations').select('contact_id')
+        .eq('tenant_id',ctx.tenantId).eq('channel','whatsapp').limit(1000);
+      if (conversationsError) throw conversationsError;
+      const ids = [...new Set((conversations ?? []).map(row=>row.contact_id))];
+      query = ids.length
+        ? query.or(`status.eq.lead,id.in.(${ids.join(',')})`)
+        : query.eq('status','lead');
+    } else if (status && ['active','inactive'].includes(status)) query = query.eq('status', status);
     const { data, error } = await query;
     if (error) throw error;
     return NextResponse.json({ data });
