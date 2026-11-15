@@ -1279,3 +1279,33 @@
   .root .details > b, .root .ownerCard span { font-size: 12px; }
   .root .details textarea { font-size: 16px; min-height: 100px; }
 }
+
+/* Separate the assigned agent from the contact and message preview. */
+.root .assigneeIdentity {
+  margin-top: 2px;
+  color: var(--chat-text);
+}
+
+.root .assigneeText {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.root .assigneeText small {
+  font-size: 10px;
+  opacity: .82;
+}
+
+.root .assigneeText > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root .contactIdentity .chatAssignee {
+  font-size: 11px;
+  margin-top: 2px;
+}
