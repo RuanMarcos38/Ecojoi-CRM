@@ -9,6 +9,10 @@ export async function getRequestContext():Promise<RequestContext>{
   const {data:{user},error:userError}=await supabase.auth.getUser();
   if(userError||!user)throw new Response('Unauthorized',{status:401});
 
+  const {data:isCurrent,error:sessionError}=await supabase.rpc('is_latest_crm_session');
+  if(sessionError)throw new Response('Session validation unavailable',{status:503});
+  if(isCurrent!==true)throw new Response('Session replaced by a newer login',{status:401});
+
   const [{data:factors,error:factorError},{data:aal,error:aalError}]=await Promise.all([
     supabase.auth.mfa.listFactors(),
     supabase.auth.mfa.getAuthenticatorAssuranceLevel()
