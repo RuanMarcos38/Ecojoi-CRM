@@ -35,13 +35,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await requireFeature(ctx, 'atendimento');
     const { id } = await params;
     const form = await req.formData();
-    const file = form.get('file');
+    const attachment = form.get('file');
     const caption = String(form.get('caption') ?? '').trim().slice(0, 2000);
     const durationRaw = Number(form.get('duration_ms') ?? 0);
     const durationMs = Number.isFinite(durationRaw) && durationRaw > 0 ? Math.round(durationRaw) : null;
 
-    if (!(file instanceof File)) return NextResponse.json({ error: 'file_required' }, { status: 400 });
-    if (!file.size || file.size > MAX_FILE_SIZE) return NextResponse.json({ error: 'file_too_large' }, { status: 400 });
+    if (!(attachment instanceof File)) return NextResponse.json({ error: 'file_required' }, { status: 400 });
+    if (!attachment.size || attachment.size > MAX_FILE_SIZE) return NextResponse.json({ error: 'file_too_large' }, { status: 400 });
+
+    let file = attachment;
+    const hasGenericMime = !attachment.type || attachment.type === 'application/octet-stream';
+    if (hasGenericMime && /\.pdf$/i.test(attachment.name)) {
+      const header = await attachment.slice(0, 5).text();
+      if (header === '%PDF-') {
+        file = new File([attachment], attachment.name, { type: 'application/pdf' });
+      }
+    }
+
     if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_file_type' }, { status: 400 });
 
     const supabase = await createClient();

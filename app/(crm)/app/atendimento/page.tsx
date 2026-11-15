@@ -387,6 +387,17 @@ export default function Atendimento() {
   }
 
   function renderMessage(message: Message) {
+    const agentName = message.direction === 'outbound' && message.sender_user_id
+      ? message.sender_name
+      : null;
+    const signedName = agentName?.replace(/[\r\n*_~`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+    const signature = signedName ? `*${signedName}*\n` : null;
+    const body = signature && message.body?.startsWith(signature)
+      ? message.body.slice(signature.length)
+      : message.body;
+    const repeatsFileName = message.message_type === 'file' && message.attachment_url
+      && body === message.attachment_name;
+
     return (
       <div key={message.id} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
         <div className={styles.messageBubble}>
@@ -406,7 +417,7 @@ export default function Atendimento() {
               <Download size={17}/>
             </a>
           )}
-          {message.body && message.message_type !== 'audio' && <div className={styles.messageText}>{message.body}</div>}
+          {body && !repeatsFileName && message.message_type !== 'audio' && <div className={styles.messageText}>{body}</div>}
           <div className={styles.messageMeta}><span>{formatTime(message.created_at)}</span>{message.direction === 'outbound' && <><span>{message.status === 'queued' ? 'na fila' : ''}</span><CheckCheck size={14}/></>}</div>
         </div>
       </div>
