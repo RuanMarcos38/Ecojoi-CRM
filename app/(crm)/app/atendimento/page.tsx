@@ -34,7 +34,23 @@ type Contact = {
   source?: string | null;
   owner_id?: string | null;
   attribution?: Record<string, unknown> | null;
+  contact_tags?: { tag: { id: string; name: string } | null }[];
 };
+function acquisitionSource(contact?: Contact | null) {
+  const attrs = contact?.attribution ?? {};
+  const source = contact?.source?.trim() ?? '';
+  const trackedSource = String(attrs.utm_source ?? '').trim();
+  const referrer = String(attrs.referrer ?? '').trim();
+  const candidate = trackedSource || source;
+
+  if (attrs.meta_referral_type === 'ad' || attrs.meta_ctwa_clid || /click-to-whatsapp ads|anúncio meta|meta ads/i.test(candidate)) return 'Anúncio Meta';
+  if (attrs.gclid || /google ads/i.test(candidate)) return 'Google Ads';
+  if (/^google(?:\b|\.)/i.test(candidate) || /^https?:\/\/([\w-]+\.)?google\.[a-z.]+(?:\/|$)/i.test(referrer)) return 'Google';
+  if (candidate && !/^(whatsapp|interno|email|e-mail)$/i.test(candidate)) return candidate;
+  if (attrs.landing_page || /^(site|website|formulário)$/i.test(source)) return 'Site';
+  return 'Origem não identificada';
+}
+
 type Assignee = { id: string; full_name: string };
 
 type Conversation = {
@@ -181,15 +197,40 @@ export default function Atendimento() {
     for (const item of items) counts[item.attendance_state ?? 'waiting'] += 1;
     return counts;
   }, [items]);
+  const [attendantFilter, setAttendantFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [channelFilter, setChannelFilter] = useState('');
+  const [originFilter, setOriginFilter] = useState('');
+  const filterOptions = useMemo(() => {
+    const attendants = new Map<string, string>();
+    const tags = new Map<string, string>();
+    const channels = new Set<string>();
+    const origins = new Set<string>();
+    for (const item of items) {
+      if (item.assignee) attendants.set(item.assignee.id, item.assignee.full_name);
+      for (const { tag } of item.contact?.contact_tags ?? []) {
+        if (tag) tags.set(tag.id, tag.name);
+      }
+      channels.add(item.channel);
+      origins.add(acquisitionSource(item.contact));
+    }
+    const byLabel = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], 'pt-BR');
+    return { attendants: [...attendants].sort(byLabel), tags: [...tags].sort(byLabel), channels: [...channels].sort(), origins: [...origins].sort() };
+  }, [items]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return items.filter(item => {
       if ((item.attendance_state ?? 'waiting') !== queue) return false;
+      if (attendantFilter && (attendantFilter === 'unassigned' ? Boolean(item.assigned_to) : item.assigned_to !== attendantFilter)) return false;
+      if (tagFilter && !item.contact?.contact_tags?.some(({ tag }) => tag?.id === tagFilter)) return false;
+      if (channelFilter && item.channel !== channelFilter) return false;
+      if (originFilter && acquisitionSource(item.contact) !== originFilter) return false;
       if (!needle) return true;
       const last = item.messages?.[item.messages.length - 1]?.body ?? '';
       return `${item.contact?.name ?? ''} ${item.contact?.email ?? ''} ${item.contact?.phone ?? ''} ${last}`.toLowerCase().includes(needle);
     });
-  }, [items, queue, search]);
+  }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter]);
   useEffect(() => {
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
@@ -439,6 +480,16 @@ export default function Atendimento() {
           </form>
         )}
         <div className={styles.searchBox}><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar ou iniciar conversa" /></div>
+        <details className="field" style={{ margin: '0 10px 8px' }}>
+          <summary style={{ cursor: 'pointer' }}>Filtros de atendimento</summary>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+            <select className="select" aria-label="Atendente" value={attendantFilter} onChange={event => setAttendantFilter(event.target.value)}><option value="">Todos atendentes</option><option value="unassigned">Sem atendente</option>{filterOptions.attendants.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+            <select className="select" aria-label="Tag" value={tagFilter} onChange={event => setTagFilter(event.target.value)}><option value="">Todas tags</option>{filterOptions.tags.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+            <select className="select" aria-label="Canal" value={channelFilter} onChange={event => setChannelFilter(event.target.value)}><option value="">Todos canais</option>{filterOptions.channels.map(channel => <option key={channel} value={channel}>{channelName(channel)}</option>)}</select>
+            <select className="select" aria-label="Origem" value={originFilter} onChange={event => setOriginFilter(event.target.value)}><option value="">Todas origens</option>{filterOptions.origins.map(origin => <option key={origin}>{origin}</option>)}</select>
+          </div>
+          <button className="btn btn-secondary" type="button" style={{ marginTop: 6 }} disabled={!attendantFilter && !tagFilter && !channelFilter && !originFilter} onClick={() => { setAttendantFilter(''); setTagFilter(''); setChannelFilter(''); setOriginFilter(''); }}>Limpar filtros</button>
+        </details>
         <div className={styles.queueTabs} role="tablist">
           {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={queue === state ? styles.queueActive : ''} onClick={() => setQueue(state)}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
         </div>
@@ -451,7 +502,7 @@ export default function Atendimento() {
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
                 <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
                 <span className={styles.conversationMeta}>
-                  <i>{channelName(conversation.channel)}</i>
+                  <i>{channelName(conversation.channel)}</i><span title={acquisitionSource(conversation.contact)}>{acquisitionSource(conversation.contact)}</span>
                 </span>
               </span>
             </button>;
@@ -541,7 +592,7 @@ export default function Atendimento() {
           </div>
 
           <hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p>
-          <hr/><b>Origem</b><p className={styles.channelLabel}>{active.contact?.source || 'Não identificada'}</p>
+          <hr/><b>Origem</b><p className={styles.channelLabel}>{acquisitionSource(active.contact)}</p>
         </>}
       </aside>
     </div>
