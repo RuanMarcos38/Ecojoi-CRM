@@ -7,7 +7,7 @@ type CookieToSet={name:string;value:string;options:CookieOptions};
 
 function usesOwnAuthentication(path:string){
   return path.startsWith('/api/public/')
-    || (path.startsWith('/api/v1/') && path!=='/api/v1/openapi')
+    || path.startsWith('/api/v1/')
     || path==='/api/integrations/meta/webhook'
     || path==='/api/integrations/evolution/webhook'
     || path==='/api/ai-agent/reply'
@@ -16,6 +16,7 @@ function usesOwnAuthentication(path:string){
 }
 
 export async function middleware(request:NextRequest){
+  if(request.nextUrl.pathname==='/api/v1/openapi')return NextResponse.next();
   let response=NextResponse.next({request});
   const url=getSupabaseUrl();
   const anon=getSupabaseAnonKey();

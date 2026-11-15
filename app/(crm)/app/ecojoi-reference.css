@@ -262,7 +262,8 @@ body:has(.ecojoi-shell) {
   background: radial-gradient(ellipse at 100% 0%,#344c07,transparent 60%),var(--panel);
 }
 
-.shell .ecojoi-dashboard .approved-kpi-label { color: #f7f8f5; font-size: 13px; }
+.shell .ecojoi-dashboard .approved-kpi-label { color: #f7f8f5; font-size: 13px; padding-inline-end: 43px; min-height: 34px; }
+.shell .ecojoi-dashboard .approved-kpi-icon { flex-shrink: 0; }
 .shell .ecojoi-dashboard .approved-kpi-icon,
 .shell .ecojoi-dashboard .approved-activity-list > div > span {
   display: grid;
@@ -277,8 +278,17 @@ body:has(.ecojoi-shell) {
 .shell .ecojoi-dashboard .approved-kpi-icon svg,
 .shell .ecojoi-dashboard .approved-activity-list > div > span svg { width: 22px; height: 22px; }
 
-.shell .ecojoi-dashboard .approved-kpi-value { color: #fff; margin-top: 5px; font-size: 31px; }
-.shell .ecojoi-dashboard .approved-kpi-foot { margin-top: 5px; padding-right: 0; gap: 11px; }
+.shell .ecojoi-dashboard .approved-kpi-value {
+  color: #fff;
+  margin-top: 5px;
+  font-size: 31px;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+.shell .ecojoi-dashboard .approved-kpi-value.currency {
+  font-size: clamp(1.125rem, 1.6vw, 1.4375rem);
+}
+.shell .ecojoi-dashboard .approved-kpi-foot { margin-top: 5px; padding-right: 0; gap: 5px 11px; flex-wrap: wrap; }
 .shell .ecojoi-dashboard .approved-kpi-foot > span {
   background: var(--acid);
   color: #101200;
@@ -291,8 +301,8 @@ body:has(.ecojoi-shell) {
 .shell .ecojoi-dashboard .ecojoi-kpi-art,
 .shell .ecojoi-dashboard .approved-mini-chart {
   position: absolute;
-  right: 26px;
-  top: 33px;
+  right: 16px;
+  top: 14px;
   width: 39px;
   height: 35px;
   color: var(--acid);
