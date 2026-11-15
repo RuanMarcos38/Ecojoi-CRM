@@ -453,13 +453,6 @@ export default function Atendimento() {
                 <span className={styles.conversationMeta}>
                   <i>{channelName(conversation.channel)}</i>
                 </span>
-                <span className={styles.assigneeIdentity}>
-                  {conversation.assignee && <AgentAvatar name={conversation.assignee.full_name} userId={conversation.assignee.id}/>}
-                  <span className={styles.assigneeText}>
-                    <small>Responsável</small>
-                    <span title={conversation.assignee?.full_name}>{conversation.assignee?.full_name ?? 'Não atribuído'}</span>
-                  </span>
-                </span>
               </span>
             </button>;
           })}
@@ -470,7 +463,7 @@ export default function Atendimento() {
         {active ? <>
           <header className={styles.chatHeader}>
             <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
-            <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)}{(active.contact?.phone ?? active.contact?.email) && <> · {active.contact?.phone ?? active.contact?.email}</>}</span><span className={styles.chatAssignee} title={active.assignee?.full_name}>Responsável: {active.assignee?.full_name ?? 'Não atribuído'}</span></div></div>
+            <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)}{(active.contact?.phone ?? active.contact?.email) && <> · {active.contact?.phone ?? active.contact?.email}</>}</span></div></div>
             <div className={styles.headerActions}>
               {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
               {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}

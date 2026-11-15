@@ -1251,9 +1251,6 @@
 .root .avatar { width: 52px; height: 52px; font-size: 17px; overflow: hidden; }
 .root .bigAvatar { width: 96px; height: 96px; font-size: 28px; overflow: hidden; }
 .root .avatar img, .root .bigAvatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.root .assigneeIdentity { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.root .assigneeIdentity :global(.agent-avatar) { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; overflow: hidden; background: var(--chat-surface-soft); }
-.root .assigneeIdentity > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .root .conversationMeta { flex-wrap: wrap; row-gap: 6px; }
 .root .conversation { min-height: 106px; }
 .root .messageText { font-size: 16px; line-height: 1.6; }
@@ -1280,32 +1277,3 @@
   .root .details textarea { font-size: 16px; min-height: 100px; }
 }
 
-/* Separate the assigned agent from the contact and message preview. */
-.root .assigneeIdentity {
-  margin-top: 2px;
-  color: var(--chat-text);
-}
-
-.root .assigneeText {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-  font-size: 12px;
-  line-height: 1.3;
-}
-
-.root .assigneeText small {
-  font-size: 10px;
-  opacity: .82;
-}
-
-.root .assigneeText > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.root .contactIdentity .chatAssignee {
-  font-size: 11px;
-  margin-top: 2px;
-}
