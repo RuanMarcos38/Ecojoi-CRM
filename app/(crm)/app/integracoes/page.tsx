@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import {
   Activity, Bot, CheckCircle2, CloudCog, Database, Download, FileText, MessageCircle,
-  RefreshCw, RotateCcw, ServerCog, ShieldCheck, TriangleAlert, UploadCloud, Workflow
+  RefreshCw, RotateCcw, ServerCog, ShieldCheck, TriangleAlert, UploadCloud, Workflow, MoreHorizontal, Pencil, Trash2
 } from 'lucide-react';
 import { WhatsAppConnectionPanel } from '@/components/integrations/WhatsAppConnectionPanel';
 
@@ -39,6 +39,7 @@ export default function Integracoes() {
   const [versions,setVersions]=useState<Version[]>([]);
   const [logs,setLogs]=useState<Log[]>([]);
   const [knowledge,setKnowledge]=useState<Knowledge[]>([]);
+  const [knowledgeMenu,setKnowledgeMenu]=useState<string|null>(null);
   const [agent,setAgent]=useState<any>({});
   const [aiUsage,setAiUsage]=useState<AiUsage>({days:30,requests:0,input_tokens:0,output_tokens:0,total_tokens:0,estimated_cost:0});
   const [retention,setRetention]=useState<Retention>({attachment_retention_days:365});
@@ -129,6 +130,37 @@ export default function Integracoes() {
     const r=await fetch('/api/integrations/ai/knowledge',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:fd.get('name'),text:fd.get('text')})});
     setBusy('');
     if(r.ok){e.currentTarget.reset();setNotice('Conteúdo adicionado à base da IA.');await load();} else setError('Não foi possível adicionar o conteúdo.');
+  }
+
+  async function changeKnowledge(id:string, mode:'edit'|'toggle'|'delete') {
+    const item=knowledge.find(k=>k.id===id);
+    if(!item)return;
+    setKnowledgeMenu(null);setBusy('knowledge-'+id);setError('');setNotice('');
+    const endpoint='/api/integrations/ai/knowledge/'+encodeURIComponent(id);
+    try {
+      let method='PATCH';
+      let body:Record<string,unknown>|undefined;
+      if(mode==='toggle')body={active:!item.active};
+      if(mode==='edit'){
+        const detail=await fetch(endpoint,{cache:'no-store'});
+        if(!detail.ok)throw new Error('Não foi possível consultar o documento.');
+        const current=(await detail.json()).data;
+        const name=window.prompt('Nome do documento',current.name);
+        if(name===null)return;
+        const text=window.prompt('Conteúdo do documento',current.extracted_text??'');
+        if(text===null)return;
+        body={name,text};
+      }
+      if(mode==='delete'){
+        if(!window.confirm('Excluir definitivamente "'+item.name+'"? Esta ação não pode ser desfeita.'))return;
+        method='DELETE';
+      }
+      const response=await fetch(endpoint,{method,headers:body?{'content-type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});
+      if(!response.ok)throw new Error(response.status===403?'Somente Administrador Master pode excluir.':'A operação não foi concluída.');
+      setNotice(mode==='delete'?'Documento excluído.':mode==='toggle'?'Status atualizado.':'Documento atualizado.');
+      await load();
+    } catch(e){setError(e instanceof Error?e.message:'Falha ao atualizar documento.');}
+    finally{setBusy('');}
   }
 
   async function cleanupAttachments(){
@@ -242,7 +274,18 @@ export default function Integracoes() {
           <button className="btn btn-primary" disabled={busy==='knowledge'}><UploadCloud size={14}/>Adicionar à base</button>
         </form>
         <div style={{display:'grid',gap:6,marginTop:12}}>
-          {knowledge.map(k=><div className="setting-row" key={k.id}><span><FileText size={14}/> {k.name}</span><small className="muted">{k.active?'Ativo':'Inativo'}</small></div>)}
+          {knowledge.map(k=><div className="setting-row" key={k.id} style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span><FileText size={14}/> {k.name}</span>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <small className="muted">{k.active?'Ativo':'Inativo'}</small>
+              <button type="button" className="btn btn-secondary" title={'Ações de '+k.name} aria-label={'Ações de '+k.name} aria-expanded={knowledgeMenu===k.id} disabled={busy==='knowledge-'+k.id} onClick={()=>setKnowledgeMenu(knowledgeMenu===k.id?null:k.id)} style={{padding:'4px 8px',minWidth:30}}><MoreHorizontal size={16}/></button>
+              {knowledgeMenu===k.id&&<div role="menu" style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                <button type="button" className="btn btn-secondary" title="Editar" onClick={()=>void changeKnowledge(k.id,'edit')} style={{padding:'4px 8px'}}><Pencil size={14}/></button>
+                <button type="button" className="btn btn-secondary" onClick={()=>void changeKnowledge(k.id,'toggle')} style={{padding:'4px 8px'}}>{k.active?'Desativar':'Ativar'}</button>
+                <button type="button" className="btn btn-secondary" title="Excluir (somente Master)" onClick={()=>void changeKnowledge(k.id,'delete')} style={{padding:'4px 8px'}}><Trash2 size={14}/></button>
+              </div>}
+            </div>
+          </div>)}
         </div>
       </section>
 

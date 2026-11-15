@@ -252,15 +252,20 @@ export default function Atendimento() {
 
   async function sendFile(file: File, durationMs?: number) {
     if (!active || active.attendance_state !== 'in_service') return;
+    if(file.size>25*1024*1024){setError('O arquivo deve ter no máximo 25 MB.');return;}
+    if(!window.confirm('Enviar '+file.name+' ('+formatSize(file.size)+') para este atendimento?'))return;
     setSendingMedia(true); setError(''); setNotice('');
     const form = new FormData();
     form.append('file', file);
     if (durationMs) form.append('duration_ms', String(durationMs));
     try {
       const r = await fetch(`/api/conversations/${active.id}/attachments`, { method: 'POST', body: form });
-      const d = await r.json();
+      const d = await r.json().catch(()=>({error:'invalid_server_response'}));
       if (!r.ok) {
         const messages: Record<string, string> = {
+          attachment_storage_failed: 'Falha ao armazenar o arquivo. Verifique o bucket e as permissões do armazenamento.',
+          attachment_record_failed: 'O arquivo não pôde ser registrado na conversa. Verifique os logs do servidor.',
+          invalid_server_response: 'O servidor retornou uma resposta inválida. Verifique o limite do proxy ou a conexão.',
           file_too_large: 'O arquivo deve ter no máximo 25 MB.',
           unsupported_file_type: 'Este tipo de arquivo não é permitido.',
           conversation_not_in_human_service: 'Assuma o atendimento antes de enviar anexos.',
@@ -272,6 +277,8 @@ export default function Atendimento() {
       }
       setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo enviado.');
       await load();
+    } catch {
+      setError('Falha na comunicação ao enviar o arquivo. Verifique sua conexão e tente novamente.');
     } finally {
       setSendingMedia(false);
       if (fileInput.current) fileInput.current.value = '';

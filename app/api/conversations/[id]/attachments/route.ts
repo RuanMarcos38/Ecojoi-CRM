@@ -70,7 +70,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       contentType: file.type,
       upsert: false
     });
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error('[attachment_upload_failed]', { tenantId: ctx.tenantId, conversationId: id, code: uploadError.name, message: uploadError.message });
+      return NextResponse.json({ error: 'attachment_storage_failed' }, { status: 503 });
+    }
 
     const type = messageType(file);
     const initialStatus = conversation.channel === 'internal' ? 'sent' : 'queued';
@@ -91,7 +94,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (error) {
       await supabase.storage.from(BUCKET).remove([path]);
-      throw error;
+      console.error('[attachment_message_failed]', { tenantId: ctx.tenantId, conversationId: id, code: error.code, message: error.message });
+      return NextResponse.json({ error: 'attachment_record_failed' }, { status: 503 });
     }
 
     let delivery = initialStatus;
@@ -151,6 +155,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }, { status: 201 });
   } catch (e) {
     if (e instanceof Response) return e;
+    console.error('[attachment_send_failed]', e);
     return NextResponse.json({ error: 'attachment_send_failed' }, { status: 500 });
   }
 }
