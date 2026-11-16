@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Megaphone, Target, TrendingUp, UserPlus, WalletCards } from 'lucide-react';
+import { campaignBatchSize, campaignPhone } from '@/lib/campaign-audience';
 import styles from '../commercial.module.css';
 
 type Contact = { id: string; phone?: string | null; consent_status?: string | null; consent_at?: string | null; source?: string | null; status: string; created_at?: string };
@@ -9,14 +10,6 @@ type Deal = { id: string; stage: string; value: number; contact?: { id: string; 
 
 function money(value: number) {
   return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-function campaignPhone(raw: string) {
-  const value = raw.trim();
-  if (!/^\+?[\d\s().-]+$/.test(value)) return '';
-  const digits = value.replace(/\D/g, '');
-  const normalized = !value.startsWith('+') && [10, 11].includes(digits.length) ? '55' + digits : digits;
-  return /^[1-9]\d{7,14}$/.test(normalized) ? normalized : '';
 }
 
 function csvRows(source: string) {
@@ -46,10 +39,18 @@ type Campaign = {
   id: string; status: 'queued' | 'paused' | 'cancelled' | 'completed';
   processing: boolean; cursor_pos: number; accepted: number; skipped: number; last_result?: string | null;
 };
+type ImportedAudience = { file: string; contacts: number; phones: string[] };
+
 type TemplateOption = { id: string; name: string; language: string; status: string; category: string };
 
 function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
   const [phones, setPhones] = useState<string[]>([]);
+  const [imports, setImports] = useState<ImportedAudience[] | null>(null);
+  const [loadingImports, setLoadingImports] = useState(false);
+  const [audienceMode, setAudienceMode] = useState<'csv' | 'crm'>('csv');
+  const [importSelection, setImportSelection] = useState('');
+  const [batch, setBatch] = useState(0);
+  const [startedBatches, setStartedBatches] = useState<string[]>([]);
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [invalid, setInvalid] = useState(0);
@@ -103,6 +104,40 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
     }
   }
 
+  const selectedImports = (imports ?? []).filter(item => !importSelection || item.file === importSelection);
+  const importedPhones = [...new Set(selectedImports.flatMap(item => item.phones))].sort();
+  const batchCount = Math.ceil(importedPhones.length / campaignBatchSize);
+  const batchKey = JSON.stringify([importSelection, batch, templateId]);
+  const campaignPhones = audienceMode === 'crm'
+    ? importedPhones.slice(batch * campaignBatchSize, (batch + 1) * campaignBatchSize)
+    : phones;
+
+  async function openImportedAudience() {
+    setAudienceMode('crm');
+    setConfirmed(false);
+    campaignId.current = null;
+    setError('');
+    if (imports || loadingImports) return;
+    setLoadingImports(true);
+    try {
+      const response = await fetch('/api/campaigns/reactivation?audience=imports', { cache: 'no-store' });
+      if (!response.ok) throw new Error();
+      const result = await response.json();
+      setImports(result.data ?? []);
+    } catch {
+      setError('Não foi possível carregar os contatos importados.');
+    } finally {
+      setLoadingImports(false);
+    }
+  }
+
+  function chooseImport(file: string, nextBatch = 0) {
+    setImportSelection(file);
+    setBatch(nextBatch);
+    setConfirmed(false);
+    campaignId.current = null;
+  }
+
   async function mutate(action?: 'pause' | 'resume' | 'cancel', id?: string) {
     if (saving) return;
     setSaving(true); setError('');
@@ -112,7 +147,7 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
         method: action ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(action ? { action, id } : {
-          id: campaignId.current, template_id: templateId, phones, marketing_opt_in_confirmed: confirmed
+          id: campaignId.current, template_id: templateId, phones: campaignPhones, marketing_opt_in_confirmed: confirmed
         })
       });
       const result = await response.json();
@@ -128,7 +163,13 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
         setError(messages[result.error] ?? 'Não foi possível atualizar a campanha.');
         return;
       }
-      if (!action) setConfirmed(false);
+      if (!action) {
+        setConfirmed(false);
+        if (audienceMode === 'crm') {
+          campaignId.current = null;
+          setStartedBatches(current => [...current, batchKey]);
+        }
+      }
       await refreshCampaigns();
     } catch {
       setError('Falha de conexão. Confira o status da campanha antes de tentar novamente.');
@@ -181,9 +222,36 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
   return <section className={styles.sidePanel} aria-label="Preparar reativação por WhatsApp">
     <h2>Preparar reativação por WhatsApp</h2>
     <p className={styles.sideHint}>Confira a lista antes de enviar. Confirme se o consentimento registrado cobre mensagens de marketing pelo WhatsApp.</p>
-    <label>Lista CSV <input type="file" accept=".csv,text/csv" onChange={event => void preview(event)}/></label>
+    {canManage && <div className={styles.cardActions} aria-label="Origem do público">
+      <button type="button" className="btn btn-secondary" aria-pressed={audienceMode === 'crm'} disabled={saving || loadingImports}
+        onClick={() => void openImportedAudience()}>Selecionar contatos importados</button>
+      <button type="button" className="btn btn-secondary" aria-pressed={audienceMode === 'csv'} disabled={saving}
+        onClick={() => { setAudienceMode('csv'); setConfirmed(false); setError(''); campaignId.current = null; }}>Usar lista CSV</button>
+    </div>}
+    {audienceMode === 'csv' ? <label>Lista CSV <input type="file" accept=".csv,text/csv" disabled={saving} onChange={event => void preview(event)}/></label> :
+      <div className="field">
+        <label htmlFor="imported-audience">Arquivo importado no CRM</label>
+        <select id="imported-audience" className="select" value={importSelection} disabled={saving || loadingImports || !imports?.length}
+          onChange={event => chooseImport(event.target.value)}>
+          <option value="">Todos os contatos importados</option>
+          {(imports ?? []).map(item => <option key={item.file} value={item.file}>{item.file} · {item.contacts.toLocaleString('pt-BR')} contatos</option>)}
+        </select>
+        {loadingImports ? <p role="status">Carregando contatos importados…</p> : imports && <p aria-live="polite">
+          {selectedImports.reduce((total, item) => total + item.contacts, 0).toLocaleString('pt-BR')} contatos cadastrados · {importedPhones.length.toLocaleString('pt-BR')} números elegíveis com aceite de marketing
+        </p>}
+        {batchCount > 1 && <>
+          <label htmlFor="imported-campaign-batch">Lote de envio</label>
+          <select id="imported-campaign-batch" className="select" value={batch} disabled={saving}
+            onChange={event => chooseImport(importSelection, Number(event.target.value))}>
+            {Array.from({ length: batchCount }, (_, index) => <option key={index} value={index}>
+              Lote {index + 1} de {batchCount} · {Math.min(campaignBatchSize, importedPhones.length - index * campaignBatchSize)} números
+            </option>)}
+          </select>
+        </>}
+        {startedBatches.includes(batchKey) && <p role="status">Este lote já foi iniciado nesta sessão.</p>}
+      </div>}
     {error && <p role="alert">{error}</p>}
-    {fileName && <div aria-live="polite">
+    {audienceMode === 'csv' && fileName && <div aria-live="polite">
       <p><strong>{fileName}</strong> · {counts.candidates} com aceite registrado</p>
       <p className={styles.sideHint}>{counts.excluded} excluídos pelo cadastro · {counts.unknown} fora do CRM · {duplicates} duplicados · {invalid} inválidos</p>
     </div>}
@@ -200,15 +268,16 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
       <div className="field">
         <label htmlFor="reactivation-template">Modelo aprovado pela Meta</label>
         <select id="reactivation-template" className="select" value={templateId}
-          onChange={event => { setTemplateId(event.target.value); setConfirmed(false); }}>
+          disabled={saving} onChange={event => { setTemplateId(event.target.value); setConfirmed(false); campaignId.current = null; }}>
           <option value="">Selecione um modelo de marketing</option>
           {templates.map(template => <option key={template.id} value={template.id}>{template.name} · {template.language}</option>)}
         </select>
         <small>Use texto fixo com instrução para responder SAIR. O WhatsApp pode cobrar pelo envio.</small>
       </div>
       <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)}/> Confirmo que os aceites registrados cobrem marketing da Ecojoi pelo WhatsApp.</label>
-      {phones.length > 500 && <p role="alert">Use um CSV com até 500 números únicos por campanha.</p>}
-      <button type="button" className="btn btn-primary" disabled={saving || !confirmed || !templateId || !counts.candidates || phones.length > 500}
+      {audienceMode === 'csv' && phones.length > campaignBatchSize && <p role="alert">Use um CSV com até 500 números únicos por campanha.</p>}
+      <button type="button" className="btn btn-primary" disabled={saving || !confirmed || !templateId || !campaignPhones.length ||
+        (audienceMode === 'csv' ? !counts.candidates || phones.length > campaignBatchSize : startedBatches.includes(batchKey))}
         onClick={() => void mutate()}>Iniciar campanha</button>
       {campaigns.length > 0 && <h3>Campanhas de WhatsApp</h3>}
       {campaigns.map(campaign => <article className="card section" key={campaign.id}>
