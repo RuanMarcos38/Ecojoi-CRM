@@ -70,7 +70,10 @@ function leadTemperature(score: number) {
 
 async function nextAssignee(admin: ReturnType<typeof createAdminClient>, tenantId: string) {
   const { data, error } = await admin.rpc('next_lead_assignee', { p_tenant_id: tenantId });
-  if (error) return null;
+  if (error) {
+    console.error('[CRM] Falha na distribuição automática de leads.', error.code);
+    return null;
+  }
   return typeof data === 'string' ? data : null;
 }
 
@@ -238,7 +241,7 @@ export async function ingestLead(input: IngestLeadInput) {
     if (openConversationError) throw openConversationError;
     if (openConversation?.id) {
       conversationId = openConversation.id;
-      if (!openConversation.assigned_to && ownerId) {
+      if (!openConversation.assigned_to && openConversation.attendance_state === 'waiting' && ownerId) {
         await admin
           .from('conversations')
           .update({
@@ -248,7 +251,9 @@ export async function ingestLead(input: IngestLeadInput) {
             updated_at: new Date().toISOString()
           })
           .eq('tenant_id', input.tenantId)
-          .eq('id', conversationId);
+          .eq('id', conversationId)
+          .is('assigned_to', null)
+          .eq('attendance_state', 'waiting');
       }
     } else {
       const { data: createdConversation, error: conversationError } = await admin
