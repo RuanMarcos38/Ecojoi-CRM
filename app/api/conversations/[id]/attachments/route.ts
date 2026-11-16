@@ -44,10 +44,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!attachment.size || attachment.size > MAX_FILE_SIZE) return NextResponse.json({ error: 'file_too_large' }, { status: 400 });
 
     let file = attachment;
-    const hasGenericMime = !attachment.type || attachment.type === 'application/octet-stream';
+    const mime = attachment.type.split(';', 1)[0].trim().toLowerCase();
+    const hasGenericMime = !mime || mime === 'application/octet-stream' || mime === 'application/x-pdf';
+    if (ALLOWED.has(mime) && mime !== attachment.type) {
+      file = new File([attachment], attachment.name, { type: mime });
+    }
     if (hasGenericMime && /\.pdf$/i.test(attachment.name)) {
-      const header = await attachment.slice(0, 5).text();
-      if (header === '%PDF-') {
+      const header = await attachment.slice(0, 1024).text();
+      if (/%PDF-[0-9]\.[0-9]/.test(header)) {
         file = new File([attachment], attachment.name, { type: 'application/pdf' });
       }
     }
