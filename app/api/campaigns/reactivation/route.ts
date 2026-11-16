@@ -43,6 +43,12 @@ export async function POST(request: Request) {
       .select(columns).eq('tenant_id', ctx.tenantId).eq('id', payload.id).maybeSingle();
     if (existingError) throw existingError;
     if (existing) return NextResponse.json({ data: existing });
+    const { data: heartbeat, error: heartbeatError } = await db.from('whatsapp_reactivation_heartbeat')
+      .select('seen_at').eq('id', true).maybeSingle();
+    if (heartbeatError) throw heartbeatError;
+    if (!heartbeat || Date.now() - Date.parse(heartbeat.seen_at) > 180000) {
+      return NextResponse.json({ error: 'worker_offline' }, { status: 503 });
+    }
     if (await getWhatsAppProvider(ctx.tenantId) !== 'meta') {
       return NextResponse.json({ error: 'official_provider_required' }, { status: 409 });
     }
