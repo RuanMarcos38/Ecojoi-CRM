@@ -121,6 +121,10 @@ export default function Atendimento() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [phoneMode, setPhoneMode] = useState(true);
+  const [openingConversation, setOpeningConversation] = useState(false);
+  const [openingError, setOpeningError] = useState('');
+  const pinnedConversation = useRef<string | null>(null);
   const [changingState, setChangingState] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -143,7 +147,15 @@ export default function Atendimento() {
 
   async function refreshConversations() {
     const response = await fetch('/api/conversations', { cache: 'no-store' });
-    if (response.ok) setItems((await response.json()).data ?? []);
+    if (!response.ok) return;
+    const { data } = await response.json();
+    const next: Conversation[] = data ?? [];
+    const pinnedId = pinnedConversation.current;
+    if (pinnedId && !next.some(item => item.id === pinnedId)) {
+      const pinned = await fetchConversation(pinnedId);
+      if (pinned) next.push(pinned);
+    }
+    setItems(next);
   }
 
   async function load() {
@@ -168,7 +180,15 @@ export default function Atendimento() {
     setLoading(false);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const target = new URLSearchParams(window.location.search).get('conversa');
+    void load().then(async () => {
+      if (target) await focusConversation(target);
+    }).catch(() => {
+      setLoading(false);
+      setOpeningError('Não foi possível carregar o Atendimento.');
+    });
+  }, []);
 
   useEffect(() => {
     if (!me?.tenantId) return;
@@ -389,14 +409,62 @@ export default function Atendimento() {
   }
   function stopRecording() { mediaRecorder.current?.stop(); }
 
+  async function fetchConversation(id: string): Promise<Conversation | null> {
+    const response = await fetch('/api/conversations?id=' + encodeURIComponent(id), { cache: 'no-store' });
+    if (!response.ok) return null;
+    return (await response.json()).data?.[0] ?? null;
+  }
+
+  async function focusConversation(id: string) {
+    const conversation = await fetchConversation(id);
+    if (!conversation) {
+      setOpeningError('Conversa não encontrada ou indisponível.');
+      return;
+    }
+    pinnedConversation.current = id;
+    setItems(current => current.some(item => item.id === id)
+      ? current.map(item => item.id === id ? conversation : item)
+      : [conversation, ...current]);
+    setSearch('');
+    setTagFilter('');
+    setChannelFilter('');
+    setAttendantFilter('');
+    setOriginFilter('');
+    setQueue(conversation.attendance_state ?? 'waiting');
+    setActiveId(id);
+    setMobileChatOpen(true);
+    setCreating(false);
+  }
+
   async function createConversation(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    setError('');
-    const r = await fetch('/api/conversations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contact_id: fd.get('contact_id'), channel: fd.get('channel') || 'internal' }) });
-    const d = await r.json();
-    if (r.ok) { setCreating(false); setQueue('in_service'); setActiveId(d.data.id); await load(); }
-    else setError('Você não possui permissão para iniciar este atendimento.');
+    if (openingConversation) return;
+    const form = new FormData(e.currentTarget);
+    const body = phoneMode
+      ? { phone: form.get('phone'), channel: 'whatsapp' }
+      : { contact_id: form.get('contact_id'), channel: form.get('channel') };
+    setOpeningConversation(true);
+    setOpeningError('');
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const messages: Record<string, string> = {
+          invalid_phone: 'Informe um telefone válido com DDD. Para outros países, inclua o código do país com +.',
+          phone_required: 'O contato selecionado precisa ter um telefone cadastrado.',
+          forbidden: 'Seu perfil não tem permissão para iniciar este atendimento.'
+        };
+        setOpeningError(messages[result.error] ?? 'Não foi possível abrir a conversa.');
+        return;
+      }
+      await focusConversation(result.data.id);
+    } catch {
+      setOpeningError('Falha de conexão ao abrir a conversa.');
+    } finally {
+      setOpeningConversation(false);
+    }
   }
 
   async function changeAttendance(state: AttendanceState) {
@@ -555,11 +623,18 @@ export default function Atendimento() {
         </div>
         {creating && (
           <form className={styles.newConversation} onSubmit={createConversation}>
+            <select className="select" aria-label="Como iniciar atendimento" value={phoneMode ? 'phone' : 'contact'} onChange={e => { setPhoneMode(e.target.value === 'phone'); setOpeningError(''); }}>
+              <option value="phone">Digitar telefone do WhatsApp</option>
+              <option value="contact">Escolher contato cadastrado</option>
+            </select>
+            {phoneMode ? <input name="phone" aria-label="Telefone do cliente" className="input" type="tel" autoComplete="tel" placeholder="Telefone com DDD" required maxLength={40}/> : <>
             <select className="select" name="contact_id" required defaultValue=""><option value="" disabled>Selecione um contato</option>{contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select>
             <select className="select" name="channel" defaultValue="internal"><option value="internal">Interno</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="email">E-mail</option></select>
-            <button className="btn btn-primary">Iniciar</button>
+            </>}
+            <button className="btn btn-primary" disabled={openingConversation}>{openingConversation ? 'Abrindo…' : 'Abrir conversa'}</button>
           </form>
         )}
+        {openingError && <div className={styles.errorBar} role="alert">{openingError}</div>}
         <details className={styles.attendanceFilters}>
           <summary>Filtros de atendimento{(search || tagFilter || channelFilter || attendantFilter || originFilter || oldestFirst) && <span> · Ativos</span>}</summary>
           <div className={styles.attendanceFilterFields}>
