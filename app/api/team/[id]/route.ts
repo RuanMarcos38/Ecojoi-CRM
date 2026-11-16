@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {getRequestContext} from '@/lib/auth/context';
 import {createAdminClient} from '@/lib/supabase/admin';
 import {audit} from '@/lib/server/audit';
-const patch=z.object({role:z.enum(['company_admin','manager','user']).optional(),active:z.boolean().optional(),restore:z.literal(true).optional(),availability_state:z.enum(['online','busy','break','offline']).optional(),max_open_conversations:z.coerce.number().int().min(1).max(500).optional()}).strict();
+const patch=z.object({role:z.enum(['company_admin','manager','user']).optional(),active:z.boolean().optional(),restore:z.literal(true).optional(),availability_state:z.enum(['online','busy','break','offline']).optional(),receives_automatic_leads:z.boolean().optional(),max_open_conversations:z.coerce.number().int().min(1).max(500).optional()}).strict();
 async function mutate(req:Request,params:Promise<{id:string}>,remove:boolean){
  try{
   const ctx=await getRequestContext();const {id}=await params;
