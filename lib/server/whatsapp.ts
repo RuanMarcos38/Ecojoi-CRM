@@ -52,11 +52,13 @@ export async function canSendFreeformWhatsApp(tenantId: string, lastInboundAt?: 
   return provider === 'evolution' ? true : metaWindowOpen(lastInboundAt);
 }
 
-export async function sendWhatsAppText(tenantId: string, to: string | null | undefined, body: string) {
+export async function sendWhatsAppText(tenantId: string, to: string | null | undefined, body: string, replyToProviderId?: string | null) {
   const provider = await getWhatsAppProvider(tenantId);
-  return provider === 'evolution'
-    ? sendEvolutionText(tenantId, to, body)
-    : sendMetaText(tenantId, to, body);
+  if (provider === 'evolution') {
+    if (replyToProviderId) return { delivered: false as const, reason: 'whatsapp_reply_not_supported' };
+    return sendEvolutionText(tenantId, to, body);
+  }
+  return replyToProviderId ? sendMetaText(tenantId, to, body, replyToProviderId) : sendMetaText(tenantId, to, body);
 }
 
 export async function sendWhatsAppMedia(

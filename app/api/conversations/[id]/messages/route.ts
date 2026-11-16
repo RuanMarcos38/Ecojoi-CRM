@@ -5,10 +5,10 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
-import { canSendFreeformWhatsApp, sendWhatsAppText } from '@/lib/server/whatsapp';
+import { canSendFreeformWhatsApp, getWhatsAppProvider, sendWhatsAppText } from '@/lib/server/whatsapp';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
-const schema = z.object({ body: z.string().min(1).max(4000) });
+const schema = z.object({ body: z.string().min(1).max(4000), reply_to_message_id: z.string().uuid().optional() });
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -36,6 +36,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
     }
 
+    let replyToProviderId: string | undefined;
+    if (body.reply_to_message_id) {
+      if (conversation.channel !== 'whatsapp' || await getWhatsAppProvider(ctx.tenantId) !== 'meta') {
+        return NextResponse.json({ error: 'whatsapp_reply_not_supported' }, { status: 409 });
+      }
+      const { data: target, error: targetError } = await supabase.from('messages')
+        .select('provider_message_id')
+        .eq('tenant_id', ctx.tenantId)
+        .eq('conversation_id', id)
+        .eq('id', body.reply_to_message_id)
+        .maybeSingle();
+      if (targetError) throw targetError;
+      if (!target?.provider_message_id?.startsWith('wamid.')) {
+        return NextResponse.json({ error: 'reply_target_unavailable' }, { status: 404 });
+      }
+      replyToProviderId = target.provider_message_id;
+    }
+
     const outgoingBody = conversation.channel === 'whatsapp'
       ? signAgentMessage(await getAgentName(ctx.tenantId, ctx.userId), body.body) : body.body;
 
@@ -49,7 +67,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         body: outgoingBody,
         sender_user_id: ctx.userId,
         status: initialStatus,
-        message_type: 'text'
+        message_type: 'text',
+        ...(replyToProviderId ? { reply_to_provider_id: replyToProviderId } : {})
       })
       .select()
       .single();
@@ -62,7 +81,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (conversation.channel === 'whatsapp') {
       const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
-      const sent = await sendWhatsAppText(ctx.tenantId, contact?.phone, outgoingBody);
+      const sent = replyToProviderId
+        ? await sendWhatsAppText(ctx.tenantId, contact?.phone, outgoingBody, replyToProviderId)
+        : await sendWhatsAppText(ctx.tenantId, contact?.phone, outgoingBody);
       if (sent.delivered) {
         delivery = 'sent';
         providerMessageId = sent.providerMessageId ?? null;
@@ -77,7 +98,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           conversationId: id,
           messageId: data.id,
           channel: 'whatsapp',
-          payload: { kind: 'text', to: contact?.phone ?? '', body: outgoingBody },
+          payload: { kind: 'text', to: contact?.phone ?? '', body: outgoingBody, ...(replyToProviderId ? { replyToProviderId } : {}) },
           error: sent.reason ?? null
         });
       }

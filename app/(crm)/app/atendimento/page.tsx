@@ -3,7 +3,7 @@
 import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
-  Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
+  Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Reply, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
 import { ContactAvatar } from '@/components/ContactAvatar';
@@ -14,6 +14,7 @@ type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = {
   id: string;
   provider_message_id?: string | null;
+  reply_to_provider_id?: string | null;
   whatsapp_reaction?: string | null;
   sender_user_id?: string | null;
   sender_name?: string | null;
@@ -28,6 +29,14 @@ type Message = {
   audio_duration_ms?: number | null;
   created_at: string;
 };
+function quoteSummary(message: Message) {
+  if (message.message_type === 'audio') return 'Mensagem de voz';
+  if (message.message_type === 'image') return 'Imagem';
+  if (message.message_type === 'file') return message.attachment_name || 'Arquivo';
+  const body = message.body ?? '';
+  return (message.direction === 'outbound' ? body.replace(/^\*[^\n]+\*\r?\n/, '') : body).trim() || 'Mensagem';
+}
+
 type Contact = {
   id: string;
   name: string;
@@ -133,6 +142,8 @@ export default function Atendimento() {
   const [queue, setQueue] = useState<AttendanceState>('waiting');
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
+  const [reply, setReply] = useState<{ conversationId: string; message: Message } | null>(null);
+  const textInput = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [contactNameDraft, setContactNameDraft] = useState<{ id: string; name: string } | null>(null);
@@ -345,6 +356,12 @@ export default function Atendimento() {
   },[activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
+  const replyTarget = reply && reply.conversationId === active?.id ? reply.message : null;
+  const activeMessages = active?.messages;
+  const messageByProviderId = useMemo(() => new Map(
+    (activeMessages ?? []).flatMap(message => message.provider_message_id ? [[message.provider_message_id, message] as const] : [])
+  ), [activeMessages]);
+  useEffect(() => { setReply(null); }, [activeId]);
   const lastIncoming = active?.channel === 'whatsapp'
     ? (active.messages ?? []).reduce((latest, message) => message.direction === 'inbound'
       ? Math.max(latest, messageTime(message.created_at)) : latest, 0)
@@ -394,11 +411,12 @@ export default function Atendimento() {
     if (!text.trim() || !active || active.attendance_state !== 'in_service') return;
     setError(''); setNotice('');
     const r = await fetch(`/api/conversations/${active.id}/messages`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: text.trim() })
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: text.trim(), reply_to_message_id: replyTarget?.id })
     });
     const d = await r.json();
     if (r.ok) {
-      setText('');
+      setText(current => current === text ? '' : current);
+      setReply(current => current?.conversationId === active.id && current.message.id === replyTarget?.id ? null : current);
       setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
       await load();
       return;
@@ -406,6 +424,8 @@ export default function Atendimento() {
     const errors: Record<string, string> = {
       conversation_in_automatic_mode: 'O agente de IA está responsável. Assuma o atendimento antes de responder.',
       conversation_not_in_human_service: 'Assuma o atendimento antes de enviar uma mensagem.',
+      reply_target_unavailable: 'A mensagem original está indisponível. Remova a citação ou escolha outra mensagem.',
+      whatsapp_reply_not_supported: 'Este canal não oferece respostas com citação.',
       whatsapp_window_closed: 'A janela de 24 horas do WhatsApp terminou. Use um template aprovado para reabrir a conversa.'
     };
     if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
@@ -728,7 +748,19 @@ export default function Atendimento() {
     }
   }
 
+  function quoteAuthor(message: Message) {
+    return message.direction === 'outbound' ? message.sender_name || 'Equipe Ecojoi' : active?.contact?.name || 'Cliente';
+  }
+
+  function replyToMessage(message: Message) {
+    if (!active) return;
+    setReply({ conversationId: active.id, message });
+    setReactionPicker(null);
+    textInput.current?.focus();
+  }
+
   function renderMessage(message: Message) {
+    const original = message.reply_to_provider_id ? messageByProviderId.get(message.reply_to_provider_id) : undefined;
     const agentName = message.direction === 'outbound' && message.sender_user_id
       ? message.sender_name
       : null;
@@ -741,11 +773,17 @@ export default function Atendimento() {
       && body === message.attachment_name;
 
     return (
-      <div key={message.id} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
+      <div key={message.id} id={`message-${message.id}`} tabIndex={-1} className={`${styles.messageRow} ${message.direction === 'outbound' ? styles.outbound : styles.inbound}`}>
         <div className={styles.messageBubble}>
           {message.direction === 'outbound' && message.sender_user_id && message.sender_name && (
             <div className="message-agent"><AgentAvatar name={message.sender_name} userId={message.sender_user_id}/><strong>{message.sender_name}</strong></div>
           )}
+          {original ? <button type="button" className={styles.messageQuote} onClick={() => {
+            const target = document.getElementById(`message-${original.id}`);
+            target?.scrollIntoView({ block: 'center' });
+            target?.focus({ preventScroll: true });
+          }}><b>{quoteAuthor(original)}</b><span>{quoteSummary(original)}</span></button>
+            : message.reply_to_provider_id && <div className={styles.messageQuote}><span>Mensagem original indisponível</span></div>}
           {message.message_type === 'image' && message.attachment_url && (
             <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.imageMessage}><img src={message.attachment_url} alt={message.attachment_name ?? 'Imagem'} /></a>
           )}
@@ -762,6 +800,9 @@ export default function Atendimento() {
           )}
           {body && !repeatsFileName && message.message_type !== 'audio' && <div className={styles.messageText}>{body}</div>}
           <div className={styles.reactionBar}>
+            {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id?.startsWith('wamid.') &&
+              <button type="button" className={styles.reactButton} title="Responder" aria-label="Responder à mensagem"
+                onClick={() => replyToMessage(message)}><Reply size={15}/></button>}
             {message.whatsapp_reaction && <span aria-label="Reação enviada">{message.whatsapp_reaction}</span>}
             {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id && <>
               <button type="button" className={styles.reactButton} aria-label="Reagir à mensagem" aria-expanded={reactionPicker === message.id}
@@ -870,13 +911,18 @@ export default function Atendimento() {
               <button type="button" className="btn btn-primary" disabled={sendingMedia || recording} onClick={() => void sendPastedImage()}>Enviar imagem</button>
             </div>}
             <form className={styles.composer} onSubmit={send}>
+              {replyTarget && <div className={styles.replyPreview} aria-label="Mensagem a que você está respondendo">
+                <div className={styles.messageQuote}><b>{quoteAuthor(replyTarget)}</b><span>{quoteSummary(replyTarget)}</span></div>
+                <button type="button" className={styles.roundButton} aria-label="Cancelar resposta" title="Cancelar resposta"
+                  onClick={() => setReply(null)}><X size={18}/></button>
+              </div>}
               <div className={styles.composerTools}>
                 <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} title="Emojis" aria-label="Emoji" aria-expanded={emojiOpen}><Smile size={22}/></button>
                 <button type="button" className={styles.composerIcon} onClick={() => fileInput.current?.click()} disabled={sendingMedia} title="Anexar arquivo" aria-label="Anexar arquivo"><Paperclip size={22}/></button>
                 <input ref={fileInput} type="file" hidden onChange={onFileChange} accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
               </div>
-              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<input value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem ou /atalho" /></div>}
+              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<input ref={textInput} value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem ou /atalho" /></div>}
               <div className={styles.composerActions}>
                 {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} title="Parar e enviar áudio" aria-label="Parar gravação"><Square size={18}/></button> : <button type="button" className={styles.composerIcon} onClick={startRecording} disabled={sendingMedia} title="Gravar áudio" aria-label="Gravar áudio"><Mic size={20}/></button>}
                 <button className={styles.sendButton} type="submit" disabled={!text.trim() || recording || sendingMedia} title="Enviar mensagem" aria-label="Enviar"><Send size={19}/></button>

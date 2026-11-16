@@ -16,6 +16,7 @@ type IngestLeadInput = {
   externalName?: string | null;
   message?: string | null;
   providerMessageId?: string | null;
+  replyToProviderId?: string | null;
   messageType?: 'text' | 'image' | 'audio' | 'file' | 'system';
   attachment?: {
     path?: string | null;
@@ -318,6 +319,7 @@ export async function ingestLead(input: IngestLeadInput) {
         body,
         status: 'received',
         provider_message_id: input.providerMessageId,
+        ...(input.replyToProviderId ? { reply_to_provider_id: input.replyToProviderId } : {}),
         message_type: type,
         attachment_path: input.attachment?.path ?? null,
         attachment_name: input.attachment?.name ?? null,

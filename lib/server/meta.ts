@@ -134,7 +134,7 @@ export function isWhatsAppWindowOpen(lastInboundAt?: string | null) {
   return Date.now() - ts <= 24 * 60 * 60 * 1000;
 }
 
-export async function sendWhatsAppText(tenantId: string, to: string | null | undefined, body: string) {
+export async function sendWhatsAppText(tenantId: string, to: string | null | undefined, body: string, replyToProviderId?: string | null) {
   const phoneNumberId = await phoneNumberIdForTenant(tenantId);
   const recipient = digits(to);
   if (!phoneNumberId || !recipient || !accessToken()) return { delivered: false as const, reason: 'not_configured' };
@@ -147,6 +147,7 @@ export async function sendWhatsAppText(tenantId: string, to: string | null | und
         recipient_type: 'individual',
         to: recipient,
         type: 'text',
+        ...(replyToProviderId ? { context: { message_id: replyToProviderId } } : {}),
         text: { preview_url: true, body }
       })
     });
@@ -453,6 +454,7 @@ async function processWhatsAppValue(value: any) {
       source: 'WhatsApp',
       message: body,
       providerMessageId: message.id,
+      replyToProviderId: typeof message.context?.id === 'string' ? message.context.id.slice(0, 512) : null,
       messageType: type,
       attachment,
       createConversation: true
