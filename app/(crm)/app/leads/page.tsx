@@ -15,6 +15,7 @@ import {
   Target,
   UserPlus,
   Archive,
+  Clock3,
   X
 } from 'lucide-react';
 import styles from '../commercial.module.css';
@@ -46,7 +47,20 @@ type Lead = {
   lead_temperature?: 'cold' | 'warm' | 'hot';
   status: 'lead' | 'active' | 'inactive';
   created_at: string;
+  conversations?: { status: string; last_inbound_at?: string | null; last_outbound_at?: string | null }[];
 };
+
+const DAY = 86400000;
+const FOLLOW_UP_TEXT = 'Olá, tudo bem? Aqui é da equipe Ecojoi. Queria saber se você já encontrou o produto que procurava ou se ainda podemos ajudar. Se preferir encerrar o atendimento, tudo bem também. É só me avisar. Se não quiser receber novas mensagens, responda SAIR.';
+
+function inactivityDays(lead: Lead, now: number) {
+  if (!lead.conversations) return 0;
+  const open = lead.conversations.filter(conversation => conversation.status !== 'closed');
+  if (lead.conversations.length && !open.length) return 0;
+  const times = [lead.created_at, ...open.flatMap(conversation => [conversation.last_inbound_at, conversation.last_outbound_at])]
+    .map(value => Date.parse(value ?? '')).filter(Number.isFinite);
+  return times.length ? (now - Math.max(...times)) / DAY : 0;
+}
 
 function ageLabel(value: string) {
   const created = new Date(value).getTime();
@@ -71,6 +85,15 @@ function attributionLabel(lead: Lead) {
 
 export default function Leads() {
   const [rows, setRows] = useState<Lead[]>([]);
+  const [now, setNow] = useState(() => Date.now());
+  const [selectedView, setSelectedView] = useState('');
+  const [followUp, setFollowUp] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function fetchLeads() {
+    const response = await fetch('/api/contacts?status=lead&activity=1', { cache: 'no-store' });
+    return response.status === 403 ? fetch('/api/contacts?status=lead', { cache: 'no-store' }) : response;
+  }
   const [openingChat, setOpeningChat] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -107,7 +130,7 @@ export default function Leads() {
 
   async function load() {
     const [response,viewsResponse]=await Promise.all([
-      fetch('/api/contacts?status=lead', { cache: 'no-store' }),
+      fetchLeads(),
       fetch('/api/saved-views?entity=leads',{cache:'no-store'})
     ]);
     const [payload,viewsPayload]=await Promise.all([
@@ -119,7 +142,17 @@ export default function Leads() {
     if(viewsResponse.ok)setSavedViews(viewsPayload?.data??[]);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      setNow(Date.now());
+      void fetchLeads().then(async response => {
+        if (response.ok) setRows((await response.json()).data ?? []);
+      }).catch(() => {});
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const sources = useMemo(() => {
     return [...new Set(rows.map(row => row.source?.trim() || 'Sem origem'))].sort((a, b) => a.localeCompare(b));
@@ -312,7 +345,7 @@ export default function Leads() {
       <label className={styles.selectField}><Target size={16}/><select value={temperatureFilter} onChange={event=>setTemperatureFilter(event.target.value as 'all'|'cold'|'warm'|'hot')}><option value="all">Todas temperaturas</option><option value="hot">Quentes</option><option value="warm">Mornos</option><option value="cold">Frios</option></select></label>
     </section>
     <section className={styles.toolbar} aria-label="Visões salvas" style={{gridTemplateColumns:'minmax(260px,1fr)'}}>
-      <label className={styles.selectField}><ClipboardCheck size={16}/><select defaultValue="" onChange={event=>applyView(event.target.value)}><option value="">Visão padrão</option>{savedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}</select></label>
+      <label className={styles.selectField}><ClipboardCheck size={16}/><select value={selectedView} onChange={event=>{ setSelectedView(event.target.value); setFollowUp(null); applyView(event.target.value); }}><option value="">Visão padrão</option>{savedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}</select></label>
     </section>
 
     {error && <div className="error">{error}</div>}
@@ -331,7 +364,11 @@ export default function Leads() {
 
     <div className={styles.workspace}>
       <section className={`${styles.cardGrid} ${styles.leadGrid}`} aria-label="Lista de leads">
-        {filteredRows.length ? filteredRows.map(row => <article className={styles.recordCard} key={row.id}>
+        {filteredRows.length ? filteredRows.map(row => {
+          const days = selectedView ? 0 : inactivityDays(row, now);
+          const red = days > 2;
+          const warning = days > 1;
+          return <article className={`${styles.recordCard} ${warning ? (red ? styles.inactivityRed : styles.inactivityYellow) : ''}`} key={row.id}>
           <div className={styles.recordTop}>
             <div className={styles.identity}>
               <span className={styles.avatar}>{row.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
@@ -344,6 +381,19 @@ export default function Leads() {
             <div className={styles.metaLine}><Phone size={15}/><span>{row.phone || 'Telefone não informado'}</span></div>
           </div>
           {attributionLabel(row) && <p className={styles.recordNote}>{attributionLabel(row)}</p>}
+          {warning && <div className={styles.inactivityNotice}><Clock3 size={14}/><span>{red ? 'Mais de 2 dias sem interação' : 'Mais de 1 dia sem interação'}</span></div>}
+          {days > 5 && <div className={styles.followUpPanel}>
+            <button type="button" className="btn btn-secondary" aria-expanded={followUp === row.id}
+              onClick={() => { setCopied(false); setFollowUp(followUp === row.id ? null : row.id); }}>Follow-up · mais de 5 dias</button>
+            {followUp === row.id && <>
+              <p>{FOLLOW_UP_TEXT}</p>
+              <button type="button" className="btn btn-secondary" onClick={async () => {
+                try { await navigator.clipboard.writeText(FOLLOW_UP_TEXT); setCopied(true); }
+                catch { setError('Selecione o texto do cartão para copiar.'); }
+              }}>{copied ? 'Texto copiado' : 'Copiar mensagem'}</button>
+              <small>Fora da janela do WhatsApp, use um modelo aprovado.</small>
+            </>}
+          </div>}
                     <div className={styles.cardActions}>
             <button type="button" className="btn btn-secondary" disabled={Boolean(openingChat)} onClick={() => void openWhatsApp(row.id)}><MessageCircle size={15}/>{openingChat === row.id ? 'Abrindo…' : 'Atendimento'}</button>
             <button type="button" className="btn btn-secondary" onClick={() => void createTask(row)}><ClipboardCheck size={15}/>Tarefa</button>
@@ -351,7 +401,7 @@ export default function Leads() {
             <button type="button" className="btn btn-primary" onClick={() => void qualify(row)}><CheckCircle2 size={15}/>Qualificar</button>
             <button type="button" className="btn btn-secondary" title="Arquivar lead" aria-label={`Arquivar lead ${row.name}`} onClick={() => void archiveLead(row)}><Archive size={14} aria-hidden="true"/></button>
           </div>
-        </article>) : <div className={styles.emptyState}>Nenhum lead encontrado com os filtros atuais.</div>}
+        </article>}) : <div className={styles.emptyState}>Nenhum lead encontrado com os filtros atuais.</div>}
       </section>
 
       <aside className={styles.sidePanel}>

@@ -60,11 +60,14 @@ export async function GET(request: Request) {
   try {
     const ctx = await requirePermission('contacts.view');
     const supabase = await createClient();
-    const status = new URL(request.url).searchParams.get('status');
+    const params = new URL(request.url).searchParams;
+    const status = params.get('status');
+    const includeActivity = status === 'lead' && params.get('activity') === '1';
+    if (includeActivity) await requirePermission('conversations.view');
 
     let query = supabase
       .from('contacts')
-      .select('id,name,email,phone,source,status,owner_id,attribution,lead_score,lead_temperature,custom_fields,consent_status,consent_at,organization_id,created_at,owner:profiles!contacts_owner_id_fkey(id,full_name),organization:organizations!contacts_organization_id_fkey(id,name,document,segment),contact_tags(tag:tags(id,name,color))')
+      .select('id,name,email,phone,source,status,owner_id,attribution,lead_score,lead_temperature,custom_fields,consent_status,consent_at,organization_id,created_at,owner:profiles!contacts_owner_id_fkey(id,full_name),organization:organizations!contacts_organization_id_fkey(id,name,document,segment),contact_tags(tag:tags(id,name,color))' + (includeActivity ? ',conversations(status,last_inbound_at,last_outbound_at)' : ''))
       .eq('tenant_id', ctx.tenantId)
       .order('created_at', { ascending: false });
 

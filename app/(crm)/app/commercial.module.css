@@ -478,3 +478,12 @@
   font-size: 11px;
   white-space: nowrap;
 }
+
+.inactivityYellow { border-inline-start: 3px solid #b77905; }
+.inactivityRed { border-inline-start: 3px solid #c23d36; }
+.inactivityNotice { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; font-size: 11px; font-weight: 700; }
+.inactivityYellow .inactivityNotice { color: #633d00; background: #fff0c1; }
+.inactivityRed .inactivityNotice { color: #8a2721; background: #fde5e2; }
+.followUpPanel { display: grid; justify-items: start; gap: 6px; }
+.followUpPanel p { margin: 0; font-size: 12px; line-height: 1.5; }
+.followUpPanel small { color: var(--muted); }
