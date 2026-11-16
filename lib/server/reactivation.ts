@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { liveReactivationTemplate, reactivationWhatsAppHealth, sendWhatsAppTemplate } from '@/lib/server/meta';
+import { FOLLOW_UP_TEMPLATE_NAME, liveReactivationTemplate, reactivationWhatsAppHealth, sendWhatsAppTemplate } from '@/lib/server/meta';
 import { getWhatsAppProvider } from '@/lib/server/whatsapp';
 
 export function isReactivationTemplate(template: { category?: string; status?: string; components?: unknown } | null) {
@@ -11,6 +11,34 @@ export function isReactivationTemplate(template: { category?: string; status?: s
   ) && components.some(component => component.type === 'BODY' && /\bSAIR\b/i.test(component.text ?? ''));
 }
 
+export async function enqueueLeadFollowUps() {
+  const db = createAdminClient();
+  const { data: settings, error } = await db.from('whatsapp_lead_follow_up_settings')
+    .select('tenant_id,requested_by').eq('enabled', true);
+  if (error) throw error;
+  for (const entry of settings ?? []) {
+    try {
+      const { data: activeJob } = await db.from('whatsapp_reactivation_campaigns')
+        .select('id').eq('tenant_id', entry.tenant_id).in('status', ['queued', 'paused']).limit(1).maybeSingle();
+      if (activeJob) continue;
+      const { data: lead } = await db.rpc('whatsapp_lead_follow_up_candidate', { p_tenant: entry.tenant_id }).maybeSingle();
+      if (!lead) continue;
+      const { data: model } = await db.from('whatsapp_templates').select('id,meta_template_id')
+        .eq('tenant_id', entry.tenant_id).eq('name', FOLLOW_UP_TEMPLATE_NAME).eq('language', 'pt_BR').maybeSingle();
+      if (!model?.meta_template_id || await getWhatsAppProvider(entry.tenant_id) !== 'meta') continue;
+      const live = await liveReactivationTemplate(model.meta_template_id);
+      if (!isReactivationTemplate(live) || live.name !== FOLLOW_UP_TEMPLATE_NAME || live.language !== 'pt_BR') continue;
+      const { error: insertError } = await db.from('whatsapp_reactivation_campaigns').insert({
+        id: crypto.randomUUID(), tenant_id: entry.tenant_id, created_by: entry.requested_by, template_id: model.id,
+        follow_up_contact_id: (lead as { contact_id: string }).contact_id, phones: [(lead as { phone: string }).phone]
+      });
+      if (insertError && insertError.code !== '23505') throw insertError;
+    } catch {
+      console.error('[CRM] Falha ao preparar follow-up automático.');
+    }
+  }
+}
+
 export async function workReactivationQueue(tenantId?: string) {
   const db = createAdminClient();
   const now = new Date().toISOString();
@@ -18,7 +46,7 @@ export async function workReactivationQueue(tenantId?: string) {
     status: 'paused', processing: false, last_result: 'resultado_incerto'
   }).eq('processing', true).lt('claimed_at', new Date(Date.now() - 300000).toISOString());
   let due = db.from('whatsapp_reactivation_campaigns')
-    .select('id,tenant_id,template_id,phones,cursor_pos,accepted,skipped')
+    .select('id,tenant_id,template_id,phones,cursor_pos,accepted,skipped,follow_up_contact_id')
     .eq('status', 'queued').eq('processing', false).lte('next_at', now).order('next_at').limit(5);
   if (tenantId) { stale = stale.eq('tenant_id', tenantId); due = due.eq('tenant_id', tenantId); }
   const { error: staleError } = await stale;
@@ -58,7 +86,18 @@ export async function workReactivationQueue(tenantId?: string) {
       if (audienceError) throw audienceError;
       const nextAt = new Date(Date.now() + 60000).toISOString();
       const finished = job.cursor_pos + 1 >= job.phones.length;
-      if (!audience?.length) {
+      let eligible = Boolean(audience?.length);
+      if (eligible && job.follow_up_contact_id) {
+        const [rule, candidate] = await Promise.all([
+          db.from('whatsapp_lead_follow_up_settings').select('enabled').eq('tenant_id', job.tenant_id).maybeSingle(),
+          db.rpc('whatsapp_lead_follow_up_candidate', {
+            p_tenant: job.tenant_id, p_contact: job.follow_up_contact_id
+          }).maybeSingle()
+        ]);
+        if (rule.error || candidate.error) throw rule.error ?? candidate.error;
+        eligible = rule.data?.enabled === true && (candidate.data as { phone?: string } | null)?.phone === phone;
+      }
+      if (!eligible) {
         await release({ cursor_pos: job.cursor_pos + 1, skipped: job.skipped + 1,
           ...(finished ? { status: 'completed' } : {}), next_at: nextAt });
         continue;
