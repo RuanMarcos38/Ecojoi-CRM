@@ -90,6 +90,19 @@ const EMOJIS = ['😀','😁','😂','😊','😍','👍','🙏','👏','🎉','
 function initials(name = 'Contato') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('');
 }
+type ReadState = { since: number; conversations: Record<string, number> };
+
+function messageTime(value?: string | null) {
+  const parsed = Date.parse(value ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function conversationActivity(conversation: Conversation) {
+  const last = conversation.messages?.[conversation.messages.length - 1];
+  return Math.max(messageTime(last?.created_at), messageTime(conversation.last_inbound_at), messageTime(conversation.last_outbound_at))
+    || messageTime(conversation.updated_at);
+}
+
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
@@ -144,6 +157,31 @@ export default function Atendimento() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [me, setMe] = useState<Me | null>(null);
+  const [readState, setReadState] = useState<{ key: string; data: ReadState } | null>(null);
+  const readKey = me?.tenantId && me.userId ? 'ecojoi:attendance:read:' + me.tenantId + ':' + me.userId : '';
+  useEffect(() => {
+    if (!readKey) return;
+    function readStored(value: string | null): ReadState | null {
+      try {
+        const data = value ? JSON.parse(value) : null;
+        return data && Number.isFinite(data.since) && data.conversations && typeof data.conversations === 'object' ? data : null;
+      } catch { return null; }
+    }
+    let existing: ReadState | null = null;
+    try { existing = readStored(localStorage.getItem(readKey)); } catch {}
+    const initial = existing ?? { since: Date.now(), conversations: {} };
+    setReadState({ key: readKey, data: initial });
+    if (!existing) {
+      try { localStorage.setItem(readKey, JSON.stringify(initial)); } catch {}
+    }
+    const sync = (event: StorageEvent) => {
+      if (event.key !== readKey) return;
+      const data = readStored(event.newValue);
+      if (data) setReadState({ key: readKey, data });
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, [readKey]);
   const [transfer, setTransfer] = useState<{ conversationId: string; members: Assignee[]; target: string } | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferFeedback, setTransferFeedback] = useState('');
@@ -284,7 +322,7 @@ export default function Atendimento() {
       const last = item.messages?.[item.messages.length - 1]?.body ?? '';
       return `${item.contact?.name ?? ''} ${item.contact?.email ?? ''} ${item.contact?.phone ?? ''} ${last}`.toLowerCase().includes(needle);
     }).sort((a, b) => {
-      const comparison = (a.updated_at ?? '').localeCompare(b.updated_at ?? '');
+      const comparison = conversationActivity(a) - conversationActivity(b);
       return oldestFirst ? comparison : -comparison;
     });
   }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst]);
@@ -306,6 +344,31 @@ export default function Atendimento() {
   },[activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
+  const lastIncoming = active?.channel === 'whatsapp'
+    ? (active.messages ?? []).reduce((latest, message) => message.direction === 'inbound'
+      ? Math.max(latest, messageTime(message.created_at)) : latest, 0)
+    : 0;
+
+  useEffect(() => {
+    if (!activeId || !mobileChatOpen || !lastIncoming || !readState || readState.key !== readKey) return;
+    const previous = readState.data.conversations[activeId] ?? readState.data.since;
+    if (lastIncoming <= previous) return;
+    const markRead = () => {
+      if (document.visibilityState !== 'visible') return;
+      const next = { ...readState.data, conversations: { ...readState.data.conversations, [activeId]: lastIncoming } };
+      setReadState({ key: readKey, data: next });
+      try { localStorage.setItem(readKey, JSON.stringify(next)); } catch {}
+    };
+    markRead();
+    document.addEventListener('visibilitychange', markRead);
+    return () => document.removeEventListener('visibilitychange', markRead);
+  }, [activeId, mobileChatOpen, lastIncoming, readKey, readState]);
+
+  function unreadCount(conversation: Conversation) {
+    if (conversation.channel !== 'whatsapp' || !readState || readState.key !== readKey) return 0;
+    const after = readState.data.conversations[conversation.id] ?? readState.data.since;
+    return (conversation.messages ?? []).filter(message => message.direction === 'inbound' && messageTime(message.created_at) > after).length;
+  }
   const messagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const container=messagesRef.current;
@@ -757,11 +820,16 @@ export default function Atendimento() {
         <div className={styles.conversationList}>
           {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
             const last = conversation.messages?.[conversation.messages.length - 1];
+            const unread = unreadCount(conversation);
+            const timestamp = conversationActivity(conversation);
             return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setMobileChatOpen(true); }}>
               <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} className={styles.avatar}/>
               <span className={styles.conversationCopy}>
-                <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
-                <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
+                <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{timestamp ? formatTime(new Date(timestamp).toISOString()) : ''}</small></span>
+                <span className={styles.conversationPreview}>
+                  <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
+                  {unread > 0 && <span className={styles.unreadBadge} aria-label={unread + (unread === 1 ? ' mensagem não lida' : ' mensagens não lidas')}>{unread > 99 ? '99+' : unread}</span>}
+                </span>
                 <span className={styles.conversationMeta}>
                   <i>{channelName(conversation.channel)}</i>{acquisitionSource(conversation.contact) && <span title={acquisitionSource(conversation.contact)}>{acquisitionSource(conversation.contact)}</span>}
                 </span>
