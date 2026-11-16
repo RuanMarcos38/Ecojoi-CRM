@@ -134,7 +134,8 @@ export async function ingestLead(input: IngestLeadInput) {
   const phone = normalizePhone(input.phone);
   const email = clean(input.email)?.toLowerCase() ?? null;
   const externalId = clean(input.externalId);
-  const name = clean(input.name) ?? clean(input.externalName) ?? genericName(channel, externalId);
+  const providedName = clean(input.name) ?? clean(input.externalName);
+  const name = providedName ?? genericName(channel, externalId);
   const source = clean(input.source) ?? (
     channel === 'whatsapp' ? 'WhatsApp' :
     channel === 'instagram' ? 'Instagram' :
@@ -168,10 +169,16 @@ export async function ingestLead(input: IngestLeadInput) {
       ...(input.attribution ?? {})
     };
 
+    const defaultWhatsAppName = /^(WhatsApp(?: \d{4})?|Contato WhatsApp)$/i.test(current.name?.trim() ?? '');
+    const refreshedName = input.preserveExisting
+      ? current.name
+      : channel === 'whatsapp'
+        ? (defaultWhatsAppName && providedName ? providedName : current.name)
+        : providedName ?? current.name;
     const { error: updateError } = await admin
       .from('contacts')
       .update({
-        name: input.preserveExisting ? current.name : name || current.name,
+        name: refreshedName,
         email: input.preserveExisting ? current.email || email : email ?? current.email,
         phone: input.preserveExisting ? current.phone || phone : phone ?? current.phone,
         source: current.source || source,

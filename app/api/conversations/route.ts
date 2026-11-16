@@ -9,8 +9,9 @@ const BUCKET = 'ecojoi-message-attachments';
 const createSchema = z.object({
   contact_id: z.string().uuid().optional(),
   phone: z.string().trim().min(1).max(40).optional(),
+  name: z.string().trim().min(2).max(140).optional(),
   channel: z.enum(['internal', 'whatsapp', 'instagram', 'facebook', 'email']).default('internal')
-}).refine(body => Boolean(body.contact_id) !== Boolean(body.phone) && (!body.phone || body.channel === 'whatsapp'));
+}).refine(body => Boolean(body.contact_id) !== Boolean(body.phone) && (!body.phone || body.channel === 'whatsapp') && (!body.name || Boolean(body.phone)));
 
 function normalizeWhatsAppPhone(raw: string) {
   if (!/^\+?[\d\s().-]+$/.test(raw)) return null;
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
     const supabase = await createClient();
 
     let contactId = body.contact_id;
+    let createdContact = false;
     let phone: string | null = null;
     if (body.phone) {
       phone = normalizeWhatsAppPhone(body.phone);
@@ -104,17 +106,27 @@ export async function POST(req: Request) {
         await requirePermission('contacts.create');
         const { data: saved, error: saveError } = await supabase.from('contacts')
           .insert({ tenant_id: ctx.tenantId, created_by: ctx.userId, owner_id: ctx.userId,
-            name: `WhatsApp ${digits.slice(-4)}`, phone, status: 'lead', source: 'WhatsApp' })
+            name: body.name ?? `WhatsApp ${digits.slice(-4)}`, phone, status: 'lead', source: 'WhatsApp' })
           .select('id').single();
         if (saveError) throw saveError;
         contactId = saved.id;
+        createdContact = true;
       }
     }
 
-    const { data: contact, error: contactError } = await supabase.from('contacts').select('id,phone')
+    const { data: contact, error: contactError } = await supabase.from('contacts').select('id,phone,name')
       .eq('id', contactId).eq('tenant_id', ctx.tenantId).maybeSingle();
     if (contactError) throw contactError;
     if (!contact) return NextResponse.json({ error: 'contact_not_found' }, { status: 404 });
+
+    if (body.name && !createdContact && body.name !== contact.name) {
+      await requirePermission('contacts.update');
+      const { data: updated, error: nameError } = await supabase.from('contacts')
+        .update({ name: body.name, updated_at: new Date().toISOString() })
+        .eq('tenant_id', ctx.tenantId).eq('id', contact.id).select('id').maybeSingle();
+      if (nameError) throw nameError;
+      if (!updated) return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
 
     if (body.channel === 'whatsapp') {
       const { data: existing, error: lookupError } = await supabase.from('conversations')
