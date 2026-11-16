@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   experimental: {
+    // Allow a 25 MiB attachment plus multipart metadata through middleware.
+    proxyClientMaxBodySize: '26mb',
     webpackBuildWorker: false,
     parallelServerCompiles: false,
     parallelServerBuildTraces: false,
