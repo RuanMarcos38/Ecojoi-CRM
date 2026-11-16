@@ -12,7 +12,9 @@ export async function POST(request:Request){
   try{
     const ctx=await requirePermission('contacts.create');
     const form=await request.formData();
-    const createConversation=form.get('create_conversation')==='true';
+    const source=String(form.get('source')??'').trim().slice(0,100);
+    const contactOnly=form.get('contact_only')==='true'||/^suri$/i.test(source);
+    const createConversation=!contactOnly&&form.get('create_conversation')==='true';
     if(createConversation)await requirePermission('conversations.create');
     const file=form.get('file');
     if(!(file instanceof File))return NextResponse.json({error:'Selecione uma planilha.'},{status:400});
@@ -25,7 +27,6 @@ export async function POST(request:Request){
     const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:'',raw:false});
     const headers=[...new Set(rows.flatMap(row=>Object.keys(row)))];
     const mapping:ImportMapping=form.get('mapping')?mappingSchema.parse(JSON.parse(String(form.get('mapping')))):detectMapping(headers);
-    const source=String(form.get('source')??'').trim().slice(0,100);
     if(form.get('preview')==='true')return NextResponse.json({data:{total:rows.length,headers,mapping,sample:rows.slice(0,5)}});
     if(!mapping.name || !headers.includes(mapping.name) || (!mapping.phone&&!mapping.email))return NextResponse.json({error:'Mapeie Nome e Telefone ou E-mail antes de importar.'},{status:400});
     const offset=Number(form.get('offset')??0);
@@ -39,7 +40,7 @@ export async function POST(request:Request){
         await ingestLead({tenantId:ctx.tenantId,name:row.name,email:row.email,phone:row.phone,source:row.source,
           channel:createConversation?'whatsapp':'internal',externalId:createConversation?row.phone?.replace(/\D/g,''):null,
           attribution:{import_file:file.name,import_source:row.source,previous_agent:row.agent,previous_status:row.status,import_notes:row.notes},
-          createConversation,preserveExisting:true});
+          createConversation,contactOnly,preserveExisting:true});
         processed++;
       }catch{failed++;errors.push({row:i+2,error:'Não foi possível salvar esta linha. Tente novamente.'});}
     }

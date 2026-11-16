@@ -6,7 +6,7 @@ const labels={name:'Nome',phone:'Telefone / WhatsApp',email:'E-mail',source:'Ori
 type Preview={total:number;headers:string[];mapping:ImportMapping;sample:Record<string,unknown>[]};
 export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>}){
   const [open,setOpen]=useState(false),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState<Preview|null>(null);
-  const [mapping,setMapping]=useState<ImportMapping>({}),[source,setSource]=useState('Suri'),[conversations,setConversations]=useState(false);
+  const [mapping,setMapping]=useState<ImportMapping>({}),[source,setSource]=useState('Suri');
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [failures,setFailures]=useState<Array<{row:number;error:string}>>([]);
   function formFor(f:File){const form=new FormData();form.append('file',f);form.append('source',source);return form;}
@@ -21,7 +21,7 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
     const errors:Array<{row:number;error:string}>=[];
     try{
       while(offset<preview.total){
-        const form=formFor(file);form.append('mapping',JSON.stringify(mapping));form.append('offset',String(offset));form.append('create_conversation',String(conversations));
+        const form=formFor(file);form.append('mapping',JSON.stringify(mapping));form.append('offset',String(offset));form.append('contact_only','true');
         const r=await fetch('/api/contacts/import',{method:'POST',body:form});const d=await r.json();if(!r.ok)throw new Error(d.error||'Lote interrompido.');
         if(d.data.nextOffset<=offset)throw new Error('O lote não avançou.');
         offset=d.data.nextOffset;processed+=d.data.processed;failed+=d.data.failed;errors.push(...d.data.errors);
@@ -41,7 +41,7 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
         <p>O histórico de mensagens e arquivos da Suri não é importado por esta planilha. Atendente, situação e observações ficam registrados como dados de origem.</p>
         <label>Arquivo CSV / Excel<input aria-label="Arquivo CSV / Excel" className="input" type="file" accept=".csv,.xlsx,.xls" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void previewFile(f);}}/></label>
         <label>Origem<input className="input" value={source} disabled={busy} onChange={e=>setSource(e.target.value)}/></label>
-        <label style={{display:'flex',gap:8,margin:'16px 0'}}><input type="checkbox" checked={conversations} disabled={busy} onChange={e=>setConversations(e.target.checked)}/>Retomar contatos em Atendimento WhatsApp (não envia mensagens; usa a distribuição atual da equipe)</label>
+        <p>Os novos contatos ficam no cadastro. A primeira mensagem recebida pelo WhatsApp inicia o atendimento e pode gerar a oportunidade.</p>
         {preview&&<>
           <p><strong>{preview.total} linhas encontradas.</strong> Telefones brasileiros sem DDI recebem +55. Para outros países, use +DDI.</p>
           <div className="form-grid">{importFields.map(field=><label key={field}>{labels[field]}{field==='name'?' *':''}<select aria-label={`Coluna ${labels[field]}`} className="select" disabled={busy} value={mapping[field]??''} onChange={e=>setMapping({...mapping,[field]:e.target.value})}><option value="">Não importar</option>{preview.headers.map(h=><option key={h} value={h}>{h}</option>)}</select></label>)}</div>
