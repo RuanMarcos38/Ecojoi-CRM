@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bot, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
   Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Search, Send, Smile, Square, UserCheck, X
@@ -121,6 +121,17 @@ export default function Atendimento() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [contactNameDraft, setContactNameDraft] = useState<{ id: string; name: string } | null>(null);
+  const [savingContactName, setSavingContactName] = useState(false);
+  const [pastedImage, setPastedImage] = useState<{ conversationId: string; file: File } | null>(null);
+  const [pastedPreview, setPastedPreview] = useState('');
+
+  useEffect(() => {
+    if (!pastedImage) { setPastedPreview(''); return; }
+    const url = URL.createObjectURL(pastedImage.file);
+    setPastedPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pastedImage]);
   const [phoneMode, setPhoneMode] = useState(true);
   const [openingConversation, setOpeningConversation] = useState(false);
   const [openingError, setOpeningError] = useState('');
@@ -334,7 +345,7 @@ export default function Atendimento() {
   }
 
   async function sendFile(file: File, durationMs?: number) {
-    if (!active || active.attendance_state !== 'in_service') return;
+    if (!active || active.attendance_state !== 'in_service' || sendingMedia) return false;
     setSendingMedia(true); setError(''); setNotice('');
     const form = new FormData();
     form.append('file', file);
@@ -351,15 +362,58 @@ export default function Atendimento() {
         };
         if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
         setError(r.status === 413 ? 'O servidor recusou o tamanho do arquivo. Envie um arquivo menor.' : messages[d.error] ?? 'Não foi possível enviar o arquivo.');
-        return;
+        return false;
       }
       setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo enviado.');
-      await refreshConversations();
+      await refreshConversations().catch(() => {});
+      return true;
     } catch {
       setError('Falha de conexão ao enviar o arquivo. Confira a conversa antes de tentar novamente.');
+      return false;
     } finally {
       setSendingMedia(false);
       if (fileInput.current) fileInput.current.value = '';
+    }
+  }
+
+  function pasteImage(event: ClipboardEvent<HTMLElement>) {
+    const item = Array.from(event.clipboardData.items).find(entry => entry.kind === 'file' && entry.type.startsWith('image/'));
+    const file = item?.getAsFile();
+    if (!file || !active || active.attendance_state !== 'in_service') return;
+    event.preventDefault();
+    if (sendingMedia || recording) return;
+    setPastedImage({ conversationId: active.id, file });
+    setError('');
+  }
+
+  async function sendPastedImage() {
+    if (!pastedImage || pastedImage.conversationId !== active?.id) return;
+    if (await sendFile(pastedImage.file)) setPastedImage(current => current === pastedImage ? null : current);
+  }
+
+  async function renameContact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!contactNameDraft || savingContactName) return;
+    const { id, name } = contactNameDraft;
+    const clean = name.trim();
+    if (clean.length < 2) { setError('Informe pelo menos dois caracteres para o nome.'); return; }
+    setSavingContactName(true);
+    setError('');
+    try {
+      const response = await fetch('/api/contacts/' + encodeURIComponent(id), {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: clean })
+      });
+      if (!response.ok) {
+        setError(response.status === 403 ? 'Seu perfil não tem permissão para editar contatos.' : 'Não foi possível salvar o nome do cliente.');
+        return;
+      }
+      setItems(current => current.map(item => item.contact?.id === id ? { ...item, contact: { ...item.contact, name: clean } } : item));
+      setContacts(current => current.map(item => item.id === id ? { ...item, name: clean } : item));
+      setContactNameDraft(null);
+    } catch {
+      setError('Falha de conexão ao salvar o nome do cliente.');
+    } finally {
+      setSavingContactName(false);
     }
   }
 
@@ -440,8 +494,9 @@ export default function Atendimento() {
     e.preventDefault();
     if (openingConversation) return;
     const form = new FormData(e.currentTarget);
+    const name = String(form.get('name') ?? '').trim();
     const body = phoneMode
-      ? { phone: form.get('phone'), channel: 'whatsapp' }
+      ? { phone: form.get('phone'), channel: 'whatsapp', ...(name ? { name } : {}) }
       : { contact_id: form.get('contact_id'), channel: form.get('channel') };
     setOpeningConversation(true);
     setOpeningError('');
@@ -627,7 +682,10 @@ export default function Atendimento() {
               <option value="phone">Digitar telefone do WhatsApp</option>
               <option value="contact">Escolher contato cadastrado</option>
             </select>
-            {phoneMode ? <input name="phone" aria-label="Telefone do cliente" className="input" type="tel" autoComplete="tel" placeholder="Telefone com DDD" required maxLength={40}/> : <>
+            {phoneMode ? <>
+              <input name="name" aria-label="Nome do cliente" className="input" autoComplete="off" placeholder="Nome do cliente (opcional)" minLength={2} maxLength={140}/>
+              <input name="phone" aria-label="Telefone do cliente" className="input" type="tel" autoComplete="tel" placeholder="Telefone com DDD" required maxLength={40}/>
+            </> : <>
             <select className="select" name="contact_id" required defaultValue=""><option value="" disabled>Selecione um contato</option>{contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select>
             <select className="select" name="channel" defaultValue="internal"><option value="internal">Interno</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="email">E-mail</option></select>
             </>}
@@ -667,7 +725,7 @@ export default function Atendimento() {
         </div>
       </aside>
 
-      <main className={styles.chatPanel}>
+      <main className={styles.chatPanel} onPaste={pasteImage}>
         {active ? <>
           <header className={styles.chatHeader}>
             <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
@@ -689,6 +747,12 @@ export default function Atendimento() {
 
           {active.attendance_state === 'in_service' ? <>
             {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
+            {pastedImage?.conversationId === active?.id && <div className={styles.pastedAttachment}>
+              {pastedPreview && <img src={pastedPreview} alt="Prévia da imagem colada"/>}
+              <span>Imagem colada</span>
+              <button type="button" className="btn btn-secondary" disabled={sendingMedia} onClick={() => setPastedImage(null)}>Remover</button>
+              <button type="button" className="btn btn-primary" disabled={sendingMedia || recording} onClick={() => void sendPastedImage()}>Enviar imagem</button>
+            </div>}
             <form className={styles.composer} onSubmit={send}>
               <div className={styles.composerTools}>
                 <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} title="Emojis" aria-label="Emoji" aria-expanded={emojiOpen}><Smile size={22}/></button>
@@ -711,6 +775,15 @@ export default function Atendimento() {
         {active && <>
           <ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.bigAvatar}/>
           <h3>{active.contact?.name}</h3>
+          {active.contact?.id && (contactNameDraft && contactNameDraft.id === active.contact.id ? (
+            <form className={styles.renameContact} onSubmit={renameContact}>
+              <input className="input" aria-label="Editar nome do cliente" value={contactNameDraft.name} onChange={e => setContactNameDraft({ ...contactNameDraft, name: e.target.value })} required minLength={2} maxLength={140}/>
+              <button className="btn btn-primary" disabled={savingContactName}>Salvar nome</button>
+              <button type="button" className="btn btn-secondary" disabled={savingContactName} onClick={() => setContactNameDraft(null)}>Cancelar</button>
+            </form>
+          ) : <button type="button" className="btn btn-secondary" onClick={() => {
+            if (active.contact?.id) setContactNameDraft({ id: active.contact.id, name: active.contact.name });
+          }}>Editar nome</button>)}
           <p>{active.contact?.phone || 'Telefone não informado'}</p>
           <p>{active.contact?.email || 'E-mail não informado'}</p>
 
