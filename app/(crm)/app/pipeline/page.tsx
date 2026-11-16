@@ -117,7 +117,21 @@ export default function Pipeline() {
     if (rr.ok) { setRules(rd.data ?? []); setRulesAllowed(true); }
     else if (rr.status === 403) { setRulesAllowed(false); setRules([]); }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    async function refreshDeals() {
+      if (document.visibilityState !== 'visible') return;
+      const response = await fetch('/api/deals', { cache: 'no-store' });
+      if (response.ok) setDeals((await response.json()).data ?? []);
+    }
+    const refresh = () => { void refreshDeals().catch(() => {}); };
+    const timer = window.setInterval(refresh, 20000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedDealId && !deals.some(deal => deal.id === selectedDealId)) setSelectedDealId(null);
@@ -345,7 +359,7 @@ export default function Pipeline() {
       </>}
     </section>}
 
-    <div className="pipeline-workspace">
+    <div className={`pipeline-workspace ${selectedDeal ? "pipeline-workspace-selected" : ""}`}>
       <div className="kanban kanban-six pipeline-kanban">
         {stages.map(([stage, label]) => {
           const stageDeals = groupedDeals[stage] ?? [];
@@ -378,7 +392,7 @@ export default function Pipeline() {
         })}
       </div>
 
-      <aside className="pipeline-inspector" aria-live="polite">
+      {selectedDeal && <aside className="pipeline-inspector" aria-live="polite">
         {selectedDeal ? <>
           <div className="inspector-head">
             <div><span>Negócio selecionado</span><h2>{selectedDeal.title}</h2></div>
@@ -417,7 +431,7 @@ export default function Pipeline() {
           <strong>Selecione uma oportunidade</strong>
           <span>Os detalhes do negócio aparecem aqui.</span>
         </div>}
-      </aside>
+      </aside>}
     </div>
   </div>;
 }

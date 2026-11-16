@@ -1277,3 +1277,9 @@
   .root .details textarea { font-size: 16px; min-height: 100px; }
 }
 
+
+.reactionBar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.reactionBar:empty { display: none; }
+.reactButton, .reactionOptions button { border: 0; background: transparent; border-radius: 6px; color: inherit; padding: 4px; cursor: pointer; }
+.reactionOptions { display: flex; flex-wrap: wrap; background: var(--eco-surface); border: 1px solid var(--line); border-radius: 8px; }
+.reactButton:hover, .reactionOptions button:hover, .reactionOptions button[aria-pressed='true'] { background: var(--eco-raised); }

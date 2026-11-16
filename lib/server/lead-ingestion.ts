@@ -325,34 +325,6 @@ export async function ingestLead(input: IngestLeadInput) {
       .eq('id', conversationId);
   }
 
-  if (channel === 'whatsapp' && conversationId && input.providerMessageId) {
-    const { data: existingDeal, error: lookupError } = await admin.from('deals')
-      .select('id')
-      .eq('tenant_id', input.tenantId)
-      .eq('contact_id', contactId)
-      .in('stage', ['new', 'qualification', 'proposal', 'closing'])
-      .limit(1)
-      .maybeSingle();
-
-    if (lookupError) {
-      console.error('[CRM] Falha ao consultar oportunidade do WhatsApp.', lookupError.code);
-    } else if (!existingDeal) {
-      // Use the conversation ID as the key so repeated deliveries cannot create another deal.
-      const { error: dealError } = await admin.from('deals').upsert({
-        id: conversationId,
-        tenant_id: input.tenantId,
-        contact_id: contactId,
-        owner_id: ownerId,
-        title: `Oportunidade - ${name}`.slice(0, 180),
-        stage: 'new',
-        stage_changed_at: new Date().toISOString(),
-        value: 0,
-        probability: 10
-      }, { onConflict: 'id', ignoreDuplicates: true });
-      if (dealError) console.error('[CRM] Falha ao criar oportunidade do WhatsApp.', dealError.code);
-    }
-  }
-
   if (isNewContact) {
     await admin
       .from('notifications')

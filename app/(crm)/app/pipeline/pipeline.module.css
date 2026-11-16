@@ -197,13 +197,22 @@
 
 .root :global(.pipeline-workspace) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: start;
   margin-top: 16px;
 }
 
+.root :global(.pipeline-workspace-selected) {
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 340px);
+}
+
 .root :global(.pipeline-kanban) {
+  min-width: 0;
+  max-width: 100%;
+  grid-template-columns: repeat(6, minmax(220px, 1fr));
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
   margin-top: 0;
   gap: 11px;
   padding-bottom: 10px;
@@ -501,7 +510,7 @@
 
 @media (max-width: 1360px) {
   .root :global(.pipeline-summary-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .root :global(.pipeline-workspace) { grid-template-columns: 1fr; }
+  .root :global(.pipeline-workspace-selected) { grid-template-columns: minmax(0, 1fr); }
   .root :global(.pipeline-inspector) { position: static; max-height: none; }
 }
 
