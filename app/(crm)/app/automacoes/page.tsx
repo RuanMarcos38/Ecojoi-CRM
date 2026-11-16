@@ -1,6 +1,8 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import PipelineRuleForm, { pipelineRulePayload } from '@/components/PipelineRuleForm';
+import { standardPipeline, type PipelineDefinition } from '@/lib/pipelines';
 import { Bot, CheckCircle2, FileUp, Link2, Plus, Power, RefreshCw, Trash2 } from 'lucide-react';
 
 type Automation = {
@@ -36,6 +38,11 @@ const actionLabels: Record<string, string> = {
 };
 
 export default function Automacoes() {
+  const [pipelines, setPipelines] = useState<PipelineDefinition[]>([]);
+  const [pipelineId, setPipelineId] = useState(standardPipeline.id);
+  const [pipelineRuleOpen, setPipelineRuleOpen] = useState(false);
+  const [savingPipelineRule, setSavingPipelineRule] = useState(false);
+  const selectedPipeline = pipelines.find(item => item.id === pipelineId) ?? standardPipeline;
   const [rows, setRows] = useState<Automation[]>([]);
   const [n8n, setN8n] = useState<N8nSettings | null>(null);
   const [open, setOpen] = useState(false);
@@ -62,7 +69,33 @@ export default function Automacoes() {
     if (n8nResponse.ok) setN8n(n8nPayload?.data ?? null);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    void fetch('/api/pipelines', { cache: 'no-store' }).then(async response => {
+      if (response.ok) setPipelines((await response.json()).data ?? []);
+    }).catch(() => {});
+  }, []);
+
+  async function createPipelineRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingPipelineRule(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/pipeline-rules', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(pipelineRulePayload(event.currentTarget))
+      });
+      if (!response.ok) throw new Error('Não foi possível salvar a automação do funil.');
+      setPipelineRuleOpen(false);
+      setNotice('Automação do funil criada.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Não foi possível salvar a automação do funil.');
+    } finally {
+      setSavingPipelineRule(false);
+    }
+  }
 
   async function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -243,6 +276,20 @@ export default function Automacoes() {
         </form>
       )}
 
+      <section className="card section">
+        <h2>Automações por funil</h2>
+        <div className="field">
+          <label htmlFor="automation-pipeline">Funil</label>
+          <select id="automation-pipeline" className="select" value={pipelineId} onChange={event => setPipelineId(event.target.value)}>
+            {[standardPipeline, ...pipelines].map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={() => setPipelineRuleOpen(value => !value)}
+          disabled={savingPipelineRule}>{pipelineRuleOpen ? 'Fechar formulário' : 'Criar automação para este funil'}</button>
+        {pipelineRuleOpen && <PipelineRuleForm key={selectedPipeline.id}
+          stages={selectedPipeline.stages.map(({ id, name }) => [id, name] as const)}
+          onSubmit={createPipelineRule} saving={savingPipelineRule}/>}
+      </section>
       <div className="automation-grid">
         {rows.length ? rows.map(a => (
           <article className="card automation-card" key={a.id}>

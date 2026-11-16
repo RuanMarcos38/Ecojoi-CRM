@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { stageKeyPattern } from '@/lib/pipelines';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { audit } from '@/lib/server/audit';
 
 const patch = z.object({
   name: z.string().min(2).max(120).optional(),
-  stage: z.enum(['new','qualification','proposal','closing','won','lost']).optional(),
+  stage: z.string().regex(stageKeyPattern).optional(),
   wait_minutes: z.coerce.number().int().min(1).max(525600).optional(),
   channel: z.enum(['internal','whatsapp','email']).optional(),
   message_template: z.string().min(1).max(4000).optional(),
