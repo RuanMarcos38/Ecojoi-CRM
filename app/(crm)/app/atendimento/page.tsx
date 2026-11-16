@@ -395,7 +395,7 @@ export default function Atendimento() {
     if (r.ok) {
       setTemplateOpen(false);
       setNotice(d?.data?.delivery === 'sent' ? 'Template enviado.' : 'Template enfileirado para retentativa.');
-      await load(true);
+      await refreshConversations();
     } else {
       setError('Não foi possível enviar o template do WhatsApp.');
     }
