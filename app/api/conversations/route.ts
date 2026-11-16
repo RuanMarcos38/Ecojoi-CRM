@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     if (target && !z.string().uuid().safeParse(target).success) return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
     let query = supabase
       .from('conversations')
-      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,ai_summary,ai_next_action,ai_summary_updated_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution,lead_score,lead_temperature,contact_tags(tag:tags(id,name))),messages(id,provider_message_id,whatsapp_reaction,sender_user_id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
+      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,ai_summary,ai_next_action,ai_summary_updated_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution,lead_score,lead_temperature,contact_tags(tag:tags(id,name))),messages(id,provider_message_id,reply_to_provider_id,whatsapp_reaction,sender_user_id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
       .eq('tenant_id', ctx.tenantId);
     if (target) query = query.eq('id', target);
     const { data, error } = await query.order('updated_at', { ascending: false }).limit(target ? 1 : 100);

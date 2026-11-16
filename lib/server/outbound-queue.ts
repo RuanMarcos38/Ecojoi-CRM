@@ -4,7 +4,7 @@ import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppMedia } from '@/lib
 const BUCKET = 'ecojoi-message-attachments';
 
 type QueuePayload =
-  | { kind: 'text'; to: string; body: string }
+  | { kind: 'text'; to: string; body: string; replyToProviderId?: string }
   | { kind: 'template'; to: string; name: string; language?: string; components?: unknown[] }
   | { kind: 'media'; to: string; storagePath: string; fileName: string; mime: string; caption?: string | null };
 
@@ -44,7 +44,9 @@ function nextDelayMinutes(attempts: number) {
 
 async function deliverWhatsApp(tenantId: string, payload: QueuePayload) {
   if (payload.kind === 'text') {
-    return sendWhatsAppText(tenantId, payload.to, payload.body);
+    return payload.replyToProviderId
+      ? sendWhatsAppText(tenantId, payload.to, payload.body, payload.replyToProviderId)
+      : sendWhatsAppText(tenantId, payload.to, payload.body);
   }
 
   if (payload.kind === 'template') {

@@ -1301,3 +1301,31 @@
 .conversationPreview { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .conversationPreview .lastMessage { flex: 1; min-width: 0; }
 .unreadBadge { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-width: 20px; min-height: 20px; box-sizing: border-box; padding: 0 5px; border-radius: 999px; background: #117746; color: #fff; font-size: 11px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.messageQuote {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  margin-bottom: 4px;
+  border: 0;
+  border-inline-start: 3px solid var(--eco-primary, #087756);
+  border-radius: 5px;
+  background: var(--eco-raised);
+  color: inherit;
+  font: inherit;
+  font-size: .85em;
+  text-align: start;
+}
+button.messageQuote { cursor: pointer; }
+.messageQuote > :is(b, span) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replyPreview {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.replyPreview .messageQuote { margin-bottom: 0; }
+.messageRow:focus .messageBubble { outline: 2px solid var(--eco-primary, #087756); outline-offset: 2px; }
