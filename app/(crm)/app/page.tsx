@@ -2,9 +2,11 @@
 
 import { useEffect,useMemo,useState } from 'react';
 import { CircleDollarSign, Clock3, Database, Flame, Headset, ListChecks, MessageCircle, Settings2, Target, TrendingUp, X } from 'lucide-react';
+import { DashboardInsights, type Insights } from './DashboardInsights';
 import styles from './dashboard.module.css';
 
 type Dashboard={
+  insights?: Insights;
   leads:number;hotLeads:number;openConversations:number;waitingConversations:number;slaBreached:number;
   conversion:number;openPipeline:number;weightedForecast:number;wonRevenue:number;averageTicket:number;
   openTasks:number;overdueTasks:number;
@@ -35,6 +37,7 @@ function money(value:number){return num(value).toLocaleString('pt-BR',{style:'cu
 function normalizeDashboard(value:any):Dashboard{
   const myDay=value?.myDay??{};
   return {
+    insights:value?.insights,
     leads:num(value?.leads),
     hotLeads:num(value?.hotLeads),
     openConversations:num(value?.openConversations),
@@ -148,6 +151,7 @@ export default function Dashboard(){
         </div>
       </section>}
 
+      {data.insights && <DashboardInsights initial={data.insights}/>}
       <section className="approved-kpis">
         {visible('hot_leads')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><Flame size={16}/></span>Leads quentes</div><div className="approved-kpi-value">{data.hotLeads}</div><div className="approved-kpi-foot"><span>{data.leads} leads</span><small>priorização automática</small></div><div className="approved-mini-chart" aria-hidden="true"><i/><i/><i/><i/></div></article>}
         {visible('attendance')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><MessageCircle size={16}/></span>Atendimentos</div><div className="approved-kpi-value">{data.openConversations}</div><div className="approved-kpi-foot"><span>{data.waitingConversations} esperando</span><small>{data.slaBreached} fora do SLA</small></div><Headset className="ecojoi-kpi-art" aria-hidden="true"/></article>}
