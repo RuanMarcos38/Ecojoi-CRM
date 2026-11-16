@@ -16,6 +16,13 @@ try {
   if (error.code !== 'ENOENT') throw error;
 }
 
+try {
+  const workerToken = readFileSync(join(__dirname, '..', '.ecojoi-crm-releases', 'reactivation-worker-token'), 'utf8').trim();
+  if (/^[0-9a-f]{64}$/.test(workerToken)) process.env.ECOJOI_REACTIVATION_WORKER_TOKEN = workerToken;
+} catch (error) {
+  if (error.code !== 'ENOENT') throw error;
+}
+
 process.env.NODE_ENV = 'production';
 process.env.HOSTNAME = '0.0.0.0';
 require('./runtime/server.js');
