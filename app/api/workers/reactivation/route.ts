@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { workReactivationQueue } from '@/lib/server/reactivation';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   try {
-    return NextResponse.json({ data: await workReactivationQueue() });
+    const data = await workReactivationQueue();
+    const { error } = await createAdminClient().from('whatsapp_reactivation_heartbeat')
+      .upsert({ id: true, seen_at: new Date().toISOString() });
+    if (error) throw error;
+    return NextResponse.json({ data });
   } catch {
     return NextResponse.json({ error: 'reactivation_worker_failed' }, { status: 500 });
   }
