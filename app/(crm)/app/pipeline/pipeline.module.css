@@ -533,3 +533,7 @@
   .root :global(.pipeline-search-field),
   .root :global(.pipeline-filter-field) { padding: 0 10px; }
 }
+
+.root :global(.pipeline-deal[draggable='true']) { cursor: grab; }
+.root :global(.pipeline-deal[draggable='true']:active) { cursor: grabbing; }
+.root .dropTarget { outline: 2px dashed var(--acid); outline-offset: -3px; }

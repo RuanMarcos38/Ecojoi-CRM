@@ -1283,3 +1283,11 @@
 .reactButton, .reactionOptions button { border: 0; background: transparent; border-radius: 6px; color: inherit; padding: 4px; cursor: pointer; }
 .reactionOptions { display: flex; flex-wrap: wrap; background: var(--eco-surface); border: 1px solid var(--line); border-radius: 8px; }
 .reactButton:hover, .reactionOptions button:hover, .reactionOptions button[aria-pressed='true'] { background: var(--eco-raised); }
+
+.attendanceFilters { margin: 0 10px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.attendanceFilters summary { cursor: pointer; }
+.attendanceFilters summary span { color: var(--muted); font-size: 12px; }
+.attendanceFilterFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.attendanceFilterFields select { width: 100%; min-width: 0; }
+.attendanceFilterSearch { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
+.attendanceFilterSearch input { min-width: 0; flex: 1; }

@@ -206,11 +206,22 @@ export default function Atendimento() {
   }, [items]);
   const [attendantFilter, setAttendantFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  const [registeredTags, setRegisteredTags] = useState<{ id: string; name: string }[]>([]);
+  const [oldestFirst, setOldestFirst] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/tags', { cache: 'no-store' }).then(async response => {
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (!cancelled) setRegisteredTags(payload.data ?? []);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const [channelFilter, setChannelFilter] = useState('');
   const [originFilter, setOriginFilter] = useState('');
   const filterOptions = useMemo(() => {
     const attendants = new Map<string, string>();
-    const tags = new Map<string, string>();
+    const tags = new Map(registeredTags.map(tag => [tag.id, tag.name] as const));
     const channels = new Set<string>();
     const origins = new Set<string>();
     for (const item of items) {
@@ -224,7 +235,7 @@ export default function Atendimento() {
     }
     const byLabel = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], 'pt-BR');
     return { attendants: [...attendants].sort(byLabel), tags: [...tags].sort(byLabel), channels: [...channels].sort(), origins: [...origins].sort() };
-  }, [items]);
+  }, [items, registeredTags]);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -237,8 +248,11 @@ export default function Atendimento() {
       if (!needle) return true;
       const last = item.messages?.[item.messages.length - 1]?.body ?? '';
       return `${item.contact?.name ?? ''} ${item.contact?.email ?? ''} ${item.contact?.phone ?? ''} ${last}`.toLowerCase().includes(needle);
+    }).sort((a, b) => {
+      const comparison = (a.updated_at ?? '').localeCompare(b.updated_at ?? '');
+      return oldestFirst ? comparison : -comparison;
     });
-  }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter]);
+  }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst]);
   useEffect(() => {
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
@@ -546,16 +560,17 @@ export default function Atendimento() {
             <button className="btn btn-primary">Iniciar</button>
           </form>
         )}
-        <div className={styles.searchBox}><Search size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Pesquisar ou iniciar conversa" /></div>
-        <details className="field" style={{ margin: '0 10px 8px' }}>
-          <summary style={{ cursor: 'pointer' }}>Filtros de atendimento</summary>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginTop: 8 }}>
+        <details className={styles.attendanceFilters}>
+          <summary>Filtros de atendimento{(search || tagFilter || channelFilter || attendantFilter || originFilter || oldestFirst) && <span> · Ativos</span>}</summary>
+          <div className={styles.attendanceFilterFields}>
+            <label className={styles.attendanceFilterSearch}><Search size={16}/><input className="input" aria-label="Nome, telefone ou mensagem" value={search} onChange={e => setSearch(e.target.value)} placeholder="Nome, telefone ou mensagem" /></label>
             <select className="select" aria-label="Atendente" value={attendantFilter} onChange={event => setAttendantFilter(event.target.value)}><option value="">Todos atendentes</option><option value="unassigned">Sem atendente</option>{filterOptions.attendants.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
             <select className="select" aria-label="Tag" value={tagFilter} onChange={event => setTagFilter(event.target.value)}><option value="">Todas tags</option>{filterOptions.tags.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
             <select className="select" aria-label="Canal" value={channelFilter} onChange={event => setChannelFilter(event.target.value)}><option value="">Todos canais</option>{filterOptions.channels.map(channel => <option key={channel} value={channel}>{channelName(channel)}</option>)}</select>
             <select className="select" aria-label="Origem" value={originFilter} onChange={event => setOriginFilter(event.target.value)}><option value="">Todas origens</option>{filterOptions.origins.map(origin => <option key={origin}>{origin}</option>)}</select>
+            <select className="select" aria-label="Ordem por última atividade" value={oldestFirst ? 'oldest' : 'recent'} onChange={e => setOldestFirst(e.target.value === 'oldest')}><option value="recent">Mais recentes</option><option value="oldest">Mais antigas</option></select>
+            <button className="btn btn-secondary" type="button" disabled={!search && !attendantFilter && !tagFilter && !channelFilter && !originFilter && !oldestFirst} onClick={() => { setSearch(''); setAttendantFilter(''); setTagFilter(''); setChannelFilter(''); setOriginFilter(''); setOldestFirst(false); }}>Limpar filtros</button>
           </div>
-          <button className="btn btn-secondary" type="button" style={{ marginTop: 6 }} disabled={!attendantFilter && !tagFilter && !channelFilter && !originFilter} onClick={() => { setAttendantFilter(''); setTagFilter(''); setChannelFilter(''); setOriginFilter(''); }}>Limpar filtros</button>
         </details>
         <div className={styles.queueTabs} role="tablist">
           {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={queue === state ? styles.queueActive : ''} onClick={() => setQueue(state)}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}

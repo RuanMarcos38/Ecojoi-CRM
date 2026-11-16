@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Bot,
@@ -207,12 +207,33 @@ export default function Pipeline() {
     else setError('Não foi possível criar a oportunidade.');
   }
 
+  const movingDeals = useRef(new Set<string>());
+  const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
+  const [dropStage, setDropStage] = useState<string | null>(null);
+
+  function endDrag() {
+    setDraggedDealId(null);
+    setDropStage(null);
+  }
+
   async function move(id: string, stage: string) {
+    if (movingDeals.current.has(id) || deals.find(deal => deal.id === id)?.stage === stage) return;
+    movingDeals.current.add(id);
     setError(''); setNotice('');
-    const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stage }) });
-    if (!r.ok) setError(r.status === 403 ? 'Sem permissão para alterar esta oportunidade.' : 'Não foi possível salvar a etapa da oportunidade.');
-    else setNotice(`Oportunidade movida para ${stageLabel[stage]}. O tempo da nova etapa foi reiniciado.`);
-    await load();
+    try {
+      const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stage }) });
+      if (!r.ok) {
+        setError(r.status === 403 ? 'Sem permissão para alterar esta oportunidade.' : 'Não foi possível salvar a etapa da oportunidade.');
+        return;
+      }
+      const { data } = await r.json();
+      setDeals(current => current.map(deal => deal.id === id ? { ...deal, ...data } : deal));
+      setNotice(`Oportunidade movida para ${stageLabel[stage]}.`);
+    } catch {
+      setError('Falha de conexão ao mover a oportunidade. Confira a etapa antes de tentar novamente.');
+    } finally {
+      movingDeals.current.delete(id);
+    }
   }
 
   async function remove(id: string) {
@@ -252,7 +273,7 @@ export default function Pipeline() {
   }
 
   function selectDealFromKeyboard(event: KeyboardEvent<HTMLElement>, id: string) {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
     setSelectedDealId(id);
   }
@@ -364,7 +385,26 @@ export default function Pipeline() {
         {stages.map(([stage, label]) => {
           const stageDeals = groupedDeals[stage] ?? [];
           const stageValue = stageDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0);
-          return <div className={`column stage-${stage}`} key={stage}>
+          return <div
+            className={`column stage-${stage} ${dropStage === stage ? styles.dropTarget : ''}`}
+            key={stage}
+            onDragOver={event => {
+              if (!draggedDealId || deals.find(deal => deal.id === draggedDealId)?.stage === stage) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              setDropStage(stage);
+            }}
+            onDragLeave={event => {
+              if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+              setDropStage(current => current === stage ? null : current);
+            }}
+            onDrop={event => {
+              if (!draggedDealId) return;
+              event.preventDefault();
+              endDrag();
+              void move(draggedDealId, stage);
+            }}
+          >
             <div className="column-head"><div><span>{label}</span><small>{formatCurrency(stageValue)}</small></div><span className="badge">{stageDeals.length}</span></div>
             {(enabledByStage[stage]?.length ?? 0) > 0 && <div className="stage-automation-hint"><Bot size={13}/>{enabledByStage[stage].length} automação{enabledByStage[stage].length === 1 ? '' : 'ões'}</div>}
             {stageDeals.length === 0 && <div className="column-empty">Nenhuma oportunidade</div>}
@@ -376,6 +416,17 @@ export default function Pipeline() {
                 className={`deal pipeline-deal ${selectedDeal?.id === deal.id ? 'pipeline-deal-selected' : ''} ${isStalled(deal) ? 'pipeline-deal-stalled' : ''}`}
                 key={deal.id}
                 tabIndex={0}
+                draggable
+                onDragStart={event => {
+                  if (event.target !== event.currentTarget || movingDeals.current.has(deal.id)) {
+                    event.preventDefault();
+                    return;
+                  }
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', deal.id);
+                  setDraggedDealId(deal.id);
+                }}
+                onDragEnd={endDrag}
                 onClick={() => setSelectedDealId(deal.id)}
                 onKeyDown={event => selectDealFromKeyboard(event, deal.id)}
               >
