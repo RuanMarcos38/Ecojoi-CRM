@@ -306,12 +306,12 @@ export default function Leads() {
     </form>}
 
     <div className={styles.workspace}>
-      <section className={styles.cardGrid} aria-label="Lista de leads">
+      <section className={`${styles.cardGrid} ${styles.leadGrid}`} aria-label="Lista de leads">
         {filteredRows.length ? filteredRows.map(row => <article className={styles.recordCard} key={row.id}>
           <div className={styles.recordTop}>
             <div className={styles.identity}>
               <span className={styles.avatar}>{row.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
-              <div className={styles.identityCopy}><strong>{row.name}</strong><span>{row.source || 'Sem origem'} · {ageLabel(row.created_at)}</span><span>{row.owner?.full_name ? `Responsável: ${row.owner.full_name}` : 'Aguardando responsável'}</span></div>
+              <div className={styles.identityCopy}><strong>{row.name}</strong><span>{row.source ? `${row.source} · ` : ''}{ageLabel(row.created_at)}</span><span>{row.owner?.full_name ? `Responsável: ${row.owner.full_name}` : 'Aguardando responsável'}</span></div>
             </div>
             <span className={`${styles.statusBadge} ${row.lead_temperature === 'hot' ? styles.priorityHigh : row.lead_temperature === 'warm' ? styles.priorityMedium : styles.priorityLow}`}>{row.lead_temperature === 'hot' ? 'Quente' : row.lead_temperature === 'warm' ? 'Morno' : 'Frio'} · {row.lead_score ?? 0}</span>
           </div>

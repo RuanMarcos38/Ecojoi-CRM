@@ -90,15 +90,15 @@ export default function Equipe(){
 
     {master&&<label style={{display:'flex',gap:8,margin:'16px 0'}}><input type="checkbox" checked={showDeleted} onChange={e=>setShowDeleted(e.target.checked)}/>Mostrar acessos excluídos</label>}
     <div className="card table-wrap">
-      <table className="table">
-        <thead><tr><th>Usuário</th><th>Perfil</th><th>Disponibilidade</th><th>Atendimentos</th><th>Capacidade</th><th>Status</th><th>Ações</th></tr></thead>
+      <table className="table" style={{minWidth: 1020}}>
+        <thead><tr><th>Usuário</th><th>Perfil</th><th style={{whiteSpace: 'nowrap'}}>Disponibilidade</th><th style={{whiteSpace: 'nowrap'}}>Atendimentos</th><th>Capacidade</th><th style={{minWidth: 95}}>Status</th><th>Ações</th></tr></thead>
         <tbody>{rows.filter(r=>showDeleted||!r.deleted_at).length?rows.filter(r=>showDeleted||!r.deleted_at).map(r=><tr key={r.id}>
           <td><strong>{r.full_name}</strong>{r.email&&<small style={{display:'block'}}>{r.email}</small>}{r.confirmed===false&&<small className="muted">Primeiro acesso pendente</small>}<small className="muted" style={{display:'block'}}>{new Date(r.created_at).toLocaleDateString('pt-BR')}</small></td>
           <td><select className="select" value={r.role} onChange={e=>void change(r.id,{role:e.target.value})} disabled={!master||r.id===viewer.id||!!r.deleted_at||busyId===r.id||(r.role==='super_admin'&&viewer.role!=='super_admin')}><option value="company_admin">Administrador master</option><option value="manager">Gestor</option><option value="user">Usuário</option>{r.role==='super_admin'&&<option value="super_admin">Super Admin</option>}</select></td>
           <td><select disabled={!master||!!r.deleted_at||busyId===r.id} className="select" value={r.availability_state??'online'} onChange={e=>void change(r.id,{availability_state:e.target.value})}><option value="online">Online</option><option value="busy">Ocupado</option><option value="break">Pausa</option><option value="offline">Offline</option></select></td>
           <td><strong>{r.open_conversations??0}</strong><small className="muted" style={{display:'block'}}>abertos</small></td>
           <td><input disabled={!master||!!r.deleted_at||busyId===r.id} className="input" type="number" min={1} max={500} value={r.max_open_conversations??30} onChange={e=>setRows(rows=>rows.map(x=>x.id===r.id?{...x,max_open_conversations:Number(e.target.value)}:x))} onBlur={e=>void change(r.id,{max_open_conversations:Number(e.target.value)})} style={{width:90}}/></td>
-          <td><span className={r.active?'badge':'badge badge-off'}>{r.deleted_at?'Excluído':r.active?availabilityLabel[r.availability_state]:'Inativo'}</span></td>
+          <td><span style={{whiteSpace: 'nowrap'}} className={r.active?'badge':'badge badge-off'}>{r.deleted_at?'Excluído':r.active?availabilityLabel[r.availability_state]:'Inativo'}</span></td>
           <td><div style={{display:'flex',gap:8,flexWrap:'wrap',minWidth:200}}>
             {master&&!r.deleted_at&&r.active&&<><button className="btn btn-secondary" disabled={!!busyId} onClick={()=>void accessLink(r,'email')}>Enviar link de acesso</button><button className="btn btn-secondary" disabled={!!busyId} onClick={()=>void accessLink(r,'link')}>Copiar novo link</button></>}
             {r.id!==viewer.id&&!r.deleted_at&&(master||(viewer.role==='manager'&&r.role==='user'&&r.active))&&<button className="btn btn-secondary" disabled={!!busyId} onClick={()=>void change(r.id,{active:!r.active})}>{r.active?'Inativar':'Ativar'}</button>}
