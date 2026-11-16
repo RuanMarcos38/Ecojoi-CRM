@@ -11,6 +11,7 @@ function usesOwnAuthentication(path:string){
     || path==='/api/integrations/meta/webhook'
     || path==='/api/integrations/evolution/webhook'
     || path==='/api/ai-agent/reply'
+    || path==='/api/workers/reactivation'
     || path==='/api/workers/tick'
     || path==='/api/health';
 }
