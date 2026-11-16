@@ -156,6 +156,18 @@ export async function sendWhatsAppText(tenantId: string, to: string | null | und
   }
 }
 
+export async function reactivationWhatsAppHealth(tenantId: string) {
+  const id = await phoneNumberIdForTenant(tenantId);
+  if (!id) return false;
+  const data = await graphRequest(id + '?fields=quality_rating', { signal: AbortSignal.timeout(10000) });
+  return data?.quality_rating === 'GREEN';
+}
+
+export async function liveReactivationTemplate(metaTemplateId: string) {
+  if (!/^\d+$/.test(metaTemplateId)) return null;
+  return graphRequest(metaTemplateId + '?fields=name,language,category,status,components', { signal: AbortSignal.timeout(10000) });
+}
+
 export async function sendWhatsAppReaction(tenantId: string, to: string | null | undefined, messageId: string, emoji: string) {
   const phoneNumberId = await phoneNumberIdForTenant(tenantId);
   const recipient = digits(to);
@@ -231,6 +243,7 @@ export async function sendWhatsAppTemplate(
   try {
     const data = await graphRequest(`${phoneNumberId}/messages`, {
       method: 'POST',
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -353,6 +366,15 @@ async function processWhatsAppValue(value: any) {
 
   for (const status of value?.statuses ?? []) {
     if (!status?.id) continue;
+    if (status.status === 'failed') {
+      const { data: delivery } = await admin.from('whatsapp_reactivation_deliveries')
+        .select('campaign_id').eq('tenant_id', tenantId).eq('provider_message_id', status.id).maybeSingle();
+      if (delivery) {
+        await admin.from('whatsapp_reactivation_campaigns')
+          .update({ status: 'paused', last_result: 'falha_informada_pela_meta' })
+          .eq('tenant_id', tenantId).eq('id', delivery.campaign_id).eq('status', 'queued');
+      }
+    }
     await admin
       .from('messages')
       .update({ status: status.status ?? 'sent' })
@@ -363,6 +385,11 @@ async function processWhatsAppValue(value: any) {
   for (const message of value?.messages ?? []) {
     if (message.type === 'reaction') continue;
     if (!message?.id || !message?.from) continue;
+    if (/^(sair|stop|cancelar|parar|descadastrar)[.!]?$/i.test(String(whatsappText(message)).trim())) {
+      const { error } = await admin.from('whatsapp_reactivation_suppressions')
+        .upsert({ tenant_id: tenantId, phone: digits(message.from) }, { onConflict: 'tenant_id,phone', ignoreDuplicates: true });
+      if (error) throw error;
+    }
     const fresh = await claimEvent(tenantId, message.id, 'whatsapp_message', { phone_number_id: phoneNumberId });
     if (!fresh) continue;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart3, Megaphone, Target, TrendingUp, UserPlus, WalletCards } from 'lucide-react';
 import styles from '../commercial.module.css';
 
@@ -42,16 +42,84 @@ function csvRows(source: string) {
   return rows.filter(record => record.some(Boolean));
 }
 
+type Campaign = {
+  id: string; status: 'queued' | 'paused' | 'cancelled' | 'completed';
+  processing: boolean; cursor_pos: number; accepted: number; skipped: number; last_result?: string | null;
+};
+type TemplateOption = { id: string; name: string; language: string; status: string; category: string };
+
 function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
   const [phones, setPhones] = useState<string[]>([]);
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState('');
   const [invalid, setInvalid] = useState(0);
   const [duplicates, setDuplicates] = useState(0);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [templateId, setTemplateId] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [canManage, setCanManage] = useState(false);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [saving, setSaving] = useState(false);
+  const campaignId = useRef<string | null>(null);
+
+  async function refreshCampaigns() {
+    const response = await fetch('/api/campaigns/reactivation', { cache: 'no-store' });
+    if (!response.ok) return;
+    setCanManage(true);
+    setCampaigns((await response.json()).data ?? []);
+  }
+
+  useEffect(() => {
+    const refresh = () => { void refreshCampaigns().catch(() => {}); };
+    refresh();
+    void fetch('/api/integrations/meta/templates', { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) return;
+        const result = await response.json();
+        setTemplates((result.data ?? []).filter((item: TemplateOption) => item.status === 'APPROVED' && item.category === 'MARKETING'));
+      }).catch(() => {});
+    const timer = window.setInterval(refresh, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  async function mutate(action?: 'pause' | 'resume' | 'cancel', id?: string) {
+    if (saving) return;
+    setSaving(true); setError('');
+    try {
+      campaignId.current ??= crypto.randomUUID();
+      const response = await fetch('/api/campaigns/reactivation', {
+        method: action ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(action ? { action, id } : {
+          id: campaignId.current, template_id: templateId, phones, marketing_opt_in_confirmed: confirmed
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const messages: Record<string, string> = {
+          worker_offline: 'O agendador de campanhas está indisponível. Nenhuma mensagem foi agendada.',
+          approved_template_required: 'Escolha um modelo aprovado de marketing com texto fixo e instrução para responder SAIR.',
+          no_eligible_contacts: 'Nenhum número da lista pode receber a campanha.',
+          campaign_already_active: 'Já existe uma campanha em andamento ou pausada.',
+          campaign_busy_or_closed: 'A campanha está enviando um item ou já foi encerrada. Atualize e tente novamente.',
+          official_provider_required: 'Ative a API oficial do WhatsApp da Meta para usar campanhas.'
+        };
+        setError(messages[result.error] ?? 'Não foi possível atualizar a campanha.');
+        return;
+      }
+      if (!action) setConfirmed(false);
+      await refreshCampaigns();
+    } catch {
+      setError('Falha de conexão. Confira o status da campanha antes de tentar novamente.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function preview(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     if (!file) return;
+    campaignId.current = null; setConfirmed(false);
     setPhones([]); setInvalid(0); setDuplicates(0); setFileName(''); setError('');
     if (file.size > 2 * 1024 * 1024) {
       setError('O CSV deve ter no máximo 2 MB para prévia.');
@@ -98,6 +166,33 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
       <p><strong>{fileName}</strong> · {counts.candidates} com aceite registrado</p>
       <p className={styles.sideHint}>{counts.excluded} excluídos pelo cadastro · {counts.unknown} fora do CRM · {duplicates} duplicados · {invalid} inválidos</p>
     </div>}
+    {canManage && <>
+      <div className="field">
+        <label htmlFor="reactivation-template">Modelo aprovado pela Meta</label>
+        <select id="reactivation-template" className="select" value={templateId}
+          onChange={event => { setTemplateId(event.target.value); setConfirmed(false); }}>
+          <option value="">Selecione um modelo de marketing</option>
+          {templates.map(template => <option key={template.id} value={template.id}>{template.name} · {template.language}</option>)}
+        </select>
+        <small>Use texto fixo com instrução para responder SAIR. O WhatsApp pode cobrar pelo envio.</small>
+      </div>
+      <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)}/> Confirmo que os aceites registrados cobrem marketing da Ecojoi pelo WhatsApp.</label>
+      {phones.length > 500 && <p role="alert">Use um CSV com até 500 números únicos por campanha.</p>}
+      <button type="button" className="btn btn-primary" disabled={saving || !confirmed || !templateId || !counts.candidates || phones.length > 500}
+        onClick={() => void mutate()}>Iniciar campanha</button>
+      {campaigns.length > 0 && <h3>Campanhas de WhatsApp</h3>}
+      {campaigns.map(campaign => <article className="card section" key={campaign.id}>
+        <strong>{({ queued: 'Na fila', paused: 'Pausada', cancelled: 'Cancelada', completed: 'Processada' })[campaign.status]}</strong>
+        <p>{campaign.accepted} aceitas pela Meta · {campaign.skipped} ignoradas · {campaign.cursor_pos} analisadas</p>
+        {campaign.last_result && <small>{campaign.last_result.replaceAll('_', ' ')}</small>}
+        {(campaign.status === 'queued' || campaign.status === 'paused') && <div className={styles.cardActions}>
+          <button type="button" className="btn btn-secondary" disabled={saving || campaign.processing}
+            onClick={() => void mutate(campaign.status === 'queued' ? 'pause' : 'resume', campaign.id)}>{campaign.status === 'queued' ? 'Pausar' : 'Retomar'}</button>
+          <button type="button" className="btn btn-secondary" disabled={saving || campaign.processing}
+            onClick={() => void mutate('cancel', campaign.id)}>Cancelar</button>
+        </div>}
+      </article>)}
+    </>}
   </section>;
 }
 
