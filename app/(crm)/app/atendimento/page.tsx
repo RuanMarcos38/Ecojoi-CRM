@@ -74,7 +74,7 @@ type Conversation = {
   assignee?: Assignee | null;
   messages: Message[];
 };
-type Me = { features?: Record<string, boolean>; tenantId?: string; userId?: string };
+type Me = { role?: string; features?: Record<string, boolean>; tenantId?: string; userId?: string };
 type QuickReply = { id:string; shortcut:string; title:string; body:string };
 type WhatsAppTemplate = { id:string; name:string; language:string; category?:string|null; status?:string|null };
 type ConversationNote = { id:string; body:string; created_at:string; user?: { id:string; full_name:string } | null };
@@ -144,6 +144,10 @@ export default function Atendimento() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [me, setMe] = useState<Me | null>(null);
+  const [transfer, setTransfer] = useState<{ conversationId: string; members: Assignee[]; target: string } | null>(null);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferFeedback, setTransferFeedback] = useState('');
+  const canTransfer = ['company_admin', 'super_admin', 'manager'].includes(me?.role ?? '');
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -522,6 +526,48 @@ export default function Atendimento() {
     }
   }
 
+  async function prepareTransfer() {
+    if (!active || transferBusy) return;
+    const id = active.id;
+    setTransferFeedback('');
+    setTransferBusy(true);
+    try {
+      const response = await fetch('/api/conversations/' + id + '/transfer', { cache: 'no-store' });
+      if (!response.ok) throw Error();
+      setTransfer({ conversationId: id, members: (await response.json()).data ?? [], target: '' });
+    } catch {
+      setTransferFeedback('Não foi possível carregar os usuários disponíveis.');
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
+  async function transferConversation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active || transfer?.conversationId !== active.id || !transfer.target || transferBusy) return;
+    const id = active.id;
+    setTransferBusy(true);
+    setTransferFeedback('');
+    try {
+      const response = await fetch('/api/conversations/' + id + '/transfer', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ assignee_id: transfer.target })
+      });
+      if (!response.ok) throw Error();
+      const { data } = await response.json();
+      setItems(current => current.map(item => item.id === id ? { ...item, ...data } : item));
+      setQueue('in_service');
+      setActiveId(id);
+      setAttendantFilter('');
+      setTransfer(null);
+      setTransferFeedback('Atendimento transferido.');
+    } catch {
+      setTransferFeedback('Não foi possível transferir. Confira se a conversa está aberta e o usuário está ativo.');
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
   async function changeAttendance(state: AttendanceState) {
     if (!active || changingState || active.attendance_state === state) return;
     setChangingState(true); setError(''); setNotice('');
@@ -792,6 +838,22 @@ export default function Atendimento() {
           <div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div>
 
           <hr/>
+          {canTransfer && active.status !== 'closed' && <>
+            {transfer?.conversationId === active.id ? <form className="field" onSubmit={transferConversation}>
+              <label htmlFor="transfer-member">Novo responsável</label>
+              <select className="select" id="transfer-member" value={transfer.target}
+                onChange={event => setTransfer({ ...transfer, target: event.target.value })} required disabled={transferBusy}>
+                <option value="">Selecione um usuário</option>
+                {transfer.members.filter(member => member.id !== active.assigned_to).map(member => (
+                  <option key={member.id} value={member.id}>{member.full_name}</option>
+                ))}
+              </select>
+              <button className="btn btn-primary" disabled={transferBusy || !transfer.target}>Confirmar transferência</button>
+              <button type="button" className="btn btn-secondary" disabled={transferBusy} onClick={() => setTransfer(null)}>Cancelar</button>
+            </form> : <button type="button" className="btn btn-secondary" disabled={transferBusy}
+              onClick={() => void prepareTransfer()}>Transferir atendimento</button>}
+            {transferFeedback && <p role="status">{transferFeedback}</p>}
+          </>}
           <b>Status do atendimento</b>
           <div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div>
 
