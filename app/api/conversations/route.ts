@@ -89,8 +89,8 @@ export async function POST(req: Request) {
       phone = normalizeWhatsAppPhone(body.phone);
       if (!phone) return NextResponse.json({ error: 'invalid_phone' }, { status: 400 });
       const digits = phone.slice(1);
-      const { data: channelContact, error: channelError } = await supabase.from('contact_channels')
-        .select('contact_id').eq('tenant_id', ctx.tenantId).eq('channel', 'whatsapp').eq('external_id', digits).maybeSingle();
+      const { data: channelContact, error: channelError } = await createAdminClient().from('contact_channels')
+        .select('contact_id').eq('tenant_id', ctx.tenantId).eq('channel', 'whatsapp').eq('external_id', digits).limit(1).maybeSingle();
       if (channelError) throw channelError;
       contactId = channelContact?.contact_id;
       if (!contactId) {
