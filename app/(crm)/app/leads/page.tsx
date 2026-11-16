@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Target,
   UserPlus,
+  Archive,
   X
 } from 'lucide-react';
 import styles from '../commercial.module.css';
@@ -190,6 +191,24 @@ export default function Leads() {
     }
   }
 
+  async function archiveLead(lead: Lead) {
+    if (!window.confirm(`Retirar ${lead.name} de Pré-vendas? O contato e o histórico serão preservados.`)) return;
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/contacts/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'inactive' })
+      });
+      if (!response.ok) throw new Error('archive_failed');
+      setRows(current => current.filter(row => row.id !== lead.id));
+      setNotice('Lead retirado de Pré-vendas.');
+    } catch {
+      setError('Não foi possível retirar este lead de Pré-vendas.');
+    }
+  }
+
   async function qualify(lead: Lead) {
     setError('');
     setNotice('');
@@ -305,6 +324,7 @@ export default function Leads() {
             <button type="button" className="btn btn-secondary" onClick={() => void createTask(row)}><ClipboardCheck size={15}/>Tarefa</button>
             <button type="button" className="btn btn-secondary" onClick={() => void createDeal(row)}><BriefcaseBusiness size={15}/>Oportunidade</button>
             <button type="button" className="btn btn-primary" onClick={() => void qualify(row)}><CheckCircle2 size={15}/>Qualificar</button>
+            <button type="button" className="btn btn-secondary" title="Arquivar lead" aria-label={`Arquivar lead ${row.name}`} onClick={() => void archiveLead(row)}><Archive size={14} aria-hidden="true"/></button>
           </div>
         </article>) : <div className={styles.emptyState}>Nenhum lead encontrado com os filtros atuais.</div>}
       </section>
