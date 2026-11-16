@@ -468,6 +468,7 @@ export default function Atendimento() {
           {message.message_type === 'audio' && message.attachment_url && (
             <div className={styles.audioMessage}><Mic size={17}/><audio controls preload="metadata" src={message.attachment_url} /></div>
           )}
+          {message.message_type === 'audio' && !message.attachment_url && <small>Áudio indisponível</small>}
           {message.message_type === 'file' && message.attachment_url && (
             <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.fileMessage}>
               <span className={styles.fileIcon}><FileText size={20}/></span>
