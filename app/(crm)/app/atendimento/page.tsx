@@ -118,6 +118,7 @@ export default function Atendimento() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const [explicitlyOpened, setExplicitlyOpened] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   useEffect(() => {
     try {
@@ -350,7 +351,7 @@ export default function Atendimento() {
     : 0;
 
   useEffect(() => {
-    if (!activeId || !mobileChatOpen || !lastIncoming || !readState || readState.key !== readKey) return;
+    if (!activeId || explicitlyOpened !== activeId || !mobileChatOpen || !lastIncoming || !readState || readState.key !== readKey) return;
     const previous = readState.data.conversations[activeId] ?? readState.data.since;
     if (lastIncoming <= previous) return;
     const markRead = () => {
@@ -362,7 +363,7 @@ export default function Atendimento() {
     markRead();
     document.addEventListener('visibilitychange', markRead);
     return () => document.removeEventListener('visibilitychange', markRead);
-  }, [activeId, mobileChatOpen, lastIncoming, readKey, readState]);
+  }, [activeId, explicitlyOpened, mobileChatOpen, lastIncoming, readKey, readState]);
 
   function unreadCount(conversation: Conversation) {
     if (conversation.channel !== 'whatsapp' || !readState || readState.key !== readKey) return 0;
@@ -546,6 +547,7 @@ export default function Atendimento() {
     setItems(current => current.some(item => item.id === id)
       ? current.map(item => item.id === id ? conversation : item)
       : [conversation, ...current]);
+    setExplicitlyOpened(id);
     setSearch('');
     setTagFilter('');
     setChannelFilter('');
@@ -822,7 +824,7 @@ export default function Atendimento() {
             const last = conversation.messages?.[conversation.messages.length - 1];
             const unread = unreadCount(conversation);
             const timestamp = conversationActivity(conversation);
-            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setMobileChatOpen(true); }}>
+            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setExplicitlyOpened(conversation.id); setMobileChatOpen(true); }}>
               <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} className={styles.avatar}/>
               <span className={styles.conversationCopy}>
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{timestamp ? formatTime(new Date(timestamp).toISOString()) : ''}</small></span>
