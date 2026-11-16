@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { campaignBatchSize, campaignPhone } from '@/lib/campaign-audience';
 import { requirePermission } from '@/lib/auth/context';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getWhatsAppProvider } from '@/lib/server/whatsapp';
@@ -8,7 +9,7 @@ import { isReactivationTemplate } from '@/lib/server/reactivation';
 const columns = 'id,status,processing,cursor_pos,accepted,skipped,last_result,created_at';
 const create = z.object({
   id: z.string().uuid(), template_id: z.string().uuid(),
-  phones: z.array(z.string().regex(/^[1-9]\d{7,14}$/)).min(1).max(500),
+  phones: z.array(z.string().regex(/^[1-9]\d{7,14}$/)).min(1).max(campaignBatchSize),
   marketing_opt_in_confirmed: z.literal(true)
 });
 const change = z.object({ id: z.string().uuid(), action: z.enum(['pause', 'resume', 'cancel']) });
@@ -21,9 +22,56 @@ async function context() {
   return ctx;
 }
 
-export async function GET() {
+async function importedAudience(tenantId: string) {
+  const db = createAdminClient();
+  const files = new Map<string, { contacts: number; phones: Set<string> }>();
+  const numbers = new Set<string>();
+  const pageSize = 500;
+  let after: string | undefined;
+  for (;;) {
+    let query = db.from('contacts').select('id,phone,attribution')
+      .eq('tenant_id', tenantId).not('attribution->>import_file', 'is', null).order('id').limit(pageSize);
+    if (after) query = query.gt('id', after);
+    const { data, error } = await query;
+    if (error) throw error;
+    for (const contact of data ?? []) {
+      const file = contact.attribution?.import_file;
+      if (typeof file !== 'string' || !file.trim()) continue;
+      const group = files.get(file) ?? { contacts: 0, phones: new Set<string>() };
+      group.contacts++;
+      const phone = campaignPhone(contact.phone ?? '');
+      if (phone) {
+        group.phones.add(phone);
+        numbers.add(phone);
+      }
+      files.set(file, group);
+    }
+    if (!data || data.length < pageSize) break;
+    after = data[data.length - 1].id;
+  }
+  const eligible = new Set<string>();
+  const phones = [...numbers];
+  for (let start = 0; start < phones.length; start += campaignBatchSize) {
+    const { data, error } = await db.rpc('reactivation_audience', {
+      p_tenant: tenantId, p_phones: phones.slice(start, start + campaignBatchSize)
+    });
+    if (error) throw error;
+    for (const item of data ?? []) eligible.add(item.phone);
+  }
+  return [...files].map(([file, group]) => ({
+    file,
+    contacts: group.contacts,
+    phones: [...group.phones].filter(phone => eligible.has(phone))
+  })).sort((a, b) => a.file.localeCompare(b.file, 'pt-BR'));
+}
+
+export async function GET(request: Request) {
   try {
     const ctx = await context();
+    if (new URL(request.url).searchParams.get('audience') === 'imports') {
+      await requirePermission('contacts.view');
+      return NextResponse.json({ data: await importedAudience(ctx.tenantId) }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const { data, error } = await createAdminClient().from('whatsapp_reactivation_campaigns')
       .select(columns).eq('tenant_id', ctx.tenantId).order('created_at', { ascending: false }).limit(10);
     if (error) throw error;
