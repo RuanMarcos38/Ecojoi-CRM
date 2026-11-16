@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const { data: template, error: templateError } = await db.from('whatsapp_templates')
       .select('id,category,status,components').eq('tenant_id', ctx.tenantId).eq('id', payload.template_id).maybeSingle();
     if (templateError) throw templateError;
-    if (!isReactivationTemplate(template)) return NextResponse.json({ error: 'approved_template_required' }, { status: 409 });
+    if (!template || !isReactivationTemplate(template)) return NextResponse.json({ error: 'approved_template_required' }, { status: 409 });
 
     const { data: audience, error: audienceError } = await db.rpc('reactivation_audience', {
       p_tenant: ctx.tenantId, p_phones: [...new Set(payload.phones)]
