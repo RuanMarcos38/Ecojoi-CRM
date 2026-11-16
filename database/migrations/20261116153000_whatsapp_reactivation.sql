@@ -55,3 +55,11 @@ returns table(phone text) language sql stable security invoker set search_path =
 $$;
 revoke execute on function public.reactivation_audience(uuid,text[]) from public, anon, authenticated;
 grant execute on function public.reactivation_audience(uuid,text[]) to service_role;
+
+create table public.whatsapp_reactivation_heartbeat (
+  id boolean primary key check (id),
+  seen_at timestamptz not null
+);
+alter table public.whatsapp_reactivation_heartbeat enable row level security;
+revoke all on public.whatsapp_reactivation_heartbeat from anon, authenticated;
+grant select, insert, update on public.whatsapp_reactivation_heartbeat to service_role;
