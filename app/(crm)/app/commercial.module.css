@@ -463,3 +463,18 @@
   .sidePanel { position: static; max-height: none; }
   .cardGrid { max-height: none; }
 }
+
+.leadGrid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+}
+
+.leadGrid .recordCard {
+  padding: 14px;
+  grid-template-rows: auto auto 1fr;
+}
+
+.leadGrid .cardActions :global(.btn) {
+  font-size: 11px;
+  white-space: nowrap;
+}
