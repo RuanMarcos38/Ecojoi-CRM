@@ -171,8 +171,8 @@ export default function Pipeline() {
   }, [filteredDeals]);
 
   const selectedDeal = useMemo(() => {
-    return deals.find(deal => deal.id === selectedDealId) ?? filteredDeals[0] ?? null;
-  }, [deals, filteredDeals, selectedDealId]);
+    return deals.find(deal => deal.id === selectedDealId) ?? null;
+  }, [deals, selectedDealId]);
   const selectedRules = selectedDeal ? enabledByStage[selectedDeal.stage] ?? [] : [];
   const selectedElapsedMinutes = selectedDeal ? elapsedMinutes(selectedDeal.stage_changed_at) : 0;
   const selectedNextRule = selectedDeal ? selectedRules.find(rule => rule.wait_minutes > selectedElapsedMinutes) : undefined;
