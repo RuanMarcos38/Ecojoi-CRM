@@ -262,6 +262,26 @@ export async function sendWhatsAppTemplate(
   }
 }
 
+export const FOLLOW_UP_TEMPLATE_NAME = 'ecojoi_retorno_atendimento_5_dias';
+
+export async function submitFollowUpTemplate(tenantId: string) {
+  const wabaId = await wabaIdForTenant(tenantId);
+  if (!wabaId || !accessToken()) return null;
+  const language = 'pt_BR';
+  const filters = new URLSearchParams({ name: FOLLOW_UP_TEMPLATE_NAME, fields: 'id,name,language,category,status', limit: '50' });
+  const source = await graphRequest(wabaId + '/message_templates?' + filters, { signal: AbortSignal.timeout(10000) });
+  const existing = source.data?.find((item: any) => item.name === FOLLOW_UP_TEMPLATE_NAME && item.language === language);
+  if (existing) return { name: existing.name, status: existing.status ?? 'PENDING' };
+  const created = await graphRequest(wabaId + '/message_templates', {
+    method: 'POST', signal: AbortSignal.timeout(15000),
+    body: JSON.stringify({
+      name: FOLLOW_UP_TEMPLATE_NAME, language, category: 'MARKETING',
+      components: [{ type: 'BODY', text: 'Olá, tudo bem? Aqui é da equipe Ecojoi. Queria saber se você já encontrou o produto que procurava ou se ainda podemos ajudar. Se preferir encerrar o atendimento, tudo bem também. É só me avisar. Se não quiser receber novas mensagens, responda SAIR.' }]
+    })
+  });
+  return { name: FOLLOW_UP_TEMPLATE_NAME, status: created.status ?? 'PENDING' };
+}
+
 export async function syncWhatsAppTemplates(tenantId: string) {
   const wabaId = await wabaIdForTenant(tenantId);
   if (!wabaId || !accessToken()) return { configured: false, count: 0 };
