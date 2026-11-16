@@ -305,7 +305,7 @@ export default function Atendimento() {
     if (durationMs) form.append('duration_ms', String(durationMs));
     try {
       const r = await fetch(`/api/conversations/${active.id}/attachments`, { method: 'POST', body: form });
-      const d = await r.json();
+      const d = await r.json().catch(() => ({}));
       if (!r.ok) {
         const messages: Record<string, string> = {
           file_too_large: 'O arquivo deve ter no máximo 25 MB.',
@@ -314,11 +314,13 @@ export default function Atendimento() {
           whatsapp_window_closed: 'A janela de 24 horas terminou. Envie um template aprovado antes de anexar arquivos.'
         };
         if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
-        setError(messages[d.error] ?? 'Não foi possível enviar o arquivo.');
+        setError(r.status === 413 ? 'O servidor recusou o tamanho do arquivo. Envie um arquivo menor.' : messages[d.error] ?? 'Não foi possível enviar o arquivo.');
         return;
       }
       setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo enviado.');
-      await load();
+      await refreshConversations();
+    } catch {
+      setError('Falha de conexão ao enviar o arquivo. Confira a conversa antes de tentar novamente.');
     } finally {
       setSendingMedia(false);
       if (fileInput.current) fileInput.current.value = '';
@@ -336,27 +338,36 @@ export default function Atendimento() {
       setError('Seu navegador não permite gravação de áudio neste dispositivo.');
       return;
     }
+    const mp4 = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
+    if (active.channel === 'whatsapp' && !mp4) {
+      setError('Este navegador não grava no formato de áudio do WhatsApp. Anexe um arquivo MP3 ou M4A.');
+      return;
+    }
+    const preferredMime = active.channel === 'whatsapp' ? mp4 : 'audio/webm';
     try {
       setError('');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStream.current = stream;
-      const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported('audio/webm') ? { mimeType: 'audio/webm' } : undefined);
+      const recorder = new MediaRecorder(stream, preferredMime && MediaRecorder.isTypeSupported(preferredMime) ? { mimeType: preferredMime } : undefined);
       mediaRecorder.current = recorder;
       audioChunks.current = [];
       recorder.ondataavailable = event => { if (event.data.size) audioChunks.current.push(event.data); };
       recorder.onstop = async () => {
         const duration = Date.now() - recordStartedAt.current;
-        const mime = recorder.mimeType || 'audio/webm';
+        const mime = (recorder.mimeType || audioChunks.current[0]?.type || preferredMime || '').split(';', 1)[0];
+        const extension = mime === 'audio/mp4' ? 'm4a' : mime === 'audio/ogg' ? 'ogg' : 'webm';
         const blob = new Blob(audioChunks.current, { type: mime });
         stream.getTracks().forEach(track => track.stop());
         mediaStream.current = null;
         setRecording(false); setRecordSeconds(0);
-        if (blob.size) await sendFile(new File([blob], `audio-${Date.now()}.webm`, { type: mime }), duration);
+        if (blob.size) await sendFile(new File([blob], `audio-${Date.now()}.${extension}`, { type: mime }), duration);
       };
       recordStartedAt.current = Date.now();
       recorder.start(250);
       setRecording(true); setRecordSeconds(0);
     } catch {
+      mediaStream.current?.getTracks().forEach(track => track.stop());
+      mediaStream.current = null;
       setError('Não foi possível acessar o microfone. Verifique a permissão do navegador.');
     }
   }
