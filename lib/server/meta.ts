@@ -156,6 +156,18 @@ export async function sendWhatsAppText(tenantId: string, to: string | null | und
   }
 }
 
+export async function reactivationWhatsAppHealth(tenantId: string) {
+  const id = await phoneNumberIdForTenant(tenantId);
+  if (!id) return false;
+  const data = await graphRequest(id + '?fields=quality_rating', { signal: AbortSignal.timeout(10000) });
+  return data?.quality_rating === 'GREEN';
+}
+
+export async function liveReactivationTemplate(metaTemplateId: string) {
+  if (!/^\d+$/.test(metaTemplateId)) return null;
+  return graphRequest(metaTemplateId + '?fields=name,language,category,status,components', { signal: AbortSignal.timeout(10000) });
+}
+
 export async function sendWhatsAppReaction(tenantId: string, to: string | null | undefined, messageId: string, emoji: string) {
   const phoneNumberId = await phoneNumberIdForTenant(tenantId);
   const recipient = digits(to);
