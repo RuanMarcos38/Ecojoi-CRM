@@ -1291,3 +1291,9 @@
 .attendanceFilterFields select { width: 100%; min-width: 0; }
 .attendanceFilterSearch { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; }
 .attendanceFilterSearch input { min-width: 0; flex: 1; }
+
+.pastedAttachment { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; background: var(--eco-surface); border-top: 1px solid var(--line); }
+.pastedAttachment img { width: 44px; height: 44px; object-fit: contain; border-radius: 5px; }
+.pastedAttachment span { flex: 1; min-width: 90px; }
+.renameContact { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.renameContact input { flex-basis: 100%; min-width: 0; }
