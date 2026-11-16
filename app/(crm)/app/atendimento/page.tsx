@@ -13,6 +13,8 @@ import { createClient } from '@/lib/supabase/client';
 type AttendanceState = 'waiting' | 'in_service' | 'automatic';
 type Message = {
   id: string;
+  provider_message_id?: string | null;
+  whatsapp_reaction?: string | null;
   sender_user_id?: string | null;
   sender_name?: string | null;
   direction: string;
@@ -444,6 +446,40 @@ export default function Atendimento() {
     setText(reply.body);
   }
 
+  const [reactionPicker, setReactionPicker] = useState<string | null>(null);
+  const [sendingReaction, setSendingReaction] = useState(false);
+
+  async function reactToMessage(message: Message, emoji: string) {
+    if (!active || sendingReaction) return;
+    setSendingReaction(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/conversations/${active.id}/reactions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message_id: message.id, emoji })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        setError(result.error === 'reaction_expired'
+          ? 'O WhatsApp aceita reações em mensagens de até 30 dias.'
+          : result.error === 'provider_not_supported'
+            ? 'Reações estão disponíveis no canal oficial da Meta.'
+            : 'Não foi possível registrar a reação no WhatsApp.');
+        return;
+      }
+      setItems(current => current.map(conversation => conversation.id !== active.id ? conversation : {
+        ...conversation,
+        messages: conversation.messages?.map(item => item.id === message.id ? { ...item, whatsapp_reaction: result.reaction } : item)
+      }));
+      setReactionPicker(null);
+    } catch {
+      setError('Falha de conexão ao registrar a reação.');
+    } finally {
+      setSendingReaction(false);
+    }
+  }
+
   function renderMessage(message: Message) {
     const agentName = message.direction === 'outbound' && message.sender_user_id
       ? message.sender_name
@@ -477,6 +513,19 @@ export default function Atendimento() {
             </a>
           )}
           {body && !repeatsFileName && message.message_type !== 'audio' && <div className={styles.messageText}>{body}</div>}
+          <div className={styles.reactionBar}>
+            {message.whatsapp_reaction && <span aria-label="Reação enviada">{message.whatsapp_reaction}</span>}
+            {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id && <>
+              <button type="button" className={styles.reactButton} aria-label="Reagir à mensagem" aria-expanded={reactionPicker === message.id}
+                onClick={() => setReactionPicker(reactionPicker === message.id ? null : message.id)}><Smile size={14}/></button>
+              {reactionPicker === message.id && <div className={styles.reactionOptions} aria-label="Escolher reação">
+                {[['👍', 'Curtir'], ['❤️', 'Coração'], ['😂', 'Risada'], ['😊', 'Sorriso'], ['😮', 'Surpresa'], ['😢', 'Triste'], ['🙏', 'Agradecer']].map(([emoji, label]) => (
+                  <button type="button" key={emoji} aria-label={label} aria-pressed={message.whatsapp_reaction === emoji}
+                    disabled={sendingReaction} onClick={() => void reactToMessage(message, message.whatsapp_reaction === emoji ? '' : emoji)}>{emoji}</button>
+                ))}
+              </div>}
+            </>}
+          </div>
           <div className={styles.messageMeta}><span>{formatTime(message.created_at)}</span>{message.direction === 'outbound' && <><span>{message.status === 'queued' ? 'na fila' : ''}</span><CheckCheck size={14}/></>}</div>
         </div>
       </div>
