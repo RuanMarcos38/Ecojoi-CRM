@@ -58,6 +58,9 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
   const [templateId, setTemplateId] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const [followUpEnabled, setFollowUpEnabled] = useState(false);
+  const [followUpStatus, setFollowUpStatus] = useState('');
+  const [followUpBusy, setFollowUpBusy] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [saving, setSaving] = useState(false);
   const campaignId = useRef<string | null>(null);
@@ -78,9 +81,27 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
         const result = await response.json();
         setTemplates((result.data ?? []).filter((item: TemplateOption) => item.status === 'APPROVED' && item.category === 'MARKETING'));
       }).catch(() => {});
+    void fetch('/api/integrations/meta/follow-up-template', { cache: 'no-store' })
+      .then(async response => { if (response.ok) setFollowUpEnabled((await response.json()).configured); }).catch(() => {});
     const timer = window.setInterval(refresh, 15000);
     return () => window.clearInterval(timer);
   }, []);
+
+  async function configureFollowUp(disable = false) {
+    setFollowUpBusy(true);
+    setFollowUpStatus('');
+    try {
+      const response = await fetch('/api/integrations/meta/follow-up-template', { method: disable ? 'DELETE' : 'POST' });
+      const result = await response.json();
+      if (!response.ok) throw Error();
+      setFollowUpEnabled(result.configured === true);
+      setFollowUpStatus(disable ? 'Follow-up desativado.' : 'Modelo na Meta · ' + result.data.status);
+    } catch {
+      setFollowUpStatus('Não foi possível configurar o modelo na Meta. Confira a conta oficial e as permissões da integração.');
+    } finally {
+      setFollowUpBusy(false);
+    }
+  }
 
   async function mutate(action?: 'pause' | 'resume' | 'cancel', id?: string) {
     if (saving) return;
@@ -167,6 +188,15 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
       <p className={styles.sideHint}>{counts.excluded} excluídos pelo cadastro · {counts.unknown} fora do CRM · {duplicates} duplicados · {invalid} inválidos</p>
     </div>}
     {canManage && <>
+      <div className="field">
+        <strong>Follow-up automático após cinco dias</strong>
+        <small>{followUpEnabled ? 'Configurado. A fila exige aprovação da Meta e aceite no cadastro.' : 'Disponível para leads com WhatsApp em atendimento e aceite registrado.'}</small>
+        <button type="button" className="btn btn-secondary" disabled={followUpBusy} onClick={() => void configureFollowUp()}>
+          {followUpEnabled ? 'Consultar modelo na Meta' : 'Enviar modelo à Meta e habilitar após aprovação'}
+        </button>
+        {followUpEnabled && <button type="button" className="btn btn-secondary" disabled={followUpBusy} onClick={() => void configureFollowUp(true)}>Desativar follow-up</button>}
+        {followUpStatus && <p role="status">{followUpStatus}</p>}
+      </div>
       <div className="field">
         <label htmlFor="reactivation-template">Modelo aprovado pela Meta</label>
         <select id="reactivation-template" className="select" value={templateId}
