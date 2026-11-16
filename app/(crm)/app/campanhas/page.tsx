@@ -97,6 +97,7 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
       const result = await response.json();
       if (!response.ok) {
         const messages: Record<string, string> = {
+          worker_offline: 'O agendador de campanhas está indisponível. Nenhuma mensagem foi agendada.',
           approved_template_required: 'Escolha um modelo aprovado de marketing com texto fixo e instrução para responder SAIR.',
           no_eligible_contacts: 'Nenhum número da lista pode receber a campanha.',
           campaign_already_active: 'Já existe uma campanha em andamento ou pausada.',
