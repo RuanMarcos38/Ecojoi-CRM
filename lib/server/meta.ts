@@ -271,7 +271,9 @@ async function downloadMetaMedia(mediaId: string) {
   const bytes = new Uint8Array(await response.arrayBuffer());
   return {
     bytes,
-    mime: response.headers.get('content-type') || metadata.mime_type || 'application/octet-stream'
+    mime: [metadata.mime_type, response.headers.get('content-type')]
+      .map(value => String(value ?? '').split(';', 1)[0].trim().toLowerCase())
+      .find(value => value && value !== 'application/octet-stream') || 'application/octet-stream'
   };
 }
 
