@@ -24,6 +24,7 @@ type IngestLeadInput = {
     size?: number | null;
   } | null;
   createConversation?: boolean;
+  contactOnly?: boolean;
   preserveExisting?: boolean;
 };
 
@@ -151,11 +152,12 @@ export async function ingestLead(input: IngestLeadInput) {
   const computedScore = leadScore({ phone, email, source, channel, message: input.message, attribution: input.attribution });
   const computedTemperature = leadTemperature(computedScore);
   let isNewContact = false;
+  let promotedImport = false;
 
   if (contactId) {
     const { data: current, error: currentError } = await admin
       .from('contacts')
-      .select('id,name,email,phone,source,attribution,owner_id,lead_score')
+      .select('id,name,email,phone,source,status,attribution,owner_id,lead_score')
       .eq('tenant_id', input.tenantId)
       .eq('id', contactId)
       .single();
@@ -169,6 +171,8 @@ export async function ingestLead(input: IngestLeadInput) {
       ...(input.attribution ?? {})
     };
 
+    const shouldPromote = channel === 'whatsapp' && Boolean(input.providerMessageId)
+      && current.status === 'active' && mergedAttribution.waiting_for_whatsapp === true;
     const defaultWhatsAppName = /^(WhatsApp(?: \d{4})?|Contato WhatsApp)$/i.test(current.name?.trim() ?? '');
     const refreshedName = input.preserveExisting
       ? current.name
@@ -191,9 +195,18 @@ export async function ingestLead(input: IngestLeadInput) {
       .eq('tenant_id', input.tenantId)
       .eq('id', contactId);
     if (updateError) throw updateError;
+    if (shouldPromote) {
+      const attribution = { ...mergedAttribution };
+      delete attribution.waiting_for_whatsapp;
+      const { data: promoted, error } = await admin.from('contacts').update({ status: 'lead', attribution })
+        .eq('tenant_id', input.tenantId).eq('id', contactId).eq('status', 'active')
+        .contains('attribution', { waiting_for_whatsapp: true }).select('id').maybeSingle();
+      if (error) throw error;
+      promotedImport = Boolean(promoted);
+    }
   } else {
     isNewContact = true;
-    ownerId = await nextAssignee(admin, input.tenantId);
+    ownerId = input.contactOnly ? null : await nextAssignee(admin, input.tenantId);
     const { data: created, error: createError } = await admin
       .from('contacts')
       .insert({
@@ -202,8 +215,8 @@ export async function ingestLead(input: IngestLeadInput) {
         email,
         phone,
         source,
-        status: 'lead',
-        attribution: input.attribution ?? {},
+        status: input.contactOnly ? 'active' : 'lead',
+        attribution: { ...(input.attribution ?? {}), ...(input.contactOnly ? { waiting_for_whatsapp: true } : {}) },
         owner_id: ownerId,
         lead_score: computedScore,
         lead_temperature: computedTemperature
@@ -337,7 +350,7 @@ export async function ingestLead(input: IngestLeadInput) {
       .eq('id', conversationId);
   }
 
-  if (isNewContact) {
+  if ((isNewContact && !input.contactOnly) || promotedImport) {
     await admin
       .from('notifications')
       .insert({
@@ -345,7 +358,7 @@ export async function ingestLead(input: IngestLeadInput) {
         user_id: ownerId,
         type: 'lead_created',
         title: 'Novo lead recebido',
-        body: `${name} entrou por ${source}.`,
+        body: `${name} entrou por ${promotedImport ? 'WhatsApp' : source}.`,
         entity_type: 'contact',
         entity_id: contactId,
         priority: computedTemperature === 'hot' ? 'high' : 'normal'
