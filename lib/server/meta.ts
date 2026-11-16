@@ -156,6 +156,25 @@ export async function sendWhatsAppText(tenantId: string, to: string | null | und
   }
 }
 
+export async function sendWhatsAppReaction(tenantId: string, to: string | null | undefined, messageId: string, emoji: string) {
+  const phoneNumberId = await phoneNumberIdForTenant(tenantId);
+  const recipient = digits(to);
+  if (!phoneNumberId || !recipient || !accessToken()) return false;
+
+  try {
+    await graphRequest(`${phoneNumberId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        messaging_product: 'whatsapp', to: recipient, type: 'reaction',
+        reaction: { message_id: messageId, emoji }
+      })
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function sendWhatsAppMedia(
   tenantId: string,
   to: string | null | undefined,
@@ -342,6 +361,7 @@ async function processWhatsAppValue(value: any) {
   }
 
   for (const message of value?.messages ?? []) {
+    if (message.type === 'reaction') continue;
     if (!message?.id || !message?.from) continue;
     const fresh = await claimEvent(tenantId, message.id, 'whatsapp_message', { phone_number_id: phoneNumberId });
     if (!fresh) continue;
