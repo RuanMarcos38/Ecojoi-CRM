@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   Filter,
   Mail,
+  MessageCircle,
   Phone,
   Plus,
   Search,
@@ -70,7 +71,30 @@ function attributionLabel(lead: Lead) {
 
 export default function Leads() {
   const [rows, setRows] = useState<Lead[]>([]);
+  const [openingChat, setOpeningChat] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+
+  async function openWhatsApp(contactId: string) {
+    if (openingChat) return;
+    setOpeningChat(contactId);
+    setError('');
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ contact_id: contactId, channel: 'whatsapp' })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.error === 'phone_required' ? 'Cadastre um telefone no lead para abrir o WhatsApp.' : 'Não foi possível abrir o Atendimento.');
+        return;
+      }
+      window.location.assign('/app/atendimento?conversa=' + encodeURIComponent(payload.data.id));
+    } catch {
+      setError('Falha de conexão ao abrir o Atendimento.');
+    } finally {
+      setOpeningChat(null);
+    }
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -321,6 +345,7 @@ export default function Leads() {
           </div>
           {attributionLabel(row) && <p className={styles.recordNote}>{attributionLabel(row)}</p>}
                     <div className={styles.cardActions}>
+            <button type="button" className="btn btn-secondary" disabled={Boolean(openingChat)} onClick={() => void openWhatsApp(row.id)}><MessageCircle size={15}/>{openingChat === row.id ? 'Abrindo…' : 'Atendimento'}</button>
             <button type="button" className="btn btn-secondary" onClick={() => void createTask(row)}><ClipboardCheck size={15}/>Tarefa</button>
             <button type="button" className="btn btn-secondary" onClick={() => void createDeal(row)}><BriefcaseBusiness size={15}/>Oportunidade</button>
             <button type="button" className="btn btn-primary" onClick={() => void qualify(row)}><CheckCircle2 size={15}/>Qualificar</button>
