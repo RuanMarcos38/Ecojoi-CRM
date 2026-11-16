@@ -9,7 +9,7 @@ export async function GET(){
     const supabase=await createClient();
     const {data,error}=await supabase
       .from('profiles')
-      .select('id,full_name,role,active,availability_state,max_open_conversations,created_at,deleted_at')
+      .select('id,full_name,role,active,availability_state,receives_automatic_leads,max_open_conversations,created_at,deleted_at')
       .eq('tenant_id',ctx.tenantId)
       .order('full_name');
     if(error)throw error;
