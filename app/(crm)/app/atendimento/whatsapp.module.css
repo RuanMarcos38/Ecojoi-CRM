@@ -1297,3 +1297,7 @@
 .pastedAttachment span { flex: 1; min-width: 90px; }
 .renameContact { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .renameContact input { flex-basis: 100%; min-width: 0; }
+
+.conversationPreview { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.conversationPreview .lastMessage { flex: 1; min-width: 0; }
+.unreadBadge { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; min-width: 20px; min-height: 20px; box-sizing: border-box; padding: 0 5px; border-radius: 999px; background: #117746; color: #fff; font-size: 11px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
