@@ -507,7 +507,7 @@ async function processInboundMessage(instanceName: string, data: any) {
   const base64Value = data?.base64 || data?.data?.base64 || message?.base64 || null;
 
   if (base64Value && node && base.conversationId) {
-    const mime = String(node?.mimetype || 'application/octet-stream');
+    const mime = String(node?.mimetype || 'application/octet-stream').split(';', 1)[0].trim().toLowerCase();
     const fileName = String(node?.fileName || (type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'));
     try {
       attachment = await saveInboundBase64(tenantId, base.conversationId, String(base64Value), mime, fileName);

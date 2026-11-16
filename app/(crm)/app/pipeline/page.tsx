@@ -120,8 +120,7 @@ export default function Pipeline() {
   useEffect(() => { void load(); }, []);
 
   useEffect(() => {
-    if (selectedDealId && deals.some(deal => deal.id === selectedDealId)) return;
-    setSelectedDealId(deals[0]?.id ?? null);
+    if (selectedDealId && !deals.some(deal => deal.id === selectedDealId)) setSelectedDealId(null);
   }, [deals, selectedDealId]);
 
   const enabledByStage = useMemo(() => {
@@ -197,7 +196,7 @@ export default function Pipeline() {
   async function move(id: string, stage: string) {
     setError(''); setNotice('');
     const r = await fetch(`/api/deals/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ stage }) });
-    if (!r.ok) setError('Sem permissão para alterar esta oportunidade.');
+    if (!r.ok) setError(r.status === 403 ? 'Sem permissão para alterar esta oportunidade.' : 'Não foi possível salvar a etapa da oportunidade.');
     else setNotice(`Oportunidade movida para ${stageLabel[stage]}. O tempo da nova etapa foi reiniciado.`);
     await load();
   }
@@ -401,6 +400,10 @@ export default function Pipeline() {
             <label>Etapa atual</label>
             <select className="select" value={selectedDeal.stage} onChange={event => void move(selectedDeal.id, event.target.value)}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           </div>
+          {openStages.has(selectedDeal.stage) && <div className="inspector-stage-control">
+            <button type="button" className="btn btn-primary" onClick={() => void move(selectedDeal.id, 'won')}>Marcar como ganha</button>
+            <button type="button" className="btn btn-secondary" onClick={() => void move(selectedDeal.id, 'lost')}>Marcar como perdida</button>
+          </div>}
           <div className="inspector-rules">
             <div className="inspector-section-title"><Bot size={15}/><strong>Automações da etapa</strong></div>
             {selectedRules.length === 0 ? <p>Nenhuma automação ativa nesta etapa.</p> : selectedRules.map(rule => <div className="inspector-rule" key={rule.id}>
