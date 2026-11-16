@@ -9,6 +9,7 @@ create table public.whatsapp_reactivation_campaigns (
   skipped integer not null default 0,
   status text not null default 'queued' check (status in ('queued','paused','cancelled','completed')),
   processing boolean not null default false,
+  claimed_at timestamptz,
   next_at timestamptz not null default now(),
   last_result text,
   created_at timestamptz not null default now()
