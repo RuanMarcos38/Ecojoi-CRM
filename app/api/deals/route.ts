@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { stageKeyPattern } from '@/lib/pipelines';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { audit } from '@/lib/server/audit';
 
 const schema = z.object({
   title: z.string().min(2).max(180),
-  stage: z.enum(['new','qualification','proposal','closing','won','lost']).default('new'),
+  stage: z.string().regex(stageKeyPattern).default('new'),
   value: z.coerce.number().min(0).default(0),
   probability: z.coerce.number().int().min(0).max(100).default(10),
   contact_id: z.string().uuid().optional().nullable()
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
       owner_id: ctx.userId,
       stage_changed_at: now
     }).select().single();
+    if (error?.code === '23514') return NextResponse.json({ error: 'invalid_stage' }, { status: 400 });
     if (error) throw error;
     await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'deal.create', entity: 'deal', entityId: data.id, metadata: { stage: body.stage } });
     return NextResponse.json({ data }, { status: 201 });

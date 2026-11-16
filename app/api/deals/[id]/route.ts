@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { stageKeyPattern } from '@/lib/pipelines';
 import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { audit } from '@/lib/server/audit';
 
 const patch = z.object({
   title: z.string().min(2).max(180).optional(),
-  stage: z.enum(['new','qualification','proposal','closing','won','lost']).optional(),
+  stage: z.string().regex(stageKeyPattern).optional(),
   value: z.coerce.number().min(0).optional(),
   probability: z.coerce.number().int().min(0).max(100).optional()
 });
@@ -25,6 +26,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.stage && body.stage !== current.stage) changes.stage_changed_at = now;
 
     const { data, error } = await supabase.from('deals').update(changes).eq('id', id).eq('tenant_id', ctx.tenantId).select().maybeSingle();
+    if (error?.code === '23514') return NextResponse.json({ error: 'invalid_stage' }, { status: 400 });
     if (error) throw error;
     if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
     if(body.stage==='won'&&current.stage!=='won'){

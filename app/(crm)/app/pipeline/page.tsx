@@ -21,7 +21,9 @@ import {
   UserRound,
   X
 } from 'lucide-react';
+import PipelineRuleForm, { pipelineRulePayload } from '@/components/PipelineRuleForm';
 import styles from './pipeline.module.css';
+import { standardPipeline, type PipelineDefinition } from '@/lib/pipelines';
 
 type Deal = {
   id: string;
@@ -46,16 +48,9 @@ type Rule = {
   enabled: boolean;
 };
 
-const stages = [
-  ['new', 'Novo'],
-  ['qualification', 'Qualificação'],
-  ['proposal', 'Proposta'],
-  ['closing', 'Fechamento'],
-  ['won', 'Ganho'],
-  ['lost', 'Perdido']
-] as const;
-const stageLabel = Object.fromEntries(stages) as Record<string, string>;
-const openStages = new Set(['new', 'qualification', 'proposal', 'closing']);
+function isOpenStage(stage: string) {
+  return stage !== 'won' && stage !== 'lost';
+}
 const staleMinutes = 48 * 60;
 type FocusFilter = 'all' | 'stalled' | 'no-contact' | 'automation';
 
@@ -87,13 +82,13 @@ function compactCurrency(value: number) {
   return formatCurrency(amount);
 }
 function isStalled(deal: Deal) {
-  return openStages.has(deal.stage) && elapsedMinutes(deal.stage_changed_at) >= staleMinutes;
+  return isOpenStage(deal.stage) && elapsedMinutes(deal.stage_changed_at) >= staleMinutes;
 }
 
 export default function Pipeline() {
-  const [deals, setDeals] = useState<Deal[]>([]);
+  const [allDeals, setDeals] = useState<Deal[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
+  const [allRules, setRules] = useState<Rule[]>([]);
   const [open, setOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [newRuleOpen, setNewRuleOpen] = useState(false);
@@ -104,6 +99,48 @@ export default function Pipeline() {
   const [stageFilter, setStageFilter] = useState('all');
   const [focusFilter, setFocusFilter] = useState<FocusFilter>('all');
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+
+  const [pipelines, setPipelines] = useState<PipelineDefinition[]>([]);
+  const [pipelineId, setPipelineId] = useState(standardPipeline.id);
+  const [pipelineFormOpen, setPipelineFormOpen] = useState(false);
+  const [savingPipeline, setSavingPipeline] = useState(false);
+  const [stageNames, setStageNames] = useState(['']);
+  const pipeline = pipelines.find(item => item.id === pipelineId) ?? standardPipeline;
+  const stages = useMemo(() => pipeline.stages.map(({ id, name }) => [id, name] as const), [pipeline]);
+  const stageLabel = useMemo(() => Object.fromEntries(stages) as Record<string, string>, [stages]);
+  const deals = useMemo(() => allDeals.filter(deal => Object.hasOwn(stageLabel, deal.stage)), [allDeals, stageLabel]);
+  const rules = useMemo(() => allRules.filter(rule => Object.hasOwn(stageLabel, rule.stage)), [allRules, stageLabel]);
+
+  function changePipeline(id: string) {
+    setPipelineId(id);
+    setStageFilter('all');
+    setSelectedDealId(null);
+  }
+
+  async function createPipeline(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = new FormData(event.currentTarget).get('name');
+    setSavingPipeline(true);
+    setError('');
+    try {
+      const response = await fetch('/api/pipelines', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, stages: stageNames })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Não foi possível criar o funil.');
+      setPipelines(current => [...current, result.data]);
+      changePipeline(result.data.id);
+      setStageNames(['']);
+      setPipelineFormOpen(false);
+      setNotice('Funil criado.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Não foi possível criar o funil.');
+    } finally {
+      setSavingPipeline(false);
+    }
+  }
 
   async function load() {
     const [dr, cr, rr] = await Promise.all([
@@ -119,6 +156,10 @@ export default function Pipeline() {
   }
   useEffect(() => {
     void load();
+    void fetch('/api/pipelines', { cache: 'no-store' }).then(async response => {
+      if (!response.ok) return;
+      setPipelines((await response.json()).data ?? []);
+    }).catch(() => {});
     async function refreshDeals() {
       if (document.visibilityState !== 'visible') return;
       const response = await fetch('/api/deals', { cache: 'no-store' });
@@ -145,7 +186,7 @@ export default function Pipeline() {
   }, [rules]);
 
   const summary = useMemo(() => {
-    const activeDeals = deals.filter(deal => openStages.has(deal.stage));
+    const activeDeals = deals.filter(deal => isOpenStage(deal.stage));
     const activeValue = activeDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0);
     const weightedValue = activeDeals.reduce((sum, deal) => sum + (Number(deal.value || 0) * Number(deal.probability || 0)) / 100, 0);
     const averageProbability = activeDeals.length
@@ -182,7 +223,7 @@ export default function Pipeline() {
     const map = Object.fromEntries(stages.map(([stage]) => [stage, [] as Deal[]])) as Record<string, Deal[]>;
     for (const deal of filteredDeals) (map[deal.stage] ??= []).push(deal);
     return map;
-  }, [filteredDeals]);
+  }, [filteredDeals, stages]);
 
   const selectedDeal = useMemo(() => {
     return deals.find(deal => deal.id === selectedDealId) ?? null;
@@ -246,14 +287,7 @@ export default function Pipeline() {
 
   async function createRule(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError(''); setNotice('');
-    const fd = new FormData(e.currentTarget);
-    const value = Math.max(1, Number(fd.get('wait_value') ?? 1));
-    const unit = String(fd.get('wait_unit') ?? 'days');
-    const waitMinutes = unit === 'minutes' ? value : unit === 'hours' ? value * 60 : value * 1440;
-    const payload = {
-      name: fd.get('name'), stage: fd.get('stage'), channel: fd.get('channel'),
-      wait_minutes: waitMinutes, message_template: fd.get('message_template'), enabled: true
-    };
+    const payload = pipelineRulePayload(e.currentTarget);
     const r = await fetch('/api/pipeline-rules', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
     if (r.ok) { setNewRuleOpen(false); setNotice('Automação criada. A verificação ocorre automaticamente a cada 5 minutos.'); await load(); }
     else setError('Não foi possível criar a automação. Verifique sua permissão.');
@@ -282,11 +316,47 @@ export default function Pipeline() {
     <div className="page-head">
       <div><h1 className="page-title">Pipeline Comercial</h1><p className="page-sub">Gestão de oportunidades, ritmo de follow-up e previsão comercial da operação.</p></div>
       <div className="page-actions">
+        <button type="button" className="btn btn-secondary" onClick={() => setPipelineFormOpen(value => !value)}><Plus size={17}/>Criar funil</button>
         <button type="button" className="btn btn-secondary" onClick={() => setRulesOpen(value => !value)}><Settings2 size={17}/>Automações</button>
         <button type="button" className="btn btn-primary" onClick={() => setOpen(value => !value)}>{open ? <X size={17}/> : <Plus size={17}/>}Nova oportunidade</button>
       </div>
     </div>
 
+    <div className="field">
+      <label htmlFor="commercial-pipeline">Funil</label>
+      <select id="commercial-pipeline" className="select" value={pipeline.id} onChange={event => changePipeline(event.target.value)}>
+        {[standardPipeline, ...pipelines].map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select>
+    </div>
+    {pipelineFormOpen && <form className="card section" onSubmit={createPipeline}>
+      <h2>Novo funil</h2>
+      <div className="field"><label htmlFor="custom-pipeline-name">Nome do funil</label>
+        <input id="custom-pipeline-name" className="input" name="name" minLength={2} maxLength={100} required disabled={savingPipeline}/>
+      </div>
+      {stageNames.map((name, index) => <div className="field" key={index}>
+        <label htmlFor={`custom-stage-${index}`}>Etapa {index + 1}</label>
+        <div className="page-actions">
+          <input className="input" id={`custom-stage-${index}`} value={name} maxLength={80} required disabled={savingPipeline}
+            onChange={event => setStageNames(current => current.map((value, position) => position === index ? event.target.value : value))}/>
+          {[-1, 1].map(direction => <button className="btn btn-secondary" type="button" key={direction}
+            disabled={savingPipeline || index + direction < 0 || index + direction >= stageNames.length}
+            aria-label={`Mover etapa ${index + 1} para ${direction < 0 ? 'cima' : 'baixo'}`}
+            onClick={() => setStageNames(current => {
+              const next = [...current];
+              [next[index], next[index + direction]] = [next[index + direction], next[index]];
+              return next;
+            })}>{direction < 0 ? '↑' : '↓'}</button>)}
+          <button className="btn btn-secondary" type="button" disabled={savingPipeline || stageNames.length === 1}
+            aria-label={`Remover etapa ${index + 1}`}
+            onClick={() => setStageNames(current => current.filter((_, position) => position !== index))}><Trash2 size={15}/></button>
+        </div>
+      </div>)}
+      <div className="page-actions">
+        <button className="btn btn-secondary" type="button" disabled={savingPipeline || stageNames.length >= 30}
+          onClick={() => setStageNames(current => [...current, ''])}>Adicionar etapa</button>
+        <button className="btn btn-primary" type="submit" disabled={savingPipeline}>{savingPipeline ? 'Salvando…' : 'Salvar funil'}</button>
+      </div>
+    </form>}
     <section className="pipeline-summary-grid" aria-label="Resumo do pipeline">
       <article className="pipeline-summary-card">
         <div className="summary-icon green"><CircleDollarSign size={18}/></div>
@@ -346,7 +416,7 @@ export default function Pipeline() {
         <div className="field"><label>Título</label><input className="input" name="title" required placeholder="Ex.: Proposta Ecojoi"/></div>
         <div className="field"><label>Contato</label><select className="select" name="contact_id" defaultValue=""><option value="">Sem contato vinculado</option>{contacts.map(contact => <option key={contact.id} value={contact.id}>{contact.name}</option>)}</select></div>
         <div className="field"><label>Valor</label><input className="input" name="value" type="number" min="0" step="0.01" defaultValue="0"/></div>
-        <div className="field"><label>Etapa</label><select className="select" name="stage">{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
+        <div className="field"><label>Etapa</label><select key={pipeline.id} className="select" name="stage">{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
         <div className="field"><label>Probabilidade (%)</label><input className="input" name="probability" type="number" min="0" max="100" defaultValue="10"/></div>
       </div>
       <button className="btn btn-primary">Salvar oportunidade</button>
@@ -358,17 +428,7 @@ export default function Pipeline() {
         {rulesAllowed && <button type="button" className="btn btn-primary" onClick={() => setNewRuleOpen(value => !value)}><Plus size={16}/>Nova automação</button>}
       </div>
       {!rulesAllowed ? <div className="empty">Seu perfil pode visualizar o pipeline, mas não gerenciar automações.</div> : <>
-        {newRuleOpen && <form className="automation-rule-form" onSubmit={createRule}>
-          <div className="form-grid pipeline-form-grid">
-            <div className="field"><label>Nome da automação</label><input className="input" name="name" required placeholder="Follow-up da proposta"/></div>
-            <div className="field"><label>Etapa</label><select className="select" name="stage">{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>
-            <div className="field"><label>Esperar</label><div className="time-rule"><input className="input" name="wait_value" type="number" min="1" defaultValue="2"/><select className="select" name="wait_unit" defaultValue="days"><option value="minutes">Minutos</option><option value="hours">Horas</option><option value="days">Dias</option></select></div></div>
-            <div className="field"><label>Canal</label><select className="select" name="channel" defaultValue="internal"><option value="internal">Interno</option><option value="whatsapp">WhatsApp</option><option value="email">E-mail</option></select></div>
-          </div>
-          <div className="field"><label>Mensagem</label><textarea className="textarea" name="message_template" rows={3} required defaultValue="Olá {{nome}}, passando para acompanhar a oportunidade {{oportunidade}}. Posso te ajudar com alguma informação?"/></div>
-          <div className="template-help">Variáveis disponíveis: <code>{'{{nome}}'}</code> <code>{'{{oportunidade}}'}</code> <code>{'{{etapa}}'}</code></div>
-          <button className="btn btn-primary">Salvar automação</button>
-        </form>}
+        {newRuleOpen && <PipelineRuleForm key={pipeline.id} stages={stages} onSubmit={createRule}/>}
         <div className="automation-rule-list">
           {rules.length === 0 ? <div className="empty">Nenhuma automação configurada.</div> : rules.map(rule => <article key={rule.id} className={`automation-rule ${rule.enabled ? '' : 'automation-rule-off'}`}>
             <div className="automation-rule-icon"><Bot size={18}/></div>
@@ -465,7 +525,7 @@ export default function Pipeline() {
             <label>Etapa atual</label>
             <select className="select" value={selectedDeal.stage} onChange={event => void move(selectedDeal.id, event.target.value)}>{stages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           </div>
-          {openStages.has(selectedDeal.stage) && <div className="inspector-stage-control">
+          {pipeline.id === standardPipeline.id && isOpenStage(selectedDeal.stage) && <div className="inspector-stage-control">
             <button type="button" className="btn btn-primary" onClick={() => void move(selectedDeal.id, 'won')}>Marcar como ganha</button>
             <button type="button" className="btn btn-secondary" onClick={() => void move(selectedDeal.id, 'lost')}>Marcar como perdida</button>
           </div>}
