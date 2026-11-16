@@ -48,7 +48,7 @@ function acquisitionSource(contact?: Contact | null) {
   if (/^google(?:\b|\.)/i.test(candidate) || /^https?:\/\/([\w-]+\.)?google\.[a-z.]+(?:\/|$)/i.test(referrer)) return 'Google';
   if (candidate && !/^(whatsapp|interno|email|e-mail)$/i.test(candidate)) return candidate;
   if (attrs.landing_page || /^(site|website|formulário)$/i.test(source)) return 'Site';
-  return 'Origem não identificada';
+  return '';
 }
 
 type Assignee = { id: string; full_name: string };
@@ -139,8 +139,13 @@ export default function Atendimento() {
   const audioChunks = useRef<Blob[]>([]);
   const recordStartedAt = useRef<number>(0);
 
-  async function load(silent = false) {
-    if (!silent) setLoading(true);
+  async function refreshConversations() {
+    const response = await fetch('/api/conversations', { cache: 'no-store' });
+    if (response.ok) setItems((await response.json()).data ?? []);
+  }
+
+  async function load() {
+    setLoading(true);
     const [cr, ct, mr, qr, tr] = await Promise.all([
       fetch('/api/conversations', { cache: 'no-store' }),
       fetch('/api/contacts', { cache: 'no-store' }),
@@ -158,7 +163,7 @@ export default function Atendimento() {
     if (mr.ok) setMe(md?.data ?? null);
     if (qr.ok) setQuickReplies(qd?.data ?? []);
     if (tr.ok) setTemplates(templatesData?.data ?? []);
-    if (!silent) setLoading(false);
+    setLoading(false);
   }
 
   useEffect(() => { void load(); }, []);
@@ -169,7 +174,7 @@ export default function Atendimento() {
     let refreshTimer: number | null = null;
     const refresh = () => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => void load(true), 180);
+      refreshTimer = window.setTimeout(() => void refreshConversations().catch(() => {}), 180);
     };
 
     const channel = supabase
@@ -178,7 +183,7 @@ export default function Atendimento() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${me.tenantId}` }, refresh)
       .subscribe();
 
-    const fallback = window.setInterval(() => void load(true), 30000);
+    const fallback = window.setInterval(() => void refreshConversations().catch(() => {}), 30000);
     return () => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
       window.clearInterval(fallback);
@@ -212,7 +217,8 @@ export default function Atendimento() {
         if (tag) tags.set(tag.id, tag.name);
       }
       channels.add(item.channel);
-      origins.add(acquisitionSource(item.contact));
+      const origin = acquisitionSource(item.contact);
+      if (origin) origins.add(origin);
     }
     const byLabel = (a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], 'pt-BR');
     return { attendants: [...attendants].sort(byLabel), tags: [...tags].sort(byLabel), channels: [...channels].sort(), origins: [...origins].sort() };
@@ -502,7 +508,7 @@ export default function Atendimento() {
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{conversation.updated_at ? formatTime(conversation.updated_at) : ''}</small></span>
                 <span className={styles.lastMessage}>{last?.message_type === 'audio' ? '🎙️ Mensagem de voz' : last?.message_type === 'file' ? `📎 ${last.attachment_name ?? 'Arquivo'}` : last?.body ?? 'Sem mensagens'}</span>
                 <span className={styles.conversationMeta}>
-                  <i>{channelName(conversation.channel)}</i><span title={acquisitionSource(conversation.contact)}>{acquisitionSource(conversation.contact)}</span>
+                  <i>{channelName(conversation.channel)}</i>{acquisitionSource(conversation.contact) && <span title={acquisitionSource(conversation.contact)}>{acquisitionSource(conversation.contact)}</span>}
                 </span>
               </span>
             </button>;
@@ -592,7 +598,7 @@ export default function Atendimento() {
           </div>
 
           <hr/><b>Canal</b><p className={styles.channelLabel}>{channelName(active.channel)}</p>
-          <hr/><b>Origem</b><p className={styles.channelLabel}>{acquisitionSource(active.contact)}</p>
+          {acquisitionSource(active.contact) && <><hr/><b>Origem</b><p className={styles.channelLabel}>{acquisitionSource(active.contact)}</p></>}
         </>}
       </aside>
     </div>
