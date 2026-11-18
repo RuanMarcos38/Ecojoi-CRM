@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Upload, X } from 'lucide-react';
 import { importFields, type ImportMapping, parseImportRow } from '@/lib/contact-import';
 const labels={name:'Nome',phone:'Telefone / WhatsApp',email:'E-mail',source:'Origem',agent:'Atendente na Suri',status:'Situação na Suri',notes:'Observações'};
@@ -8,6 +8,10 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
   const [open,setOpen]=useState(false),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState<Preview|null>(null);
   const [mapping,setMapping]=useState<ImportMapping>({}),[source,setSource]=useState('Suri');
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const running = useRef(false);
+  const stopRequested = useRef(false);
+  const [importing, setImporting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [failures,setFailures]=useState<Array<{row:number;error:string}>>([]);
   function formFor(f:File){const form=new FormData();form.append('file',f);form.append('source',source);return form;}
   async function previewFile(f:File){
@@ -16,21 +20,41 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
     catch(e){setError(e instanceof Error?e.message:'Falha ao ler arquivo.');}finally{setBusy(false);}
   }
   async function run(){
-    if(!file||!preview)return;setBusy(true);setError('');setFailures([]);
+    if(!file || !preview || running.current || busy)return;
+    running.current = true;
+    stopRequested.current = false;
+    setImporting(true);
+    setBusy(true);
+    setError('');
+    setNotice('');
+    setFailures([]);
     let offset=0,processed=0,failed=0;
     const errors:Array<{row:number;error:string}>=[];
     try{
-      while(offset<preview.total){
+      while(offset<preview.total && !stopRequested.current){
         const form=formFor(file);form.append('mapping',JSON.stringify(mapping));form.append('offset',String(offset));form.append('contact_only','true');
         const r=await fetch('/api/contacts/import',{method:'POST',body:form});const d=await r.json();if(!r.ok)throw new Error(d.error||'Lote interrompido.');
         if(d.data.nextOffset<=offset)throw new Error('O lote não avançou.');
         offset=d.data.nextOffset;processed+=d.data.processed;failed+=d.data.failed;errors.push(...d.data.errors);
         setNotice(`${offset} de ${preview.total} linhas: ${processed} processadas, ${failed} com erro.`);setFailures([...errors]);
       }
-      setNotice(`Importação concluída: ${processed} linhas processadas e ${failed} com erro. Nenhuma mensagem foi enviada.`);
+      if(offset < preview.total){
+        setNotice(`Importação interrompida na linha ${offset} de ${preview.total}. As ${processed} linhas processadas foram mantidas.`);
+      }else{
+        setNotice(`Importação concluída: ${processed} linhas processadas e ${failed} com erro. Nenhuma mensagem foi enviada.`);
+        if(failed === 0){
+          setFile(null);
+          setPreview(null);
+        }
+      }
       await onComplete();
     }catch(e){setError(`${e instanceof Error?e.message:'Falha na importação.'} ${processed} linhas já foram processadas. É possível reenviar a planilha; contatos são localizados por telefone ou e-mail.`);}
-    finally{setBusy(false);}
+    finally{
+      running.current = false;
+      setImporting(false);
+      setStopping(false);
+      setBusy(false);
+    }
   }
   return <>
     <button type="button" className="btn btn-secondary" onClick={()=>setOpen(true)}><Upload size={15}/>Importar / Suri</button>
@@ -39,7 +63,7 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
         <div className="page-head"><h2>Importar contatos da Suri</h2><button className="btn btn-secondary" disabled={busy} onClick={()=>setOpen(false)} aria-label="Fechar importação"><X size={18}/></button></div>
         <p>Selecione a exportação CSV ou Excel da Suri (até 8 MB). Confira as colunas antes de importar. Cadastros existentes mantêm nome e responsável; telefone ou e-mail identificam contatos repetidos.</p>
         <p>O histórico de mensagens e arquivos da Suri não é importado por esta planilha. Atendente, situação e observações ficam registrados como dados de origem.</p>
-        <label>Arquivo CSV / Excel<input aria-label="Arquivo CSV / Excel" className="input" type="file" accept=".csv,.xlsx,.xls" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void previewFile(f);}}/></label>
+        <label>Arquivo CSV / Excel<input key={file ? 'selected-file' : 'empty-file'} aria-label="Arquivo CSV / Excel" className="input" type="file" accept=".csv,.xlsx,.xls" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void previewFile(f);}}/></label>
         <label>Origem<input className="input" value={source} disabled={busy} onChange={e=>setSource(e.target.value)}/></label>
         <p>Os novos contatos ficam no cadastro. A primeira mensagem recebida pelo WhatsApp inicia o atendimento e pode gerar a oportunidade.</p>
         {preview&&<>
@@ -48,6 +72,7 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
           <h3>Prévia das primeiras linhas</h3><div className="table-wrap"><table className="table"><thead><tr><th>Nome</th><th>Telefone</th><th>E-mail</th><th>Conferência</th></tr></thead><tbody>{preview.sample.map((r,i)=>{const p=parseImportRow(r,mapping,source);return <tr key={i}><td>{p.name}</td><td>{p.phone}</td><td>{p.email}</td><td>{p.error||'Pronto para importar'}</td></tr>;})}</tbody></table></div>
           <button className="btn btn-primary" disabled={busy||!mapping.name||(!mapping.phone&&!mapping.email)||!preview.total} onClick={()=>void run()}>{busy?'Processando...':'Confirmar importação'}</button>
         </>}
+        {importing&&<button type="button" className="btn btn-secondary" disabled={stopping} onClick={()=>{stopRequested.current = true;setStopping(true);}}>{stopping?'Finalizando o lote atual…':'Interromper importação'}</button>}
         {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="success">{notice}</p>}
         {failures.length>0&&<details><summary>{failures.length} linhas para corrigir</summary><ul>{failures.map(e=><li key={e.row}>Linha {e.row}: {e.error}</li>)}</ul></details>}
       </section>
