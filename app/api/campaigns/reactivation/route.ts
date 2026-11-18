@@ -61,6 +61,8 @@ async function importedAudience(tenantId: string) {
   return [...files].map(([file, group]) => ({
     file,
     contacts: group.contacts,
+    total_phones: group.phones.size,
+    eligible_phones: [...group.phones].filter(phone => eligible.has(phone)).length,
     phones: [...group.phones].filter(phone => eligible.has(phone))
   })).sort((a, b) => a.file.localeCompare(b.file, 'pt-BR'));
 }
