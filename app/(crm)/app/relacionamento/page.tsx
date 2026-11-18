@@ -110,7 +110,8 @@ export default function Relacionamento(){
 
   async function createPlaybook(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setError('');setNotice('');
-    const fd=new FormData(e.currentTarget);
+    const form=e.currentTarget;
+    const fd=new FormData(form);
     const lines=String(fd.get('questions')??'').split('\n').map(v=>v.trim()).filter(Boolean);
     const questions=lines.map((label,index)=>({
       field_key:'q_'+(index+1),
@@ -120,17 +121,21 @@ export default function Relacionamento(){
       options:[],
       sort_order:index
     }));
-    const response=await fetch('/api/playbooks',{
-      method:'POST',headers:{'content-type':'application/json'},
-      body:JSON.stringify({
-        name:String(fd.get('name')??'').trim(),
-        description:String(fd.get('description')??'').trim()||null,
-        entity_type:String(fd.get('entity_type')??'deal'),
-        questions
-      })
-    });
-    if(response.ok){e.currentTarget.reset();setNotice('Playbook criado.');await load();}
-    else setError('Não foi possível criar o playbook.');
+    if (!questions.length) { setError('Inclua pelo menos uma pergunta.'); return; }
+    try {
+      const response=await fetch('/api/playbooks',{
+        method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({
+          name:String(fd.get('name')??'').trim(),
+          description:String(fd.get('description')??'').trim()||null,
+          entity_type:String(fd.get('entity_type')??'deal'),
+          questions
+        })
+      });
+      const payload=await response.json().catch(()=>({}));
+      if(response.ok){form.reset();setNotice('Playbook criado.');await load();}
+      else setError(response.status===403?'Sem permissão para criar playbooks.':payload.error==='invalid_payload'?'Confira o nome e as perguntas do playbook.':'Não foi possível criar o playbook. Verifique as configurações do módulo.');
+    } catch { setError('Falha de conexão ao criar o playbook.'); }
   }
 
   async function runPlaybook(e:FormEvent<HTMLFormElement>,playbook:Playbook){

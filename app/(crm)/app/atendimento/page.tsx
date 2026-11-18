@@ -163,6 +163,14 @@ export default function Atendimento() {
   const pinnedConversation = useRef<string | null>(null);
   const [changingState, setChangingState] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<{ conversationId: string; file: File } | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState('');
+  useEffect(() => {
+    if (!pendingAttachment?.file.type.startsWith('image/')) { setAttachmentPreview(''); return; }
+    const url = URL.createObjectURL(pendingAttachment.file);
+    setAttachmentPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingAttachment]);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -293,6 +301,7 @@ export default function Atendimento() {
   const [tagFilter, setTagFilter] = useState('');
   const [registeredTags, setRegisteredTags] = useState<{ id: string; name: string }[]>([]);
   const [oldestFirst, setOldestFirst] = useState(false);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void fetch('/api/tags', { cache: 'no-store' }).then(async response => {
@@ -326,6 +335,7 @@ export default function Atendimento() {
     const needle = search.trim().toLowerCase();
     return items.filter(item => {
       if ((item.attendance_state ?? 'waiting') !== queue) return false;
+      if (unreadOnly && unreadCount(item) === 0) return false;
       if (attendantFilter && (attendantFilter === 'unassigned' ? Boolean(item.assigned_to) : item.assigned_to !== attendantFilter)) return false;
       if (tagFilter && !item.contact?.contact_tags?.some(({ tag }) => tag?.id === tagFilter)) return false;
       if (channelFilter && item.channel !== channelFilter) return false;
@@ -337,7 +347,7 @@ export default function Atendimento() {
       const comparison = conversationActivity(a) - conversationActivity(b);
       return oldestFirst ? comparison : -comparison;
     });
-  }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst]);
+  }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
   useEffect(() => {
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
@@ -505,9 +515,15 @@ export default function Atendimento() {
     }
   }
 
-  async function onFileChange(e: ChangeEvent<HTMLInputElement>) {
+  function onFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) await sendFile(file);
+    if (file && active) setPendingAttachment({ conversationId: active.id, file });
+    e.target.value = '';
+  }
+
+  async function confirmAttachment() {
+    if (!pendingAttachment || pendingAttachment.conversationId !== active?.id) return;
+    if (await sendFile(pendingAttachment.file)) setPendingAttachment(current => current === pendingAttachment ? null : current);
   }
 
   async function startRecording() {
@@ -846,15 +862,16 @@ export default function Atendimento() {
         )}
         {openingError && <div className={styles.errorBar} role="alert">{openingError}</div>}
         <details className={styles.attendanceFilters}>
-          <summary>Filtros de atendimento{(search || tagFilter || channelFilter || attendantFilter || originFilter || oldestFirst) && <span> · Ativos</span>}</summary>
+          <summary>Filtros de atendimento{(search || tagFilter || channelFilter || attendantFilter || originFilter || oldestFirst || unreadOnly) && <span> · Ativos</span>}</summary>
           <div className={styles.attendanceFilterFields}>
             <label className={styles.attendanceFilterSearch}><Search size={16}/><input className="input" aria-label="Nome, telefone ou mensagem" value={search} onChange={e => setSearch(e.target.value)} placeholder="Nome, telefone ou mensagem" /></label>
+            <label style={{display:'flex',alignItems:'center',gap:8}}><input type="checkbox" checked={unreadOnly} onChange={event => setUnreadOnly(event.target.checked)}/> Somente não lidas</label>
             <select className="select" aria-label="Atendente" value={attendantFilter} onChange={event => setAttendantFilter(event.target.value)}><option value="">Todos atendentes</option><option value="unassigned">Sem atendente</option>{filterOptions.attendants.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
             <select className="select" aria-label="Tag" value={tagFilter} onChange={event => setTagFilter(event.target.value)}><option value="">Todas tags</option>{filterOptions.tags.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
             <select className="select" aria-label="Canal" value={channelFilter} onChange={event => setChannelFilter(event.target.value)}><option value="">Todos canais</option>{filterOptions.channels.map(channel => <option key={channel} value={channel}>{channelName(channel)}</option>)}</select>
             <select className="select" aria-label="Origem" value={originFilter} onChange={event => setOriginFilter(event.target.value)}><option value="">Todas origens</option>{filterOptions.origins.map(origin => <option key={origin}>{origin}</option>)}</select>
             <select className="select" aria-label="Ordem por última atividade" value={oldestFirst ? 'oldest' : 'recent'} onChange={e => setOldestFirst(e.target.value === 'oldest')}><option value="recent">Mais recentes</option><option value="oldest">Mais antigas</option></select>
-            <button className="btn btn-secondary" type="button" disabled={!search && !attendantFilter && !tagFilter && !channelFilter && !originFilter && !oldestFirst} onClick={() => { setSearch(''); setAttendantFilter(''); setTagFilter(''); setChannelFilter(''); setOriginFilter(''); setOldestFirst(false); }}>Limpar filtros</button>
+            <button className="btn btn-secondary" type="button" disabled={!search && !attendantFilter && !tagFilter && !channelFilter && !originFilter && !oldestFirst && !unreadOnly} onClick={() => { setSearch(''); setAttendantFilter(''); setTagFilter(''); setChannelFilter(''); setOriginFilter(''); setOldestFirst(false); setUnreadOnly(false); }}>Limpar filtros</button>
           </div>
         </details>
         <div className={styles.queueTabs} role="tablist">
@@ -909,6 +926,12 @@ export default function Atendimento() {
               <span>Imagem colada</span>
               <button type="button" className="btn btn-secondary" disabled={sendingMedia} onClick={() => setPastedImage(null)}>Remover</button>
               <button type="button" className="btn btn-primary" disabled={sendingMedia || recording} onClick={() => void sendPastedImage()}>Enviar imagem</button>
+            </div>}
+            {pendingAttachment?.conversationId === active.id && <div className={styles.pastedAttachment} role="group" aria-label="Confirmar anexo antes do envio">
+              {attachmentPreview && <img src={attachmentPreview} alt="Prévia do arquivo selecionado"/>}
+              <span>{pendingAttachment.file.name} · {formatSize(pendingAttachment.file.size)}</span>
+              <button type="button" className="btn btn-secondary" disabled={sendingMedia} onClick={() => setPendingAttachment(null)}>Cancelar anexo</button>
+              <button type="button" className="btn btn-primary" disabled={sendingMedia || recording} onClick={() => void confirmAttachment()}>{sendingMedia ? 'Enviando…' : 'Confirmar envio'}</button>
             </div>}
             <form className={styles.composer} onSubmit={send}>
               {replyTarget && <div className={styles.replyPreview} aria-label="Mensagem a que você está respondendo">
