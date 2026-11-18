@@ -4,14 +4,15 @@ import { createClient } from '@/lib/supabase/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
-import { canSendFreeformWhatsApp, sendWhatsAppMedia } from '@/lib/server/whatsapp';
+import { canSendFreeformWhatsApp, getWhatsAppProvider, sendWhatsAppMedia } from '@/lib/server/whatsapp';
+import { AudioConversionError, prepareMetaWhatsAppAudio } from '@/lib/server/whatsapp-audio';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
 const BUCKET = 'ecojoi-message-attachments';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ALLOWED = new Set([
   'image/jpeg','image/png','image/webp','image/gif',
-  'audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/wav',
+  'audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/wav','audio/aac','audio/amr',
   'application/pdf','text/plain','text/csv',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -46,8 +47,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let file = attachment;
     const mime = attachment.type.split(';', 1)[0].trim().toLowerCase();
     const hasGenericMime = !mime || mime === 'application/octet-stream' || mime === 'application/x-pdf';
-    if (ALLOWED.has(mime) && mime !== attachment.type) {
-      file = new File([attachment], attachment.name, { type: mime });
+    const audioAliases: Record<string,string> = { 'audio/x-m4a':'audio/mp4', 'audio/m4a':'audio/mp4', 'audio/mp3':'audio/mpeg', 'audio/x-wav':'audio/wav' };
+    const normalizedMime = audioAliases[mime] || mime;
+    if (ALLOWED.has(normalizedMime) && normalizedMime !== attachment.type) {
+      file = new File([attachment], attachment.name, { type: normalizedMime });
     }
     if (hasGenericMime && /\.pdf$/i.test(attachment.name)) {
       const header = await attachment.slice(0, 1024).text();
@@ -73,6 +76,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (conversation.channel === 'whatsapp' && !(await canSendFreeformWhatsApp(ctx.tenantId, conversation.last_inbound_at))) {
       return NextResponse.json({ error: 'whatsapp_window_closed', template_required: true }, { status: 409 });
+    }
+
+    // The provider accepts an HTTP request before it validates the media codec.
+    // Transcode first so the recipient does not see a phantom 'sent' voice note.
+    if (conversation.channel === 'whatsapp' && file.type.startsWith('audio/') && (await getWhatsAppProvider(ctx.tenantId)) === 'meta') {
+      try {
+        file = await prepareMetaWhatsAppAudio(file);
+      } catch (error) {
+        if (error instanceof AudioConversionError) {
+          return NextResponse.json({error:error.code,message:error.message},{status:error.code==='audio_too_large'?413:422});
+        }
+        throw error;
+      }
     }
 
     const outgoingCaption = conversation.channel === 'whatsapp' && !file.type.startsWith('audio/')
