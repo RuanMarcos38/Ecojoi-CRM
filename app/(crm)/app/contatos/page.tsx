@@ -40,6 +40,9 @@ export default function Contatos(){
   const [organizations,setOrganizations]=useState<Organization[]>([]);
   const [tags,setTags]=useState<TagItem[]>([]);
   const [duplicates,setDuplicates]=useState<DuplicateGroup[]>([]);
+  const [duplicateOnly,setDuplicateOnly]=useState(false);
+  const [selectedKeep,setSelectedKeep]=useState<Record<string,string>>({});
+  const [duplicateAction,setDuplicateAction]=useState('');
   const [customFields,setCustomFields]=useState<CustomFieldDef[]>([]);
   const [open,setOpen]=useState(false);
   const [openOrg,setOpenOrg]=useState(false);
@@ -81,14 +84,15 @@ export default function Contatos(){
     return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
   },[rows]);
 
+  const duplicatedIds=useMemo(()=>new Set(duplicates.flatMap(group=>group.items.map(item=>item.id))),[duplicates]);
   const filteredRows=useMemo(()=>{
     const term=query.trim().toLowerCase();
     return rows.filter(row=>{
       const org=Array.isArray(row.organization)?row.organization[0]:row.organization;
       const text=[row.name,row.email,row.phone,row.source,org?.name].filter(Boolean).join(' ').toLowerCase();
-      return(!term||text.includes(term))&&(statusFilter==='all'||row.status===statusFilter);
+      return(!term||text.includes(term))&&(statusFilter==='all'||row.status===statusFilter)&&(!duplicateOnly||duplicatedIds.has(row.id));
     });
-  },[query,rows,statusFilter]);
+  },[query,rows,statusFilter,duplicateOnly,duplicatedIds]);
 
   async function submit(event:FormEvent<HTMLFormElement>){
     event.preventDefault();setSaving(true);setError('');setNotice('');
@@ -176,12 +180,41 @@ export default function Contatos(){
     if(response.ok)await load();else setError('Não foi possível adicionar a tag.');
   }
 
-  async function merge(group:DuplicateGroup){
-    if(group.items.length<2)return;
-    const target=group.items[0];const source=group.items[group.items.length-1];
-    if(!confirm(`Mesclar "${source.name}" em "${target.name}" preservando histórico?`))return;
-    const r=await fetch('/api/contacts/duplicates',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({source_id:source.id,target_id:target.id})});
-    if(r.ok){setNotice('Contatos mesclados com histórico preservado.');await load();}else setError('Não foi possível mesclar os contatos.');
+  async function mergePair(group:DuplicateGroup,sourceId:string){
+    const targetId=selectedKeep[group.key]||group.items[0]?.id;
+    if(!targetId||sourceId===targetId)return;
+    const source=group.items.find(item=>item.id===sourceId);
+    const target=group.items.find(item=>item.id===targetId);
+    if(!source||!target||!confirm(`Mesclar "${source.name}" em "${target.name}"? O histórico será preservado e o cadastro duplicado removido.`))return;
+    setDuplicateAction(sourceId);setError('');setNotice('');
+    try{
+      const response=await fetch('/api/contacts/duplicates',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({source_id:sourceId,target_id:targetId})});
+      if(!response.ok)throw Error('Não foi possível mesclar. Confira os vínculos e tente novamente.');
+      setNotice('Duplicidade mesclada. Histórico e oportunidades preservados.');
+      await load();
+    }catch(e){setError(e instanceof Error?e.message:'Falha ao mesclar duplicidade.');}
+    finally{setDuplicateAction('');}
+  }
+
+  async function deleteDuplicate(group:DuplicateGroup,sourceId:string){
+    const targetId=selectedKeep[group.key]||group.items[0]?.id;
+    if(!targetId||sourceId===targetId)return;
+    const source=group.items.find(item=>item.id===sourceId);
+    if(!source)return;
+    const confirmation=prompt(`EXCLUSÃO DEFINITIVA do duplicado "${source.name}". Histórico vinculado não pode ser apagado: nesses casos use Mesclar. Para confirmar, digite EXCLUIR DUPLICADO:`);
+    if(confirmation!=='EXCLUIR DUPLICADO')return;
+    setDuplicateAction(sourceId);setError('');setNotice('');
+    try{
+      const response=await fetch('/api/contacts/duplicates',{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({source_id:sourceId,target_id:targetId,confirmation})});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok){
+        if(result?.merge_required)throw Error('Este contato possui histórico ou vínculos. Use Mesclar para preservar os dados.');
+        throw Error('Não foi possível excluir o cadastro duplicado.');
+      }
+      setNotice('Cadastro duplicado excluído definitivamente. O cadastro mantido foi preservado.');
+      await load();
+    }catch(e){setError(e instanceof Error?e.message:'Falha na exclusão.');}
+    finally{setDuplicateAction('');}
   }
 
   return <div className={`content ${styles.page}`}>
@@ -206,6 +239,7 @@ export default function Contatos(){
       <label className={styles.searchField}><Search size={17}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar nome, e-mail, telefone, origem ou empresa"/></label>
       <label className={styles.selectField}><Filter size={16}/><select value={statusFilter} onChange={event=>setStatusFilter(event.target.value as 'all'|ContactStatus)}><option value="all">Todos os status</option><option value="lead">Leads</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></label>
       <label className={styles.selectField}><GitMerge size={16}/><span>{duplicates.length} grupo(s) duplicado(s)</span></label>
+      <label className={styles.selectField} style={{cursor:'pointer'}}><input type="checkbox" checked={duplicateOnly} onChange={e=>setDuplicateOnly(e.target.checked)}/> Somente duplicados ({duplicatedIds.size})</label>
     </section>
 
     {error&&<div className="error">{error}</div>}
@@ -249,12 +283,30 @@ export default function Contatos(){
     </form>}
 
     {duplicates.length>0&&<section className="card section">
-      <h3>Possíveis duplicidades</h3>
-      <div style={{display:'grid',gap:8}}>
-        {duplicates.slice(0,6).map(group=><div className="setting-row" key={group.key}>
-          <span><strong>{group.items.map(i=>i.name).join(' / ')}</strong><small className="muted" style={{display:'block'}}>{group.key.replace('phone:','Telefone: ').replace('email:','E-mail: ')}</small></span>
-          <button className="btn btn-secondary" onClick={()=>void merge(group)}><GitMerge size={14}/>Mesclar</button>
-        </div>)}
+      <h3>Revisão de possíveis duplicidades · {duplicates.length} grupos</h3>
+      <p className="muted">Coincidência de telefone ou e-mail não comprova que sejam a mesma pessoa. Escolha o cadastro principal. Mesclar preserva vínculos; excluir definitivamente só funciona em cadastros sem registros relacionados.</p>
+      <div style={{display:'grid',gap:12,maxHeight:550,overflowY:'auto'}}>
+        {duplicates.map(group=>{
+          const keeper=selectedKeep[group.key]||group.items[0]?.id;
+          return <div className="setting-row" key={group.key} style={{display:'block'}}>
+            <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+              <strong>{group.key.startsWith('phone:')?'Telefone':'E-mail'} compartilhado: {group.key.slice(group.key.indexOf(':')+1)}</strong>
+              <small>{group.items.length} cadastros</small>
+            </div>
+            <label style={{display:'block',margin:'8px 0'}}>Manter cadastro principal: <select className="select" value={keeper} onChange={e=>setSelectedKeep(prev=>({...prev,[group.key]:e.target.value}))}>
+              {group.items.map(item=><option key={item.id} value={item.id}>{item.name} · {item.created_at?.slice(0,10)||'sem data'}</option>)}
+            </select></label>
+            <div style={{display:'grid',gap:6}}>
+              {group.items.map(item=><div key={item.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+                <span>{item.name} <small className="muted">({item.email||item.phone||'sem contato'})</small> {keeper===item.id&&<strong>· Principal</strong>}</span>
+                {keeper!==item.id&&<span style={{display:'flex',gap:6}}>
+                  <button type="button" className="btn btn-secondary" disabled={Boolean(duplicateAction)} onClick={()=>void mergePair(group,item.id)}><GitMerge size={14}/>Mesclar</button>
+                  <button type="button" className="btn btn-danger" disabled={Boolean(duplicateAction)} onClick={()=>void deleteDuplicate(group,item.id)} title="Excluir definitivamente somente se não houver histórico vinculado"><Trash2 size={14}/>Excluir definitivo</button>
+                </span>}
+              </div>)}
+            </div>
+          </div>;
+        })}
       </div>
     </section>}
 
@@ -264,7 +316,7 @@ export default function Contatos(){
           const org=Array.isArray(row.organization)?row.organization[0]:row.organization;
           return <article className={styles.recordCard} key={row.id}>
             <div className={styles.recordTop}>
-              <div className={styles.identity}><span className={styles.avatar}>{initials(row.name)}</span><div className={styles.identityCopy}><strong>{row.name}</strong><span>{row.source||'Origem não informada'}</span>{org?.name&&<span><Building2 size={11}/> {org.name}</span>}</div></div>
+              <div className={styles.identity}><span className={styles.avatar}>{initials(row.name)}</span><div className={styles.identityCopy}><strong>{row.name}</strong>{duplicatedIds.has(row.id)&&<span style={{color:'#b45309',fontWeight:700}}>Possível duplicidade</span>}<span>{row.source||'Origem não informada'}</span>{org?.name&&<span><Building2 size={11}/> {org.name}</span>}</div></div>
               <span className={`${styles.statusBadge} ${statusClass[row.status]}`}>{statusLabel[row.status]}</span>
             </div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
