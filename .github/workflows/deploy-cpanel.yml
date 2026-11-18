@@ -68,7 +68,8 @@ jobs:
           archive=$(npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$pkg_dir" --silent)
           tar -xzf "$pkg_dir/$archive" -C "$pkg_dir"
           install -m 0755 "$pkg_dir/package/ffmpeg" deploy/runtime/bin/ffmpeg
-          deploy/runtime/bin/ffmpeg -hide_banner -encoders 2>/dev/null | grep -Eq 'libopus'
+          encoder_list=$(deploy/runtime/bin/ffmpeg -hide_banner -encoders 2>/dev/null)
+          grep -Eq 'libopus' <<< "$encoder_list"
           # Verify that actual audio can be encoded, not only that the executable exists.
           deploy/runtime/bin/ffmpeg -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$pkg_dir/probe.ogg"
           test "$(head -c 4 "$pkg_dir/probe.ogg")" = OggS
