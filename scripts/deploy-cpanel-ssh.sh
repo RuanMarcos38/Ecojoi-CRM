@@ -29,6 +29,15 @@ test -f "$stage/server.js"
 test -f "$stage/runtime/server.js"
 test -s "$stage/runtime/.next/BUILD_ID"
 
+# Preflight on the actual cPanel host before touching the current runtime.
+# A missing/incompatible ffmpeg must fail the deployment, never leave a broken
+# audio path after replacing a previously working release.
+test -x "$stage/runtime/bin/ffmpeg"
+"$stage/runtime/bin/ffmpeg" -hide_banner -encoders 2>/dev/null | grep -Eq 'libopus'
+"$stage/runtime/bin/ffmpeg" -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$stage/audio-probe.ogg"
+test "$(head -c 4 "$stage/audio-probe.ogg")" = OggS
+echo "Pré-teste do áudio Ogg/Opus no servidor cPanel: OK"
+
 backup=$(mktemp -d "$state/rollback.XXXXXXXX")
 cp -p -- "$app/server.js" "$backup/server.js"
 if [[ -f "$app/DEPLOY_SOURCE_SHA" ]]; then

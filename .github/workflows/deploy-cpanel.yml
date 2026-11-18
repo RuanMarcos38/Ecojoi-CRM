@@ -59,6 +59,20 @@ jobs:
             rsync -a public/ deploy/runtime/public/
           fi
 
+          # Ship a pinned Linux x64 FFmpeg with the release. Never assume the
+          # shared-hosting account has ffmpeg installed or in its PATH.
+          # npm verifies the registry package integrity during download.
+          mkdir -p deploy/runtime/bin
+          pkg_dir=$(mktemp -d)
+          trap 'rm -rf "$pkg_dir"' EXIT
+          archive=$(npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$pkg_dir" --silent)
+          tar -xzf "$pkg_dir/$archive" -C "$pkg_dir"
+          install -m 0755 "$pkg_dir/package/ffmpeg" deploy/runtime/bin/ffmpeg
+          deploy/runtime/bin/ffmpeg -hide_banner -encoders 2>/dev/null | grep -Eq 'libopus'
+          # Verify that actual audio can be encoded, not only that the executable exists.
+          deploy/runtime/bin/ffmpeg -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$pkg_dir/probe.ogg"
+          test "$(head -c 4 "$pkg_dir/probe.ogg")" = OggS
+
           # Operational/support files do not participate in runtime resolution.
           for item in .cpanel.yml database README.md SECURITY.md; do
             if [ -e "$item" ]; then
