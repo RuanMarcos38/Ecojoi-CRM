@@ -2,7 +2,7 @@
 
 import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bot, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
+  AlertCircle, Bot, Check, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
   Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Reply, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
@@ -460,14 +460,17 @@ export default function Atendimento() {
         const messages: Record<string, string> = {
           file_too_large: 'O arquivo deve ter no máximo 25 MB.',
           unsupported_file_type: 'Este tipo de arquivo não é permitido.',
+          ffmpeg_unavailable: 'Conversão de áudio indisponível no servidor. Instale FFmpeg antes de enviar gravações.',
+          audio_conversion_failed: 'Não foi possível preparar um áudio compatível. Grave novamente ou use MP3.',
+          audio_too_large: 'Áudio excede o limite de 16 MB do WhatsApp.',
           conversation_not_in_human_service: 'Assuma o atendimento antes de enviar anexos.',
           whatsapp_window_closed: 'A janela de 24 horas terminou. Envie um template aprovado antes de anexar arquivos.'
         };
         if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
-        setError(r.status === 413 ? 'O servidor recusou o tamanho do arquivo. Envie um arquivo menor.' : messages[d.error] ?? 'Não foi possível enviar o arquivo.');
+        setError(messages[d.error] ?? (r.status === 413 ? 'O servidor recusou o tamanho do arquivo. Envie um arquivo menor.' : 'Não foi possível enviar o arquivo.'));
         return false;
       }
-      setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo enviado.');
+      setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo aceito pelo provedor. Aguarde a confirmação de entrega no WhatsApp.');
       await refreshConversations().catch(() => {});
       return true;
     } catch {
@@ -841,7 +844,17 @@ export default function Atendimento() {
               </div>}
             </>}
           </div>
-          <div className={styles.messageMeta}><span>{formatTime(message.created_at)}</span>{message.direction === 'outbound' && <><span>{message.status === 'queued' ? 'na fila' : ''}</span><CheckCheck size={14}/></>}</div>
+          <div className={styles.messageMeta}><span>{formatTime(message.created_at)}</span>{message.direction === 'outbound' && (() => {
+            const status = String(message.status || 'queued').toLowerCase();
+            const failed = status === 'failed' || status === 'dead_letter';
+            const queued = status === 'queued' || status === 'pending' || status === 'processing';
+            const read = status === 'read';
+            const delivered = status === 'delivered';
+            const label = failed ? 'Falhou — não entregue' : queued ? 'Aguardando envio' : read ? 'Visualizado pelo destinatário' : delivered ? 'Entregue ao destinatário' : 'Aceito pelo provedor — entrega não confirmada';
+            return <span title={label} aria-label={label} style={{display:'inline-flex',alignItems:'center',gap:3,color:failed?'#b91c1c':undefined}}>
+              {failed ? <><AlertCircle size={14}/>Falhou</> : queued ? <><Clock3 size={14}/>Na fila</> : read || delivered ? <CheckCheck size={14} color={read?'#0ea5e9':undefined}/> : <Check size={14}/>}
+            </span>;
+          })()}</div>
         </div>
       </div>
     );
