@@ -57,7 +57,7 @@ export async function POST(request:Request){
                 source:row.consentSource || row.source,date:recordedAt,import_file:file.name
               }}
             }).eq('tenant_id',ctx.tenantId).eq('id',existing.id);
-            if(row.consentStatus === 'opt_in')update=update.neq('consent_status','opt_out');
+            if(row.consentStatus === 'opt_in')update=update.or('consent_status.is.null,consent_status.neq.opt_out');
             const { error: updateError }=await update;
             if(updateError)throw updateError;
             consentsApplied++;
