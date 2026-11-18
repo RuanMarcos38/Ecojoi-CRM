@@ -85,7 +85,12 @@ type Conversation = {
 };
 type Me = { role?: string; features?: Record<string, boolean>; tenantId?: string; userId?: string };
 type QuickReply = { id:string; shortcut:string; title:string; body:string };
-type WhatsAppTemplate = { id:string; name:string; language:string; category?:string|null; status?:string|null };
+type WhatsAppTemplate = { id:string; name:string; language:string; category?:string|null; status?:string|null; components?: {type?:string; text?:string}[] };
+function templatePreview(template: WhatsAppTemplate) {
+  return (template.components ?? [])
+    .filter(component => ['HEADER', 'BODY', 'FOOTER'].includes(component.type?.toUpperCase() ?? '') && typeof component.text === 'string')
+    .map(component => component.text?.trim()).filter(Boolean).join('\n');
+}
 type ConversationNote = { id:string; body:string; created_at:string; user?: { id:string; full_name:string } | null };
 
 const QUEUES: { state: AttendanceState; label: string; Icon: typeof Clock3 }[] = [
@@ -694,7 +699,12 @@ export default function Atendimento() {
       setNotice(d?.data?.delivery === 'sent' ? 'Template enviado.' : 'Template enfileirado para retentativa.');
       await refreshConversations();
     } else {
-      setError('Não foi possível enviar o template do WhatsApp.');
+      const reason = d?.error;
+      setError(reason === 'template_body_or_parameters_unavailable'
+        ? 'Este template exige parâmetros ou não possui texto sincronizado. Revise o modelo aprovado antes de enviar.'
+        : reason === 'template_not_approved_or_not_synced'
+          ? 'O template não está aprovado ou sincronizado com a Meta. Atualize os templates.'
+          : 'Não foi possível enviar o template do WhatsApp.');
     }
   }
 
@@ -913,7 +923,7 @@ export default function Atendimento() {
             </div>
           </header>
 
-          {templateOpen && active.channel === 'whatsapp' && <div className={styles.templatePanel}><div className={styles.templateHeader}><strong>Templates aprovados</strong><button type="button" className={styles.roundButton} onClick={() => setTemplateOpen(false)}><X size={16}/></button></div><div className={styles.templateList}>{templates.filter(t => !t.status || t.status === 'APPROVED').map(t => <button key={t.id} type="button" onClick={() => void sendTemplate(t)}><span><b>{t.name}</b><small>{t.language} · {t.category ?? 'WhatsApp'}</small></span><Send size={14}/></button>)}</div></div>}
+          {templateOpen && active.channel === 'whatsapp' && <div className={styles.templatePanel}><div className={styles.templateHeader}><strong>Templates aprovados</strong><button type="button" className={styles.roundButton} onClick={() => setTemplateOpen(false)}><X size={16}/></button></div><div className={styles.templateList}>{templates.filter(t => t.status?.toUpperCase() === 'APPROVED').map(t => <button key={t.id} type="button" onClick={() => void sendTemplate(t)} disabled={!templatePreview(t)} title={templatePreview(t) || 'Template sem texto sincronizado'}><span><b>{t.name}</b><small>{t.language} · {t.category ?? 'WhatsApp'}</small><small style={{whiteSpace:'pre-wrap', overflowWrap:'anywhere'}}>{templatePreview(t) || 'Sincronize o conteúdo deste template antes de enviar'}</small></span><Send size={14}/></button>)}</div></div>}
           {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
           {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
 
