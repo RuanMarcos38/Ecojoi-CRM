@@ -460,6 +460,7 @@ export default function Atendimento() {
         const messages: Record<string, string> = {
           file_too_large: 'O arquivo deve ter no máximo 25 MB.',
           unsupported_file_type: 'Este tipo de arquivo não é permitido.',
+          unsupported_whatsapp_audio_format: 'Formato de áudio incompatível com o WhatsApp oficial. Use M4A, MP3, AAC, AMR ou OGG.',
           conversation_not_in_human_service: 'Assuma o atendimento antes de enviar anexos.',
           whatsapp_window_closed: 'A janela de 24 horas terminou. Envie um template aprovado antes de anexar arquivos.'
         };
