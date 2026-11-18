@@ -297,11 +297,6 @@ export default function Atendimento() {
   }, [recording]);
   useEffect(() => () => mediaStream.current?.getTracks().forEach(track => track.stop()), []);
 
-  const queueCounts = useMemo(() => {
-    const counts: Record<AttendanceState, number> = { waiting: 0, in_service: 0, automatic: 0 };
-    for (const item of items) counts[item.attendance_state ?? 'waiting'] += 1;
-    return counts;
-  }, [items]);
   const [attendantFilter, setAttendantFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [registeredTags, setRegisteredTags] = useState<{ id: string; name: string }[]>([]);
@@ -402,6 +397,17 @@ export default function Atendimento() {
     const after = readState.data.conversations[conversation.id] ?? readState.data.since;
     return (conversation.messages ?? []).filter(message => message.direction === 'inbound' && messageTime(message.created_at) > after).length;
   }
+  // The queue badge counts unread inbound messages, not open conversations.
+  // It respects the operator's existing read markers, so a read queue shows 0.
+  const queueCounts = useMemo(() => {
+    const counts: Record<AttendanceState, number> = { waiting: 0, in_service: 0, automatic: 0 };
+    for (const item of items) {
+      if (item.status === 'closed') continue;
+      counts[item.attendance_state ?? 'waiting'] += unreadCount(item);
+    }
+    return counts;
+  }, [items, readState, readKey]);
+
   const messagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const container=messagesRef.current;
