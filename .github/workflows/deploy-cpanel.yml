@@ -65,8 +65,8 @@ jobs:
           mkdir -p deploy/runtime/bin
           pkg_dir=$(mktemp -d)
           trap 'rm -rf "$pkg_dir"' EXIT
-          npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$pkg_dir" --silent
-          tar -xzf "$pkg_dir/linux-x64-4.1.0.tgz" -C "$pkg_dir"
+          archive=$(npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$pkg_dir" --silent)
+          tar -xzf "$pkg_dir/$archive" -C "$pkg_dir"
           install -m 0755 "$pkg_dir/package/ffmpeg" deploy/runtime/bin/ffmpeg
           deploy/runtime/bin/ffmpeg -hide_banner -encoders 2>/dev/null | grep -Eq 'libopus'
           # Verify that actual audio can be encoded, not only that the executable exists.
