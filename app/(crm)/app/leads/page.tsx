@@ -386,7 +386,7 @@ export default function Leads() {
             <div className={styles.metaLine}><Phone size={15}/><span>{row.phone || 'Telefone não informado'}</span></div>
           </div>
           {attributionLabel(row) && <p className={styles.recordNote}>{attributionLabel(row)}</p>}
-           {warning && <span title={red ? 'Mais de 3 dias sem interação — prioridade alta' : 'Mais de 1 dia sem interação — atenção'} aria-label={red ? 'Prioridade alta, mais de 3 dias sem interação' : 'Atenção, mais de 1 dia sem interação'} style={{display:'inline-flex',alignItems:'center',color:red?'#dc2626':'#ca8a04'}}><Clock3 size={17}/></span>
+           {warning && <span title={red ? 'Mais de 3 dias sem interação — prioridade alta' : 'Mais de 1 dia sem interação — atenção'} aria-label={red ? 'Prioridade alta, mais de 3 dias sem interação' : 'Atenção, mais de 1 dia sem interação'} style={{display:'inline-flex',alignItems:'center',color:red?'#dc2626':'#ca8a04'}}><Clock3 size={17}/></span>}
           {days > 5 && <div className={styles.followUpPanel}>
             <button type="button" className="btn btn-secondary" aria-expanded={followUp === row.id}
               onClick={() => { setCopied(false); setFollowUp(followUp === row.id ? null : row.id); }}>Follow-up · mais de 5 dias</button>
