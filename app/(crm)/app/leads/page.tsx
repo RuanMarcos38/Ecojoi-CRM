@@ -347,8 +347,8 @@ export default function Leads() {
       <label className={styles.searchField}><Search size={17}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar lead, e-mail, telefone ou origem"/></label>
       <label className={styles.selectField}><Filter size={16}/><select value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">Todas as origens</option>{sources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
       <label className={styles.selectField}><Target size={16}/><select value={temperatureFilter} onChange={event=>setTemperatureFilter(event.target.value as 'all'|'cold'|'warm'|'hot')}><option value="all">Todas temperaturas</option><option value="hot">Quentes</option><option value="warm">Mornos</option><option value="cold">Frios</option></select></label>
-    </section>
       <label className={styles.selectField}><Clock3 size={16}/><select aria-label="Prioridade por inatividade" value={inactivityFilter} onChange={event => setInactivityFilter(event.target.value as 'all'|'yellow'|'red')}><option value="all">Todas as prioridades</option><option value="yellow">Amarelo · mais de 1 até 3 dias</option><option value="red">Vermelho · mais de 3 dias</option></select></label>
+    </section>
     <section className={styles.toolbar} aria-label="Visões salvas" style={{gridTemplateColumns:'minmax(260px,1fr)'}}>
       <label className={styles.selectField}><ClipboardCheck size={16}/><select value={selectedView} onChange={event=>{ setSelectedView(event.target.value); setFollowUp(null); applyView(event.target.value); }}><option value="">Visão padrão</option>{savedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}</select></label>
     </section>
