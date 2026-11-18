@@ -11,7 +11,7 @@ const BUCKET = 'ecojoi-message-attachments';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ALLOWED = new Set([
   'image/jpeg','image/png','image/webp','image/gif',
-  'audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/wav',
+  'audio/webm','audio/ogg','audio/mpeg','audio/mp4','audio/wav','audio/aac','audio/amr',
   'application/pdf','text/plain','text/csv',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -43,20 +43,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!(attachment instanceof File)) return NextResponse.json({ error: 'file_required' }, { status: 400 });
     if (!attachment.size || attachment.size > MAX_FILE_SIZE) return NextResponse.json({ error: 'file_too_large' }, { status: 400 });
 
+    // Browsers and operating systems often label M4A/MP3 recordings with
+    // audio/x-m4a, audio/mp4;codecs=..., or application/octet-stream.
+    // Normalize only known audio extensions, preserving bytes and file name.
+    const rawMime = attachment.type.split(';', 1)[0].trim().toLowerCase();
+    const extension = attachment.name.split('.').pop()?.toLowerCase() ?? '';
+    const audioMimeByExtension: Record<string, string> = {
+      m4a: 'audio/mp4', mp4: 'audio/mp4', mp3: 'audio/mpeg',
+      oga: 'audio/ogg', ogg: 'audio/ogg', opus: 'audio/ogg',
+      webm: 'audio/webm', wav: 'audio/wav', aac: 'audio/aac', amr: 'audio/amr'
+    };
+    const aliases: Record<string, string> = {
+      'audio/x-m4a': 'audio/mp4', 'audio/m4a': 'audio/mp4',
+      'audio/x-mp4': 'audio/mp4', 'audio/mp3': 'audio/mpeg',
+      'audio/x-mpeg': 'audio/mpeg', 'audio/x-wav': 'audio/wav',
+      'audio/wave': 'audio/wav', 'audio/x-aac': 'audio/aac'
+    };
+    const generic = !rawMime || ['application/octet-stream', 'binary/octet-stream', 'application/x-pdf'].includes(rawMime);
+    const normalizedMime = aliases[rawMime] || (generic ? audioMimeByExtension[extension] || rawMime : rawMime);
     let file = attachment;
-    const mime = attachment.type.split(';', 1)[0].trim().toLowerCase();
-    const hasGenericMime = !mime || mime === 'application/octet-stream' || mime === 'application/x-pdf';
-    if (ALLOWED.has(mime) && mime !== attachment.type) {
-      file = new File([attachment], attachment.name, { type: mime });
+    if (normalizedMime && normalizedMime !== attachment.type) {
+      file = new File([attachment], attachment.name, { type: normalizedMime });
     }
-    if (hasGenericMime && /\.pdf$/i.test(attachment.name)) {
+    if (generic && /\\.pdf$/i.test(attachment.name)) {
       const header = await attachment.slice(0, 1024).text();
-      if (/%PDF-[0-9]\.[0-9]/.test(header)) {
+      if (/%PDF-[0-9]\\.[0-9]/.test(header)) {
         file = new File([attachment], attachment.name, { type: 'application/pdf' });
       }
     }
 
     if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_file_type' }, { status: 400 });
+    // The Meta WhatsApp Cloud API does not support WebM or WAV audio directly.
+    // Fail clearly instead of showing a misleading queued/sent message.
+    // Other channels may continue to accept these formats.
+
 
     const supabase = await createClient();
     const { data: conversation, error: conversationError } = await supabase
