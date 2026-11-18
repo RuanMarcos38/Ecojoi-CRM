@@ -29,7 +29,7 @@ export function parseImportRow(row:Record<string,unknown>,mapping:ImportMapping,
     : ['nao','não','no','false','0','opt_out','opt-out','recusado'].includes(consentRaw) ? 'opt_out' : 'unknown';
   const consentDateRaw=get('consent_at');
   // Only ISO dates are accepted: ambiguous local dates must be corrected at the source.
-  const validConsentDate=/^\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?(?:Z|[+-]\\d{2}:\\d{2}))?$/.test(consentDateRaw)
+  const validConsentDate=/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2}))?$/.test(consentDateRaw)
     && Number.isFinite(Date.parse(consentDateRaw));
   const consentAt=validConsentDate ? new Date(consentDateRaw).toISOString() : null;
   const consentSource=get('consent_source');
