@@ -39,9 +39,9 @@ type Campaign = {
   id: string; status: 'queued' | 'paused' | 'cancelled' | 'completed';
   processing: boolean; cursor_pos: number; accepted: number; skipped: number; last_result?: string | null;
 };
-type ImportedAudience = { file: string; contacts: number; phones: string[] };
+type ImportedAudience = { file: string; contacts: number; phones: string[]; total_phones?: number; eligible_phones?: number };
 
-type TemplateOption = { id: string; name: string; language: string; status: string; category: string };
+type TemplateOption = { id: string; name: string; language: string; status: string; category: string; components?: Array<{ type?: string; text?: string }> };
 
 function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
   const [phones, setPhones] = useState<string[]>([]);
@@ -111,21 +111,24 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
   const campaignPhones = audienceMode === 'crm'
     ? importedPhones.slice(batch * campaignBatchSize, (batch + 1) * campaignBatchSize)
     : phones;
+  const selectedTemplate = templates.find(item => item.id === templateId);
+  const importedCount = selectedImports.reduce((sum, item) => sum + item.contacts, 0);
+  const importedPhoneCount = selectedImports.reduce((sum, item) => sum + (item.total_phones ?? item.phones.length), 0);
 
   async function openImportedAudience() {
     setAudienceMode('crm');
     setConfirmed(false);
     campaignId.current = null;
     setError('');
-    if (imports || loadingImports) return;
+    if (loadingImports) return;
     setLoadingImports(true);
     try {
       const response = await fetch('/api/campaigns/reactivation?audience=imports', { cache: 'no-store' });
-      if (!response.ok) throw new Error();
+      if (!response.ok) throw new Error(response.status === 403 ? 'Sem permissão para consultar a base importada.' : 'Falha ao consultar a base importada.');
       const result = await response.json();
       setImports(result.data ?? []);
-    } catch {
-      setError('Não foi possível carregar os contatos importados.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Não foi possível carregar os contatos importados.');
     } finally {
       setLoadingImports(false);
     }
@@ -218,6 +221,19 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
     }
     return { candidates, unknown, excluded };
   }, [contacts, phones]);
+  const blockReasons: string[] = [];
+  if (saving) blockReasons.push('Campanha em processamento.');
+  if (!templateId) blockReasons.push('Selecione um modelo de marketing aprovado.');
+  if (!confirmed) blockReasons.push('Confirme o aceite de marketing dos destinatários.');
+  if (audienceMode === 'crm') {
+    if (!imports?.length) blockReasons.push('Nenhum arquivo de importação selecionado ou encontrado.');
+    else if (!campaignPhones.length) blockReasons.push('A base importada não possui números com opt-in de marketing elegível. A importação não autoriza o envio.');
+    if (startedBatches.includes(batchKey)) blockReasons.push('Lote já iniciado nesta sessão.');
+  } else {
+    if (!phones.length) blockReasons.push('Selecione contatos importados ou um CSV.');
+    if (phones.length > campaignBatchSize) blockReasons.push('Separe a lista em lotes de até 500 números.');
+    if (phones.length && !counts.candidates) blockReasons.push('Nenhum número da lista possui opt-in válido.');
+  }
 
   return <section className={styles.sidePanel} aria-label="Preparar reativação por WhatsApp">
     <h2>Preparar reativação por WhatsApp</h2>
@@ -237,7 +253,7 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
           {(imports ?? []).map(item => <option key={item.file} value={item.file}>{item.file} · {item.contacts.toLocaleString('pt-BR')} contatos</option>)}
         </select>
         {loadingImports ? <p role="status">Carregando contatos importados…</p> : imports && <p aria-live="polite">
-          {selectedImports.reduce((total, item) => total + item.contacts, 0).toLocaleString('pt-BR')} contatos cadastrados · {importedPhones.length.toLocaleString('pt-BR')} números elegíveis com aceite de marketing
+          {importedCount.toLocaleString('pt-BR')} contatos cadastrados · {importedPhoneCount.toLocaleString('pt-BR')} números encontrados · {importedPhones.length.toLocaleString('pt-BR')} elegíveis com aceite
         </p>}
         {batchCount > 1 && <>
           <label htmlFor="imported-campaign-batch">Lote de envio</label>
@@ -273,12 +289,12 @@ function ReactivationAudience({ contacts }: { contacts: Contact[] }) {
           {templates.map(template => <option key={template.id} value={template.id}>{template.name} · {template.language}</option>)}
         </select>
         <small>Use texto fixo com instrução para responder SAIR. O WhatsApp pode cobrar pelo envio.</small>
+         {selectedTemplate && <div className="card section" aria-label="Prévia da mensagem"><strong>Mensagem selecionada</strong>{(selectedTemplate.components ?? []).filter(component => ['BODY','HEADER','FOOTER'].includes(component.type ?? '')).map((component, index) => <p key={index} style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{component.text || 'Conteúdo configurado na Meta'}</p>)}{!(selectedTemplate.components ?? []).length && <p>Prévia indisponível; confira o modelo na Meta.</p>}</div>}
       </div>
       <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)}/> Confirmo que os aceites registrados cobrem marketing da Ecojoi pelo WhatsApp.</label>
       {audienceMode === 'csv' && phones.length > campaignBatchSize && <p role="alert">Use um CSV com até 500 números únicos por campanha.</p>}
-      <button type="button" className="btn btn-primary" disabled={saving || !confirmed || !templateId || !campaignPhones.length ||
-        (audienceMode === 'csv' ? !counts.candidates || phones.length > campaignBatchSize : startedBatches.includes(batchKey))}
-        onClick={() => void mutate()}>Iniciar campanha</button>
+       {blockReasons.length > 0 && <div role="status" style={{display:'grid',gap:4}}><strong>O que falta para iniciar?</strong>{blockReasons.map((reason, index) => <small key={index}>{reason}</small>)}</div>}
+       <button type="button" className="btn btn-primary" disabled={blockReasons.length > 0} onClick={() => void mutate()}>{saving ? 'Processando…' : 'Iniciar campanha'}</button>
       {campaigns.length > 0 && <h3>Campanhas de WhatsApp</h3>}
       {campaigns.map(campaign => <article className="card section" key={campaign.id}>
         <strong>{({ queued: 'Na fila', paused: 'Pausada', cancelled: 'Cancelada', completed: 'Processada' })[campaign.status]}</strong>
