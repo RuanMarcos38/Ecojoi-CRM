@@ -34,7 +34,6 @@ export async function POST(request:Request){
     const offset=Number(form.get('offset')??0);
     if(!Number.isSafeInteger(offset)||offset<0||offset>rows.length)return NextResponse.json({error:'Lote inválido.'},{status:400});
     let processed=0,failed=0,consentsApplied=0;
-    const admin=createAdminClient();
     const errors:Array<{row:number;error:string}>=[];
     for(let i=offset;i<Math.min(offset+BATCH,rows.length);i++){
       const row=parseImportRow(rows[i],mapping,source);
@@ -45,6 +44,7 @@ export async function POST(request:Request){
           attribution:{import_file:file.name,import_source:row.source,previous_agent:row.agent,previous_status:row.status,import_notes:row.notes},
           createConversation,contactOnly,preserveExisting:true});
         if(row.consentStatus !== 'unknown' && ingested.contact?.id) {
+          const admin=createAdminClient();
           const { data: existing, error: lookupError }=await admin.from('contacts')
             .select('id,consent_status,consent_at,attribution').eq('tenant_id',ctx.tenantId).eq('id',ingested.contact.id).single();
           if(lookupError)throw lookupError;
