@@ -35,6 +35,7 @@ jobs:
           archive=$(npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$tmp" --silent)
           tar -xzf "$tmp/$archive" -C "$tmp"
           chmod +x "$tmp/package/ffmpeg"
-          "$tmp/package/ffmpeg" -hide_banner -encoders 2>/dev/null | grep -Eq 'libopus'
+          encoder_list=$("$tmp/package/ffmpeg" -hide_banner -encoders 2>/dev/null)
+          grep -Eq 'libopus' <<< "$encoder_list"
           "$tmp/package/ffmpeg" -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$tmp/probe.ogg"
           test "$(head -c 4 "$tmp/probe.ogg")" = OggS
