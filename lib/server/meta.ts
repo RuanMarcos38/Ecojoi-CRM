@@ -396,11 +396,31 @@ async function processWhatsAppValue(value: any) {
           .eq('tenant_id', tenantId).eq('id', delivery.campaign_id).eq('status', 'queued');
       }
     }
-    await admin
-      .from('messages')
-      .update({ status: status.status ?? 'sent' })
+    // A successful HTTP response from the Graph API means accepted, NOT delivered.
+    // Meta later reports sent/delivered/read or a terminal failed status here.
+    const next = String(status.status ?? '').toLowerCase();
+    if (!['sent', 'delivered', 'read', 'failed'].includes(next)) continue;
+    if (next === 'failed') {
+      const errors = Array.isArray(status.errors) ? status.errors : [];
+      await claimEvent(tenantId, `delivery-failed:${status.id}`, 'whatsapp_delivery_failed', {
+        provider_message_id: status.id,
+        errors: errors.slice(0, 3).map((error: any) => ({
+          code: error?.code ?? null,
+          title: String(error?.title ?? '').slice(0, 200),
+          message: String(error?.message ?? '').slice(0, 500)
+        }))
+      });
+    }
+    let update = admin.from('messages')
+      .update({ status: next })
       .eq('tenant_id', tenantId)
       .eq('provider_message_id', status.id);
+    // Delayed callbacks must never downgrade a more advanced delivery state.
+    if (next === 'sent') update = update.in('status', ['queued', 'sent']);
+    if (next === 'delivered') update = update.in('status', ['queued', 'sent', 'delivered']);
+    if (next === 'read') update = update.neq('status', 'failed');
+    const { error: statusError } = await update;
+    if (statusError) throw statusError;
   }
 
   for (const message of value?.messages ?? []) {
