@@ -32,8 +32,8 @@ jobs:
           set -euo pipefail
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
-          npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$tmp" --silent
-          tar -xzf "$tmp/linux-x64-4.1.0.tgz" -C "$tmp"
+          archive=$(npm pack '@ffmpeg-installer/linux-x64@4.1.0' --pack-destination "$tmp" --silent)
+          tar -xzf "$tmp/$archive" -C "$tmp"
           chmod +x "$tmp/package/ffmpeg"
           "$tmp/package/ffmpeg" -hide_banner -encoders 2>/dev/null | grep -Eq 'libopus'
           "$tmp/package/ffmpeg" -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$tmp/probe.ogg"
