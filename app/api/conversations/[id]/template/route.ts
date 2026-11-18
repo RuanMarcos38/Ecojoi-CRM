@@ -12,6 +12,34 @@ const schema = z.object({
   components: z.array(z.unknown()).default([])
 });
 
+type TemplatePart = { type?: string; text?: string };
+type TemplateParameter = { type?: string; text?: string };
+type SendComponent = { type?: string; parameters?: TemplateParameter[] };
+
+function approvedTemplateBody(definitions: unknown[], supplied: unknown[]): string | null {
+  const components = definitions as TemplatePart[];
+  const parameters = supplied as SendComponent[];
+  const parts: string[] = [];
+  for (const part of components) {
+    if (!part || typeof part !== 'object') continue;
+    const type = String(part.type ?? '').toUpperCase();
+    if (!['HEADER', 'BODY', 'FOOTER'].includes(type) || typeof part.text !== 'string') continue;
+    const values = parameters.find(component => component?.type?.toUpperCase() === type)?.parameters ?? [];
+    let missingParameter = false;
+    const rendered = part.text.replace(/{{\\s*(\\d+)\\s*}}/g, (_match, index: string) => {
+      const value = values[Number(index) - 1];
+      if (!value || value.type !== 'text' || typeof value.text !== 'string') {
+        missingParameter = true;
+        return '';
+      }
+      return value.text;
+    });
+    if (missingParameter) return null;
+    if (rendered.trim()) parts.push(rendered.trim());
+  }
+  return parts.length ? parts.join('\\n') : null;
+}
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await requirePermission('conversations.send');
@@ -38,7 +66,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'contact_opted_out' }, { status: 409 });
     }
 
-    const body = `Template WhatsApp: ${input.name}`;
+    const { data: template, error: templateError } = await supabase
+      .from('whatsapp_templates')
+      .select('name,language,status,components')
+      .eq('tenant_id', ctx.tenantId)
+      .eq('name', input.name)
+      .eq('language', input.language)
+      .maybeSingle();
+    if (templateError) throw templateError;
+    if (!template || template.status?.toUpperCase() !== 'APPROVED') {
+      return NextResponse.json({ error: 'template_not_approved_or_not_synced' }, { status: 409 });
+    }
+    const body = approvedTemplateBody(
+      Array.isArray(template.components) ? template.components : [],
+      input.components
+    );
+    if (!body) {
+      return NextResponse.json({ error: 'template_body_or_parameters_unavailable' }, { status: 422 });
+    }
     const { data: message, error: messageError } = await supabase
       .from('messages')
       .insert({
