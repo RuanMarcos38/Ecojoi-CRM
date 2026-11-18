@@ -26,7 +26,7 @@ function approvedTemplateBody(definitions: unknown[], supplied: unknown[]): stri
     if (!['HEADER', 'BODY', 'FOOTER'].includes(type) || typeof part.text !== 'string') continue;
     const values = parameters.find(component => component?.type?.toUpperCase() === type)?.parameters ?? [];
     let missingParameter = false;
-    const rendered = part.text.replace(/{{\\s*(\\d+)\\s*}}/g, (_match, index: string) => {
+    const rendered = part.text.replace(/{{\s*(\d+)\s*}}/g, (_match, index: string) => {
       const value = values[Number(index) - 1];
       if (!value || value.type !== 'text' || typeof value.text !== 'string') {
         missingParameter = true;
@@ -37,7 +37,7 @@ function approvedTemplateBody(definitions: unknown[], supplied: unknown[]): stri
     if (missingParameter) return null;
     if (rendered.trim()) parts.push(rendered.trim());
   }
-  return parts.length ? parts.join('\\n') : null;
+  return parts.length ? parts.join('\n') : null;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
