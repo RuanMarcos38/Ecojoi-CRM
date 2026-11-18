@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Upload, X } from 'lucide-react';
 import { importFields, type ImportMapping, parseImportRow } from '@/lib/contact-import';
-const labels={name:'Nome',phone:'Telefone / WhatsApp',email:'E-mail',source:'Origem',agent:'Atendente na Suri',status:'Situação na Suri',notes:'Observações'};
+const labels={name:'Nome',phone:'Telefone / WhatsApp',email:'E-mail',source:'Origem',agent:'Atendente na Suri',status:'Situação na Suri',notes:'Observações',consent_status:'Aceite WhatsApp marketing',consent_at:'Data do aceite (AAAA-MM-DD)',consent_source:'Origem / comprovante do aceite'};
 type Preview={total:number;headers:string[];mapping:ImportMapping;sample:Record<string,unknown>[]};
 export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>}){
   const [open,setOpen]=useState(false),[file,setFile]=useState<File|null>(null),[preview,setPreview]=useState<Preview|null>(null);
@@ -38,9 +38,11 @@ export default function ContactImport({onComplete}:{onComplete:()=>Promise<void>
       <section className="card section" style={{maxWidth:900,width:'100%',maxHeight:'90dvh',overflow:'auto'}}>
         <div className="page-head"><h2>Importar contatos da Suri</h2><button className="btn btn-secondary" disabled={busy} onClick={()=>setOpen(false)} aria-label="Fechar importação"><X size={18}/></button></div>
         <p>Selecione a exportação CSV ou Excel da Suri (até 8 MB). Confira as colunas antes de importar. Cadastros existentes mantêm nome e responsável; telefone ou e-mail identificam contatos repetidos.</p>
+        <p>Para campanhas, mapeie os campos de aceite de marketing WhatsApp, data original e origem/comprovante. Apenas opt-ins documentados serão elegíveis. Contatos que optaram por não receber mensagens permanecem bloqueados.</p>
         <p>O histórico de mensagens e arquivos da Suri não é importado por esta planilha. Atendente, situação e observações ficam registrados como dados de origem.</p>
         <label>Arquivo CSV / Excel<input aria-label="Arquivo CSV / Excel" className="input" type="file" accept=".csv,.xlsx,.xls" disabled={busy} onChange={e=>{const f=e.target.files?.[0];if(f)void previewFile(f);}}/></label>
         <label>Origem<input className="input" value={source} disabled={busy} onChange={e=>setSource(e.target.value)}/></label>
+        <p>Reimportar a planilha com os campos de consentimento não cria novos registros para telefones já cadastrados. O aceite só será atualizado se vier documentado por linha.</p>
         <p>Os novos contatos ficam no cadastro. A primeira mensagem recebida pelo WhatsApp inicia o atendimento e pode gerar a oportunidade.</p>
         {preview&&<>
           <p><strong>{preview.total} linhas encontradas.</strong> Telefones brasileiros sem DDI recebem +55. Para outros países, use +DDI.</p>
