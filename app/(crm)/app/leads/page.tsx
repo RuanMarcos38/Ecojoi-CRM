@@ -124,6 +124,7 @@ export default function Leads() {
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [temperatureFilter,setTemperatureFilter]=useState<'all'|'cold'|'warm'|'hot'>('all');
+  const [inactivityFilter, setInactivityFilter] = useState<'all'|'yellow'|'red'>('all');
   const [savedViews,setSavedViews]=useState<SavedView[]>([]);
   const [showSaveView,setShowSaveView]=useState(false);
   const [viewName,setViewName]=useState('');
@@ -170,13 +171,16 @@ export default function Leads() {
   const filteredRows = useMemo(() => {
     const term = query.trim().toLowerCase();
     return rows.filter(row => {
+      const idle = inactivityDays(row, now);
+      if (inactivityFilter === 'yellow' && !(idle > 1 && idle <= 3)) return false;
+      if (inactivityFilter === 'red' && idle <= 3) return false;
       const source = row.source?.trim() || 'Sem origem';
       const text = [row.name, row.email, row.phone, row.source].filter(Boolean).join(' ').toLowerCase();
       return (!term || text.includes(term))
         && (sourceFilter === 'all' || source === sourceFilter)
         && (temperatureFilter === 'all' || row.lead_temperature === temperatureFilter);
     });
-  }, [query, rows, sourceFilter, temperatureFilter]);
+  }, [query, rows, sourceFilter, temperatureFilter, inactivityFilter, now]);
 
   const recentCount = useMemo(() => rows.filter(row => Date.now() - new Date(row.created_at).getTime() <= 7 * 86400000).length, [rows]);
   const noPhoneCount = useMemo(() => rows.filter(row => !row.phone).length, [rows]);
@@ -344,6 +348,7 @@ export default function Leads() {
       <label className={styles.selectField}><Filter size={16}/><select value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}><option value="all">Todas as origens</option>{sources.map(source => <option key={source} value={source}>{source}</option>)}</select></label>
       <label className={styles.selectField}><Target size={16}/><select value={temperatureFilter} onChange={event=>setTemperatureFilter(event.target.value as 'all'|'cold'|'warm'|'hot')}><option value="all">Todas temperaturas</option><option value="hot">Quentes</option><option value="warm">Mornos</option><option value="cold">Frios</option></select></label>
     </section>
+      <label className={styles.selectField}><Clock3 size={16}/><select aria-label="Prioridade por inatividade" value={inactivityFilter} onChange={event => setInactivityFilter(event.target.value as 'all'|'yellow'|'red')}><option value="all">Todas as prioridades</option><option value="yellow">Amarelo · mais de 1 até 3 dias</option><option value="red">Vermelho · mais de 3 dias</option></select></label>
     <section className={styles.toolbar} aria-label="Visões salvas" style={{gridTemplateColumns:'minmax(260px,1fr)'}}>
       <label className={styles.selectField}><ClipboardCheck size={16}/><select value={selectedView} onChange={event=>{ setSelectedView(event.target.value); setFollowUp(null); applyView(event.target.value); }}><option value="">Visão padrão</option>{savedViews.map(view=><option key={view.id} value={view.id}>{view.name}</option>)}</select></label>
     </section>
@@ -365,10 +370,10 @@ export default function Leads() {
     <div className={styles.workspace}>
       <section className={`${styles.cardGrid} ${styles.leadGrid}`} aria-label="Lista de leads">
         {filteredRows.length ? filteredRows.map(row => {
-          const days = selectedView ? 0 : inactivityDays(row, now);
-          const red = days > 2;
+          const days = inactivityDays(row, now);
+          const red = days > 3;
           const warning = days > 1;
-          return <article className={`${styles.recordCard} ${warning ? (red ? styles.inactivityRed : styles.inactivityYellow) : ''}`} key={row.id}>
+          return <article className={styles.recordCard} key={row.id}>
           <div className={styles.recordTop}>
             <div className={styles.identity}>
               <span className={styles.avatar}>{row.name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase()}</span>
@@ -381,7 +386,7 @@ export default function Leads() {
             <div className={styles.metaLine}><Phone size={15}/><span>{row.phone || 'Telefone não informado'}</span></div>
           </div>
           {attributionLabel(row) && <p className={styles.recordNote}>{attributionLabel(row)}</p>}
-          {warning && <div className={styles.inactivityNotice}><Clock3 size={14}/><span>{red ? 'Mais de 2 dias sem interação' : 'Mais de 1 dia sem interação'}</span></div>}
+           {warning && <span title={red ? 'Mais de 3 dias sem interação — prioridade alta' : 'Mais de 1 dia sem interação — atenção'} aria-label={red ? 'Prioridade alta, mais de 3 dias sem interação' : 'Atenção, mais de 1 dia sem interação'} style={{display:'inline-flex',alignItems:'center',color:red?'#dc2626':'#ca8a04'}}><Clock3 size={17}/></span>
           {days > 5 && <div className={styles.followUpPanel}>
             <button type="button" className="btn btn-secondary" aria-expanded={followUp === row.id}
               onClick={() => { setCopied(false); setFollowUp(followUp === row.id ? null : row.id); }}>Follow-up · mais de 5 dias</button>
