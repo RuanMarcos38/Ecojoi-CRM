@@ -1,0 +1,1 @@
+globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/goals/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/home/runner/work/Ecojoi-CRM/Ecojoi-CRM/app/api/goals/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}};
