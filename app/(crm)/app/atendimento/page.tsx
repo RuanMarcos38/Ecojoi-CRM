@@ -148,7 +148,10 @@ export default function Atendimento() {
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
   const [reply, setReply] = useState<{ conversationId: string; message: Message } | null>(null);
-  const textInput = useRef<HTMLInputElement>(null);
+  const textInput = useRef<HTMLTextAreaElement>(null);
+  const [sendingText, setSendingText] = useState(false);
+  // Ref locks synchronously, before React renders the disabled state.
+  const sendingTextRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [contactNameDraft, setContactNameDraft] = useState<{ id: string; name: string } | null>(null);
@@ -429,28 +432,42 @@ export default function Atendimento() {
 
   async function send(e: FormEvent) {
     e.preventDefault();
-    if (!text.trim() || !active || active.attendance_state !== 'in_service') return;
+    // Enter, a rapid second Enter and a click must never dispatch overlapping requests.
+    if (sendingTextRef.current || sendingMedia || recording || !text.trim() || !active || active.attendance_state !== 'in_service') return;
+    sendingTextRef.current = true;
+    setSendingText(true);
     setError(''); setNotice('');
-    const r = await fetch(`/api/conversations/${active.id}/messages`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ body: text.trim(), reply_to_message_id: replyTarget?.id })
-    });
-    const d = await r.json();
-    if (r.ok) {
-      setText(current => current === text ? '' : current);
-      setReply(current => current?.conversationId === active.id && current.message.id === replyTarget?.id ? null : current);
-      setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
-      await load();
-      return;
+    const messageBody = text.trim();
+    const conversationId = active.id;
+    const replyId = replyTarget?.id;
+    try {
+      const r = await fetch(`/api/conversations/${conversationId}/messages`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ body: messageBody, reply_to_message_id: replyId })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setText(current => current.trim() === messageBody ? '' : current);
+        setReply(current => current?.conversationId === conversationId && current.message.id === replyId ? null : current);
+        setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
+        await load();
+        return;
+      }
+      const errors: Record<string, string> = {
+        conversation_in_automatic_mode: 'O agente de IA está responsável. Assuma o atendimento antes de responder.',
+        conversation_not_in_human_service: 'Assuma o atendimento antes de enviar uma mensagem.',
+        reply_target_unavailable: 'A mensagem original está indisponível. Remova a citação ou escolha outra mensagem.',
+        whatsapp_reply_not_supported: 'Este canal não oferece respostas com citação.',
+        whatsapp_window_closed: 'A janela de 24 horas do WhatsApp terminou. Use um template aprovado para reabrir a conversa.'
+      };
+      if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
+      setError(errors[d.error] ?? 'Não foi possível enviar a mensagem.');
+    } catch {
+      setError('Falha de conexão ao enviar. Confira a conversa antes de tentar novamente.');
+    } finally {
+      sendingTextRef.current = false;
+      setSendingText(false);
     }
-    const errors: Record<string, string> = {
-      conversation_in_automatic_mode: 'O agente de IA está responsável. Assuma o atendimento antes de responder.',
-      conversation_not_in_human_service: 'Assuma o atendimento antes de enviar uma mensagem.',
-      reply_target_unavailable: 'A mensagem original está indisponível. Remova a citação ou escolha outra mensagem.',
-      whatsapp_reply_not_supported: 'Este canal não oferece respostas com citação.',
-      whatsapp_window_closed: 'A janela de 24 horas do WhatsApp terminou. Use um template aprovado para reabrir a conversa.'
-    };
-    if (d.error === 'whatsapp_window_closed') setTemplateOpen(true);
-    setError(errors[d.error] ?? 'Não foi possível enviar a mensagem.');
   }
 
   async function sendFile(file: File, durationMs?: number) {
@@ -974,10 +991,17 @@ export default function Atendimento() {
                 <input ref={fileInput} type="file" hidden onChange={onFileChange} accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
                 {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
               </div>
-              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<input ref={textInput} value={text} onChange={e => setText(e.target.value)} placeholder="Digite uma mensagem ou /atalho" /></div>}
+              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<textarea ref={textInput} rows={1} value={text} onChange={e => setText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  e.preventDefault();
+                  if (!e.repeat && !sendingTextRef.current) e.currentTarget.form?.requestSubmit();
+                }}
+                aria-label="Mensagem" title="Enter para enviar; Shift+Enter para quebrar linha"
+                placeholder="Digite uma mensagem ou /atalho" /></div>}
               <div className={styles.composerActions}>
                 {recording ? <button type="button" className={`${styles.sendButton} ${styles.stopButton}`} onClick={stopRecording} title="Parar e enviar áudio" aria-label="Parar gravação"><Square size={18}/></button> : <button type="button" className={styles.composerIcon} onClick={startRecording} disabled={sendingMedia} title="Gravar áudio" aria-label="Gravar áudio"><Mic size={20}/></button>}
-                <button className={styles.sendButton} type="submit" disabled={!text.trim() || recording || sendingMedia} title="Enviar mensagem" aria-label="Enviar"><Send size={19}/></button>
+                <button className={styles.sendButton} type="submit" disabled={!text.trim() || recording || sendingMedia || sendingText} title="Enviar mensagem" aria-label="Enviar"><Send size={19}/></button>
               </div>
             </form>
           </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}

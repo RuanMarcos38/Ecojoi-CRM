@@ -1329,3 +1329,35 @@ button.messageQuote { cursor: pointer; }
 }
 .replyPreview .messageQuote { margin-bottom: 0; }
 .messageRow:focus .messageBubble { outline: 2px solid var(--eco-primary, #087756); outline-offset: 2px; }
+
+
+/* Multiline chat composer: Enter sends once; Shift+Enter inserts a new line. */
+.messageInputWrap > textarea,
+.root .messageInputWrap > textarea {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  max-height: 144px;
+  padding: 11px 13px;
+  border: 1px solid #dfe5e1;
+  border-radius: 7px;
+  outline: 0;
+  background: var(--chat-surface);
+  color: var(--chat-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.root .messageInputWrap > textarea::placeholder { color: var(--chat-text); }
+.root .messageInputWrap > textarea:focus {
+  border-color: #9bb1a5;
+  box-shadow: 0 0 0 3px rgba(8,122,75,.07);
+}
+:global(html[data-ecojoi-theme="light"]) .root .messageInputWrap > textarea { border-color: #d1d9d3; }
+@media (min-width: 761px) {
+  .root .messageInputWrap > textarea { min-height: 58px; padding: 14px; font-size: 16px; }
+}
