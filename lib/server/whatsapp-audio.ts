@@ -63,7 +63,7 @@ export async function prepareMetaWhatsAppAudio(file: File): Promise<File> {
       }
       settled = true;
       clearTimeout(timer);
-      resolve(new File([new Uint8Array(bytes)], file.name.replace(/\.[^.]+$/, '') + '.ogg', { type: 'audio/ogg' }));
+      resolve(new File([new Uint8Array(bytes)], file.name.replace(/\.[^.]+$/, '') + '.ogg', { type: 'audio/ogg; codecs=opus' }));
     });
     child.stdin.on('error', () => {});
     child.stdin.end(input);
