@@ -411,7 +411,8 @@ async function processWhatsAppValue(value: any) {
         errors: errors.slice(0, 3).map((error: any) => ({
           code: error?.code ?? null,
           title: String(error?.title ?? '').slice(0, 200),
-          message: String(error?.message ?? '').slice(0, 500)
+          message: String(error?.message ?? '').slice(0, 500),
+          details: String(error?.error_data?.details ?? '').slice(0, 1000)
         }))
       });
     }
