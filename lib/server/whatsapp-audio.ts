@@ -7,7 +7,7 @@ export class AudioConversionError extends Error {
 }
 
 /**
- * Convert browser recordings to a real Ogg/Opus bitstream.
+ * Convert browser recordings to a widely supported MP3 bitstream for Meta Cloud API.
  * WhatsApp Cloud API validates the codec inside the file, not just MIME/extension.
  * Do not fake an audio MIME or send the original MP4 when conversion fails.
  */
@@ -21,8 +21,8 @@ export async function prepareMetaWhatsAppAudio(file: File): Promise<File> {
   const executable = process.env.FFMPEG_PATH?.trim() || 'ffmpeg';
   const args = [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
-    '-i', 'pipe:0', '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '48000',
-    '-c:a', 'libopus', '-b:a', '32k', '-f', 'ogg', 'pipe:1'
+    '-i', 'pipe:0', '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '44100',
+    '-c:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3', 'pipe:1'
   ];
 
   return await new Promise<File>((resolve, reject) => {
@@ -53,17 +53,19 @@ export async function prepareMetaWhatsAppAudio(file: File): Promise<File> {
     child.on('close', (code) => {
       if (settled) return;
       if (code !== 0 || total < 128) {
-        fail(new AudioConversionError('O arquivo de áudio não pôde ser convertido para Ogg/Opus.', 'audio_conversion_failed'));
+        fail(new AudioConversionError('O arquivo de áudio não pôde ser convertido para MP3.', 'audio_conversion_failed'));
         return;
       }
       const bytes = Buffer.concat(chunks);
-      if (bytes.subarray(0, 4).toString() !== 'OggS') {
-        fail(new AudioConversionError('O resultado da conversão não é Ogg válido.', 'audio_conversion_failed'));
+      const isId3 = bytes.subarray(0, 3).toString() === 'ID3';
+      const isMpegFrame = bytes.length > 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+      if (!isId3 && !isMpegFrame) {
+        fail(new AudioConversionError('O resultado da conversão não é MP3 válido.', 'audio_conversion_failed'));
         return;
       }
       settled = true;
       clearTimeout(timer);
-      resolve(new File([new Uint8Array(bytes)], file.name.replace(/\.[^.]+$/, '') + '.ogg', { type: 'audio/ogg; codecs=opus' }));
+      resolve(new File([new Uint8Array(bytes)], file.name.replace(/\.[^.]+$/, '') + '.mp3', { type: 'audio/mpeg' }));
     });
     child.stdin.on('error', () => {});
     child.stdin.end(input);
