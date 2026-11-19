@@ -69,10 +69,10 @@ jobs:
           tar -xzf "$pkg_dir/$archive" -C "$pkg_dir"
           install -m 0755 "$pkg_dir/package/ffmpeg" deploy/runtime/bin/ffmpeg
           encoder_list=$(deploy/runtime/bin/ffmpeg -hide_banner -encoders 2>/dev/null)
-          grep -Eq 'libopus' <<< "$encoder_list"
+          grep -Eq 'libmp3lame' <<< "$encoder_list"
           # Verify that actual audio can be encoded, not only that the executable exists.
-          deploy/runtime/bin/ffmpeg -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$pkg_dir/probe.ogg"
-          test "$(head -c 4 "$pkg_dir/probe.ogg")" = OggS
+          deploy/runtime/bin/ffmpeg -hide_banner -loglevel error -f lavfi -i anullsrc=r=44100:cl=mono -t 0.3 -c:a libmp3lame -f mp3 -y "$pkg_dir/probe.mp3"
+          test "$(head -c 3 "$pkg_dir/probe.mp3")" = ID3
 
           # Operational/support files do not participate in runtime resolution.
           for item in .cpanel.yml database README.md SECURITY.md; do

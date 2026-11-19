@@ -215,7 +215,7 @@ export async function sendWhatsAppMedia(
     };
 
     if (type === 'image') payload.image = { id: mediaId, ...(caption ? { caption } : {}) };
-    if (type === 'audio') payload.audio = { id: mediaId };
+    if (type === 'audio') payload.audio = { id: mediaId, ...(file.type.toLowerCase().includes('ogg') && file.type.toLowerCase().includes('opus') ? { voice: true } : {}) };
     if (type === 'document') payload.document = { id: mediaId, filename: file.name, ...(caption ? { caption } : {}) };
 
     const sent = await graphRequest(`${phoneNumberId}/messages`, {
@@ -223,7 +223,11 @@ export async function sendWhatsAppMedia(
       body: JSON.stringify(payload)
     });
 
-    return { delivered: true as const, providerMessageId: sent?.messages?.[0]?.id ?? null };
+    const providerMessageId = sent?.messages?.[0]?.id;
+    if (typeof providerMessageId !== 'string' || !providerMessageId.startsWith('wamid.')) {
+      return { delivered: false as const, reason: 'meta_message_id_missing' };
+    }
+    return { delivered: true as const, providerMessageId };
   } catch (error) {
     return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_media_send_failed' };
   }
@@ -407,7 +411,8 @@ async function processWhatsAppValue(value: any) {
         errors: errors.slice(0, 3).map((error: any) => ({
           code: error?.code ?? null,
           title: String(error?.title ?? '').slice(0, 200),
-          message: String(error?.message ?? '').slice(0, 500)
+          message: String(error?.message ?? '').slice(0, 500),
+          details: String(error?.error_data?.details ?? '').slice(0, 1000)
         }))
       });
     }
