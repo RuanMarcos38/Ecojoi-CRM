@@ -36,6 +36,6 @@ jobs:
           tar -xzf "$tmp/$archive" -C "$tmp"
           chmod +x "$tmp/package/ffmpeg"
           encoder_list=$("$tmp/package/ffmpeg" -hide_banner -encoders 2>/dev/null)
-          grep -Eq 'libopus' <<< "$encoder_list"
-          "$tmp/package/ffmpeg" -hide_banner -loglevel error -f lavfi -i anullsrc=r=48000:cl=mono -t 0.3 -c:a libopus -f ogg -y "$tmp/probe.ogg"
-          test "$(head -c 4 "$tmp/probe.ogg")" = OggS
+          grep -Eq 'libmp3lame' <<< "$encoder_list"
+          "$tmp/package/ffmpeg" -hide_banner -loglevel error -f lavfi -i anullsrc=r=44100:cl=mono -t 0.3 -c:a libmp3lame -f mp3 -y "$tmp/probe.mp3"
+          test "$(head -c 3 "$tmp/probe.mp3")" = ID3
