@@ -627,3 +627,48 @@ export async function getEvolutionContactPicture(tenantId: string, phone: string
   });
   return typeof data?.profilePictureUrl === 'string' ? data.profilePictureUrl : null;
 }
+
+export async function recoverEvolutionAttachment(tenantId: string, conversationId: string, messageId: string) {
+  const settings = await tenantEvolutionSettings(tenantId);
+  if (settings.provider !== 'evolution' || !settings.instanceName) return null;
+
+  const admin = createAdminClient();
+  const { data: message, error } = await admin.from('messages')
+    .select('provider_message_id,message_type')
+    .eq('tenant_id', tenantId).eq('conversation_id', conversationId).eq('id', messageId)
+    .is('attachment_path', null).in('message_type', ['image', 'audio', 'file']).maybeSingle();
+  if (error) throw error;
+  const providerId = message?.provider_message_id;
+  if (!message || !providerId || providerId.startsWith('wamid.')) return null;
+
+  const fetched = await fetchInboundMedia(tenantId, settings.instanceName, providerId);
+  const media = fetched?.data ?? fetched;
+  const base64 = inboundBase64(media?.base64);
+  const mime = String(media?.mimetype ?? '').split(';', 1)[0].trim().toLowerCase();
+  if (!base64 || !mime) return null;
+  if (message.message_type === 'image' && !mime.startsWith('image/')) return null;
+  if (message.message_type === 'audio' && !mime.startsWith('audio/')) return null;
+
+  if (message.message_type === 'file' && !['application/pdf', 'text/plain', 'text/csv',
+    'application/msword', 'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(mime)) return null;
+  if (mime === 'image/svg+xml') return null;
+
+  const name = typeof media?.fileName === 'string' && media.fileName.trim()
+    ? media.fileName.trim().slice(-120)
+    : mime === 'application/pdf' ? 'documento-whatsapp.pdf' : 'anexo-whatsapp';
+  const attachment = await saveInboundBase64(tenantId, conversationId, base64, mime, name);
+  const { data: updated, error: updateError } = await admin.from('messages')
+    .update({
+      attachment_path: attachment.path,
+      attachment_name: attachment.name,
+      attachment_mime: attachment.mime,
+      attachment_size: attachment.size
+    })
+    .eq('tenant_id', tenantId).eq('conversation_id', conversationId).eq('id', messageId)
+    .is('attachment_path', null).select('id').maybeSingle();
+  if (!updated) await admin.storage.from(BUCKET).remove([attachment.path]);
+  if (updateError) throw updateError;
+  return Boolean(updated);
+}

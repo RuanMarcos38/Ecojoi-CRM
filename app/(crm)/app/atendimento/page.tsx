@@ -171,6 +171,7 @@ export default function Atendimento() {
   const pinnedConversation = useRef<string | null>(null);
   const [changingState, setChangingState] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
+  const [recoveringAttachment, setRecoveringAttachment] = useState<string | null>(null);
   const [pendingAttachment, setPendingAttachment] = useState<{ conversationId: string; file: File } | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState('');
   useEffect(() => {
@@ -467,6 +468,35 @@ export default function Atendimento() {
     } finally {
       sendingTextRef.current = false;
       setSendingText(false);
+    }
+  }
+
+  async function recoverAttachment(message: Message) {
+    if (!active || recoveringAttachment) return;
+    setRecoveringAttachment(message.id);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/conversations/${active.id}/attachments/recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: message.id })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(response.status === 403 ? 'A recuperação requer permissão para gerenciar conversas.' : 'Não foi possível recuperar o anexo pelo provedor.');
+        return;
+      }
+      if (!result.recovered) {
+        setError('O WhatsApp não disponibilizou o arquivo para recuperação.');
+        return;
+      }
+      await refreshConversations();
+      setNotice('Anexo recuperado na conversa original.');
+    } catch {
+      setError('Falha de conexão ao recuperar o anexo.');
+    } finally {
+      setRecoveringAttachment(null);
     }
   }
 
@@ -844,6 +874,13 @@ export default function Atendimento() {
             <div className={styles.audioMessage}><Mic size={17}/><audio controls preload="metadata" src={message.attachment_url} /></div>
           )}
           {message.message_type === 'audio' && !message.attachment_url && <small>Áudio indisponível</small>}
+          {active?.channel === 'whatsapp' && !message.attachment_url && message.provider_message_id
+            && !message.provider_message_id.startsWith('wamid.') && ['image', 'audio', 'file'].includes(message.message_type ?? '') && (
+              <button type="button" className="btn btn-secondary" disabled={Boolean(recoveringAttachment)}
+                onClick={() => void recoverAttachment(message)}>
+                {recoveringAttachment === message.id ? 'Recuperando…' : 'Recuperar anexo'}
+              </button>
+          )}
           {message.message_type === 'file' && message.attachment_url && (
             <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.fileMessage}>
               <span className={styles.fileIcon}><FileText size={20}/></span>
