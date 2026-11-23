@@ -60,16 +60,26 @@ export async function GET(request: Request) {
       }
     }
 
-    const hydrated = await Promise.all((data ?? []).map(async conversation => {
-      const messages = await Promise.all((conversation.messages ?? []).map(async (message: any) => {
-        const sender_name = names.get(message.sender_user_id) ?? null;
-        if (!message.attachment_path) return { ...message, sender_name, attachment_url: null };
-        const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(message.attachment_path, 3600);
-        return { ...message, sender_name, attachment_url: signed?.signedUrl ?? null };
+    const paths = [...new Set((data ?? []).flatMap(conversation =>
+      (conversation.messages ?? []).flatMap(message => message.attachment_path ? [String(message.attachment_path)] : [])
+    ))];
+    const signedUrls = new Map<string, string>();
+    for (let start = 0; start < paths.length; start += 100) {
+      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrls(paths.slice(start, start + 100), 3600);
+      for (const item of signed ?? []) {
+        if (item.path && item.signedUrl && !item.error) signedUrls.set(item.path, item.signedUrl);
+      }
+    }
+
+    const hydrated = (data ?? []).map(conversation => {
+      const messages = (conversation.messages ?? []).map(message => ({
+        ...message,
+        sender_name: names.get(message.sender_user_id) ?? null,
+        attachment_url: signedUrls.get(message.attachment_path) ?? null
       }));
-      messages.sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)));
+      messages.sort((left, right) => String(left.created_at).localeCompare(String(right.created_at)));
       return { ...conversation, messages };
-    }));
+    });
     return NextResponse.json({ data: hydrated });
   } catch (e) {
     if (e instanceof Response) return e;
