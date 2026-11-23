@@ -46,17 +46,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     let file = attachment;
     const mime = attachment.type.split(';', 1)[0].trim().toLowerCase();
-    const hasGenericMime = !mime || mime === 'application/octet-stream' || mime === 'application/x-pdf';
-    const audioAliases: Record<string,string> = { 'audio/x-m4a':'audio/mp4', 'audio/m4a':'audio/mp4', 'audio/mp3':'audio/mpeg', 'audio/x-wav':'audio/wav' };
-    const normalizedMime = audioAliases[mime] || mime;
+    const aliases: Record<string, string> = {
+      'audio/x-m4a': 'audio/mp4', 'audio/m4a': 'audio/mp4', 'audio/mp3': 'audio/mpeg',
+      'audio/x-wav': 'audio/wav', 'audio/wave': 'audio/wav', 'image/jpg': 'image/jpeg'
+    };
+    const normalizedMime = aliases[mime] || mime;
     if (ALLOWED.has(normalizedMime) && normalizedMime !== attachment.type) {
       file = new File([attachment], attachment.name, { type: normalizedMime });
     }
-    if (hasGenericMime && /\.pdf$/i.test(attachment.name)) {
-      const header = await attachment.slice(0, 1024).text();
-      if (/%PDF-[0-9]\.[0-9]/.test(header)) {
-        file = new File([attachment], attachment.name, { type: 'application/pdf' });
+
+    if (!mime || ['application/octet-stream', 'binary/octet-stream', 'application/x-pdf'].includes(mime)) {
+      const header = Buffer.from(await attachment.slice(0, 1024).arrayBuffer());
+      const signature = header.subarray(0, 12).toString('latin1');
+      let detectedMime: string | undefined;
+      if (/\.pdf$/i.test(attachment.name) && /%PDF-[0-9]\.[0-9]/.test(header.toString('latin1'))) {
+        detectedMime = 'application/pdf';
+      } else if (header.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+        detectedMime = 'image/jpeg';
+      } else if (header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+        detectedMime = 'image/png';
+      } else if (/\.m4a$/i.test(attachment.name) && signature.slice(4, 8) === 'ftyp') {
+        detectedMime = 'audio/mp4';
       }
+      if (detectedMime) file = new File([attachment], attachment.name, { type: detectedMime });
     }
 
     if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_file_type' }, { status: 400 });
@@ -100,7 +112,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       contentType: file.type,
       upsert: false
     });
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.warn('[attachments] Falha no armazenamento do anexo', { name: uploadError.name, type: file.type });
+      return NextResponse.json({ error: 'attachment_storage_failed' }, { status: 503 });
+    }
 
     const type = messageType(file);
     const initialStatus = conversation.channel === 'internal' ? 'sent' : 'queued';

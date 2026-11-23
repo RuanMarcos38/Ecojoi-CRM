@@ -4,6 +4,8 @@ import { ingestLead } from '@/lib/server/lead-ingestion';
 import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
 
 const BUCKET = 'ecojoi-message-attachments';
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_BASE64_LENGTH = Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4;
 
 type EvolutionRuntime = {
   baseUrl: string;
@@ -343,12 +345,11 @@ export async function sendEvolutionMedia(
 
   try {
     const base64 = Buffer.from(await file.arrayBuffer()).toString('base64');
-    const media = `data:${file.type || 'application/octet-stream'};base64,${base64}`;
 
     const data = file.type.startsWith('audio/')
       ? await evolutionRequest(runtime, `message/sendWhatsAppAudio/${encodeURIComponent(settings.instanceName)}`, {
           method: 'POST',
-          body: JSON.stringify({ number: recipient, audio: media })
+          body: JSON.stringify({ number: recipient, audio: base64 })
         })
       : await evolutionRequest(runtime, `message/sendMedia/${encodeURIComponent(settings.instanceName)}`, {
           method: 'POST',
@@ -357,7 +358,7 @@ export async function sendEvolutionMedia(
             mediatype: file.type.startsWith('image/') ? 'image' : 'document',
             mimetype: file.type || 'application/octet-stream',
             caption: caption || '',
-            media,
+            media: base64,
             fileName: file.name
           })
         });
@@ -428,6 +429,23 @@ function mediaNode(message: any, type: string) {
   return null;
 }
 
+function inboundBase64(value: unknown) {
+  if (typeof value !== 'string' || value.length > MAX_ATTACHMENT_BASE64_LENGTH + 256) return null;
+  const clean = value.replace(/^data:[^,]*;base64,/i, '').replace(/\s/g, '');
+  if (!clean || clean.length > MAX_ATTACHMENT_BASE64_LENGTH || !/^[A-Za-z0-9+/]+={0,2}$/.test(clean)) return null;
+  return clean;
+}
+
+async function fetchInboundMedia(tenantId: string, instanceName: string, messageId: string) {
+  const runtime = await tenantRuntime(tenantId);
+  if (!runtime) return null;
+  return evolutionRequest(runtime, `chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(15_000),
+    body: JSON.stringify({ message: { key: { id: messageId } }, convertToMp4: false })
+  });
+}
+
 async function saveInboundBase64(
   tenantId: string,
   conversationId: string,
@@ -435,8 +453,8 @@ async function saveInboundBase64(
   mime: string,
   fileName: string
 ) {
-  const clean = base64Value.includes(',') ? base64Value.split(',').pop() || '' : base64Value;
-  const bytes = new Uint8Array(Buffer.from(clean, 'base64'));
+  const bytes = new Uint8Array(Buffer.from(base64Value, 'base64'));
+  if (!bytes.byteLength || bytes.byteLength > MAX_ATTACHMENT_BYTES) throw new Error('invalid_attachment_size');
   const safe = fileName.normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-120) || 'arquivo';
   const path = `${tenantId}/${conversationId}/evolution-${crypto.randomUUID()}-${safe}`;
   const admin = createAdminClient();
@@ -477,7 +495,10 @@ async function processInboundMessage(instanceName: string, data: any) {
   if (!tenantId) return;
 
   const key = data?.key ?? data?.data?.key;
-  const message = data?.message ?? data?.data?.message;
+  const rawMessage = data?.message ?? data?.data?.message;
+  const message = rawMessage?.documentWithCaptionMessage?.message
+    ?? rawMessage?.ephemeralMessage?.message
+    ?? rawMessage;
   const remoteJid = String(key?.remoteJid ?? '');
   if (!key?.id || key?.fromMe || !remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
 
@@ -504,15 +525,24 @@ async function processInboundMessage(instanceName: string, data: any) {
   const node = mediaNode(message, type);
   let attachment: { path?: string | null; name?: string | null; mime?: string | null; size?: number | null } | undefined;
   let body = textFromMessage(message);
-  const base64Value = data?.base64 || data?.data?.base64 || message?.base64 || null;
-
-  if (base64Value && node && base.conversationId) {
-    const mime = String(node?.mimetype || 'application/octet-stream').split(';', 1)[0].trim().toLowerCase();
-    const fileName = String(node?.fileName || (type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'));
+  if (node && base.conversationId) {
     try {
-      attachment = await saveInboundBase64(tenantId, base.conversationId, String(base64Value), mime, fileName);
+      let base64 = [data?.base64, data?.data?.base64, message?.base64, node.base64]
+        .map(inboundBase64).find(Boolean);
+      let fetched: any;
+      if (!base64) {
+        fetched = await fetchInboundMedia(tenantId, instanceName, String(key.id));
+        base64 = inboundBase64(fetched?.base64 ?? fetched?.data?.base64);
+      }
+      if (!base64) throw new Error('attachment_data_unavailable');
+      const mime = String(node.mimetype || fetched?.mimetype || fetched?.data?.mimetype || 'application/octet-stream')
+        .split(';', 1)[0].trim().toLowerCase();
+      const fileName = String(node.fileName || fetched?.fileName || (
+        type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'
+      ));
+      attachment = await saveInboundBase64(tenantId, base.conversationId, base64, mime, fileName);
     } catch {
-      attachment = undefined;
+      console.warn('[evolution] Falha ao recuperar ou armazenar anexo recebido', { type });
     }
   }
 
