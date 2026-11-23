@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     let replyToProviderId: string | undefined;
     if (body.reply_to_message_id) {
-      if (conversation.channel !== 'whatsapp' || await getWhatsAppProvider(ctx.tenantId) !== 'meta') {
+      if (conversation.channel !== 'whatsapp') {
         return NextResponse.json({ error: 'whatsapp_reply_not_supported' }, { status: 409 });
       }
       const { data: target, error: targetError } = await supabase.from('messages')
@@ -48,7 +48,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq('id', body.reply_to_message_id)
         .maybeSingle();
       if (targetError) throw targetError;
-      if (!target?.provider_message_id?.startsWith('wamid.')) {
+      const provider = await getWhatsAppProvider(ctx.tenantId);
+      if (!target?.provider_message_id || target.provider_message_id.startsWith('wamid.') !== (provider === 'meta')) {
         return NextResponse.json({ error: 'reply_target_unavailable' }, { status: 404 });
       }
       replyToProviderId = target.provider_message_id;

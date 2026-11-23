@@ -293,11 +293,13 @@ async function sendTextOnce(
   instanceName: string,
   recipient: string,
   body: string,
-  legacy = false
+  legacy = false,
+  replyToProviderId?: string
 ) {
+  const quoted = replyToProviderId ? { key: { id: replyToProviderId } } : undefined;
   const payload = legacy
     ? { number: recipient, text: body, textMessage: { text: body } }
-    : { number: recipient, text: body };
+    : { number: recipient, text: body, ...(quoted ? { quoted } : {}) };
 
   return evolutionRequest(runtime, `message/sendText/${encodeURIComponent(instanceName)}`, {
     method: 'POST',
@@ -305,7 +307,7 @@ async function sendTextOnce(
   });
 }
 
-export async function sendEvolutionText(tenantId: string, to: string | null | undefined, body: string) {
+export async function sendEvolutionText(tenantId: string, to: string | null | undefined, body: string, replyToProviderId?: string) {
   const settings = await tenantEvolutionSettings(tenantId);
   const runtime = await tenantRuntime(tenantId);
   const recipient = digits(to);
@@ -316,8 +318,9 @@ export async function sendEvolutionText(tenantId: string, to: string | null | un
   try {
     let data: any;
     try {
-      data = await sendTextOnce(runtime, settings.instanceName, recipient, body);
-    } catch {
+      data = await sendTextOnce(runtime, settings.instanceName, recipient, body, false, replyToProviderId);
+    } catch (error) {
+      if (replyToProviderId) throw error;
       data = await sendTextOnce(runtime, settings.instanceName, recipient, body, true);
     }
 
@@ -508,6 +511,9 @@ async function processInboundMessage(instanceName: string, data: any) {
   const fresh = await claimEvent(tenantId, String(key.id), 'whatsapp_message', { instance: instanceName });
   if (!fresh) return;
 
+  const context = [message?.extendedTextMessage, message?.imageMessage, message?.documentMessage,
+    message?.audioMessage, message?.videoMessage].find(node => typeof node?.contextInfo?.stanzaId === 'string')?.contextInfo;
+  const replyToProviderId = typeof context?.stanzaId === 'string' ? context.stanzaId.trim().slice(0, 512) : null;
   const displayName = data?.pushName || data?.data?.pushName || null;
   const type = inboundType(message);
   const base = await ingestLead({
@@ -560,6 +566,7 @@ async function processInboundMessage(instanceName: string, data: any) {
     source: 'WhatsApp',
     message: body,
     providerMessageId: String(key.id),
+    replyToProviderId,
     messageType: type,
     attachment,
     createConversation: true

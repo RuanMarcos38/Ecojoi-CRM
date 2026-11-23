@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppMedia } from '@/lib/server/whatsapp';
+import { canSendFreeformWhatsApp, sendWhatsAppText, sendWhatsAppTemplate, sendWhatsAppMedia } from '@/lib/server/whatsapp';
 
 const BUCKET = 'ecojoi-message-attachments';
 
@@ -66,6 +66,50 @@ async function deliverWhatsApp(tenantId: string, payload: QueuePayload) {
   return sendWhatsAppMedia(tenantId, payload.to, file, payload.caption ?? null);
 }
 
+export async function queuePipelineMessages(tenantId?: string) {
+  const admin = createAdminClient();
+  let query = admin.from('messages')
+    .select('id,tenant_id,conversation_id,created_at,body,pipeline_automation_runs!inner(id),outbound_message_queue(),conversations!inner(status,channel,last_inbound_at,last_outbound_at,contacts(phone))')
+    .eq('direction', 'outbound').eq('status', 'queued').eq('message_type', 'text')
+    .is('provider_message_id', null).is('outbound_message_queue', null)
+    .eq('pipeline_automation_runs.status', 'queued').eq('conversations.channel', 'whatsapp')
+    .order('created_at', { ascending: true }).limit(50);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  let queued = 0;
+  let skipped = 0;
+  for (const message of data ?? []) {
+    const conversation = message.conversations;
+    const phone = conversation?.contacts?.phone;
+    const created = Date.parse(message.created_at);
+    const superseded = [conversation?.last_inbound_at, conversation?.last_outbound_at]
+      .some(value => value && Date.parse(value) > created);
+    if (!conversation || !phone || conversation.status === 'closed' || superseded ||
+        !(await canSendFreeformWhatsApp(message.tenant_id, conversation.last_inbound_at))) {
+      const { error: markError } = await admin.from('pipeline_automation_runs')
+        .update({ status: 'failed', error: 'whatsapp_automation_no_longer_eligible' })
+        .eq('tenant_id', message.tenant_id).eq('message_id', message.id).eq('status', 'queued');
+      if (markError) throw markError;
+      await admin.from('messages').update({ status: 'failed' })
+        .eq('tenant_id', message.tenant_id).eq('id', message.id).eq('status', 'queued');
+      skipped++;
+      continue;
+    }
+    // The message UUID is also the queue UUID for pipeline jobs, so overlapping ticks deduplicate.
+    const { data: inserted, error: queueError } = await admin.from('outbound_message_queue')
+      .upsert({
+        id: message.id, tenant_id: message.tenant_id, conversation_id: message.conversation_id,
+        message_id: message.id, channel: 'whatsapp',
+        payload: { kind: 'text', to: phone, body: message.body }
+      }, { onConflict: 'id', ignoreDuplicates: true }).select('id');
+    if (queueError) throw queueError;
+    queued += inserted?.length ?? 0;
+  }
+  return { queued, skipped };
+}
+
 export async function processOutboundQueue(limit = 20, tenantId?: string) {
   const admin = createAdminClient();
   let query = admin
@@ -90,6 +134,7 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
       .from('outbound_message_queue')
       .update({ status: 'processing', locked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', job.id)
+      .eq('attempts', job.attempts)
       .in('status', ['pending','failed'])
       .select('id')
       .maybeSingle();
@@ -98,9 +143,19 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
 
     try {
       const payload = job.payload as QueuePayload;
-      const result = job.channel === 'whatsapp'
-        ? await deliverWhatsApp(job.tenant_id, payload)
-        : { delivered: false as const, reason: 'unsupported_channel' };
+      let result;
+      if (job.channel !== 'whatsapp') {
+        result = { delivered: false as const, reason: 'unsupported_channel' };
+      } else if (payload.kind === 'template') {
+        result = await deliverWhatsApp(job.tenant_id, payload);
+      } else {
+        const { data: conversation, error: conversationError } = await admin.from('conversations')
+          .select('last_inbound_at').eq('tenant_id', job.tenant_id).eq('id', job.conversation_id).single();
+        if (conversationError) throw conversationError;
+        result = await canSendFreeformWhatsApp(job.tenant_id, conversation.last_inbound_at)
+          ? await deliverWhatsApp(job.tenant_id, payload)
+          : { delivered: false as const, reason: 'whatsapp_window_closed' };
+      }
 
       if (result.delivered) {
         await admin
@@ -124,12 +179,15 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
             .eq('tenant_id', job.tenant_id)
             .eq('id', job.message_id);
         }
+        if (job.message_id) await admin.from('pipeline_automation_runs')
+          .update({ status: 'processed', error: null }).eq('tenant_id', job.tenant_id)
+          .eq('message_id', job.message_id).eq('status', 'queued');
         sent += 1;
         continue;
       }
 
       const attempts = Number(job.attempts ?? 0) + 1;
-      const isDead = attempts >= Number(job.max_attempts ?? 5);
+      const isDead = result.reason === 'whatsapp_window_closed' || attempts >= Number(job.max_attempts ?? 5);
       await admin
         .from('outbound_message_queue')
         .update({
@@ -142,8 +200,11 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
         })
         .eq('id', job.id);
 
-      if (isDead) dead += 1;
-      else failed += 1;
+      if (isDead) {
+        if (job.message_id) await admin.from('messages').update({ status: 'failed' })
+          .eq('tenant_id', job.tenant_id).eq('id', job.message_id).eq('status', 'queued');
+        dead += 1;
+      } else failed += 1;
     } catch (error) {
       const attempts = Number(job.attempts ?? 0) + 1;
       const isDead = attempts >= Number(job.max_attempts ?? 5);
@@ -158,8 +219,11 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
           updated_at: new Date().toISOString()
         })
         .eq('id', job.id);
-      if (isDead) dead += 1;
-      else failed += 1;
+      if (isDead) {
+        if (job.message_id) await admin.from('messages').update({ status: 'failed' })
+          .eq('tenant_id', job.tenant_id).eq('id', job.message_id).eq('status', 'queued');
+        dead += 1;
+      } else failed += 1;
     }
   }
 

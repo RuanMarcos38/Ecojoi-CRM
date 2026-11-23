@@ -966,7 +966,7 @@ export default function Atendimento() {
           )}
           {body && !repeatsFileName && message.message_type !== 'audio' && <div className={styles.messageText}>{body}</div>}
           <div className={styles.reactionBar}>
-            {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id?.startsWith('wamid.') &&
+            {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id &&
               <button type="button" className={styles.reactButton} title="Responder" aria-label="Responder à mensagem"
                 onClick={() => replyToMessage(message)}><Reply size={15}/></button>}
             {message.whatsapp_reaction && <span aria-label="Reação enviada">{message.whatsapp_reaction}</span>}
