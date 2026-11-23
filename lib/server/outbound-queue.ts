@@ -81,12 +81,13 @@ export async function queuePipelineMessages(tenantId?: string) {
   let queued = 0;
   let skipped = 0;
   for (const message of data ?? []) {
-    const conversation = message.conversations;
-    const phone = conversation?.contacts?.phone;
+    const conversation = Array.isArray(message.conversations) ? message.conversations[0] : message.conversations;
+    const contacts = conversation?.contacts;
+    const phone = (Array.isArray(contacts) ? contacts[0] : contacts)?.phone;
     const created = Date.parse(message.created_at);
     const superseded = [conversation?.last_inbound_at, conversation?.last_outbound_at]
       .some(value => value && Date.parse(value) > created);
-    if (!conversation || !phone || conversation.status === 'closed' || superseded ||
+    if (!phone || conversation.status === 'closed' || superseded ||
         !(await canSendFreeformWhatsApp(message.tenant_id, conversation.last_inbound_at))) {
       const { error: markError } = await admin.from('pipeline_automation_runs')
         .update({ status: 'failed', error: 'whatsapp_automation_no_longer_eligible' })
@@ -110,11 +111,13 @@ export async function queuePipelineMessages(tenantId?: string) {
   return { queued, skipped };
 }
 
-export async function processOutboundQueue(limit = 20, tenantId?: string) {
+export async function processOutboundQueue(limit = 20, tenantId?: string, pipelineOnly = false) {
   const admin = createAdminClient();
   let query = admin
     .from('outbound_message_queue')
-    .select('id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts')
+    .select(pipelineOnly
+      ? 'id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts,messages!inner(pipeline_automation_runs!inner(id))'
+      : 'id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts')
     .in('status', ['pending','failed'])
     .lte('next_attempt_at', new Date().toISOString())
     .order('next_attempt_at', { ascending: true })
@@ -134,7 +137,6 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
       .from('outbound_message_queue')
       .update({ status: 'processing', locked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', job.id)
-      .eq('attempts', job.attempts)
       .in('status', ['pending','failed'])
       .select('id')
       .maybeSingle();
@@ -179,9 +181,6 @@ export async function processOutboundQueue(limit = 20, tenantId?: string) {
             .eq('tenant_id', job.tenant_id)
             .eq('id', job.message_id);
         }
-        if (job.message_id) await admin.from('pipeline_automation_runs')
-          .update({ status: 'processed', error: null }).eq('tenant_id', job.tenant_id)
-          .eq('message_id', job.message_id).eq('status', 'queued');
         sent += 1;
         continue;
       }
