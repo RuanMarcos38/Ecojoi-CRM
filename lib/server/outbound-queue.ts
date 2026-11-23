@@ -113,11 +113,11 @@ export async function queuePipelineMessages(tenantId?: string) {
 
 export async function processOutboundQueue(limit = 20, tenantId?: string, pipelineOnly = false) {
   const admin = createAdminClient();
-  let query = admin
-    .from('outbound_message_queue')
-    .select(pipelineOnly
-      ? 'id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts,messages!inner(pipeline_automation_runs!inner(id))'
-      : 'id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts')
+  const table = admin.from('outbound_message_queue');
+  const selection = pipelineOnly
+    ? table.select('id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts,messages!inner(pipeline_automation_runs!inner(id))')
+    : table.select('id,tenant_id,conversation_id,message_id,channel,payload,status,attempts,max_attempts');
+  let query = selection
     .in('status', ['pending','failed'])
     .lte('next_attempt_at', new Date().toISOString())
     .order('next_attempt_at', { ascending: true })
