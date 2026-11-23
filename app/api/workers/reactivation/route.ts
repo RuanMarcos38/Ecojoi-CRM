@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { enqueueLeadFollowUps, workReactivationQueue } from '@/lib/server/reactivation';
 
+import { processOutboundQueue, queuePipelineMessages } from '@/lib/server/outbound-queue';
+
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
@@ -18,7 +20,10 @@ export async function POST(request: Request) {
     const { error } = await createAdminClient().from('whatsapp_reactivation_heartbeat')
       .upsert({ id: true, seen_at: new Date().toISOString() });
     if (error) throw error;
-    return NextResponse.json({ data });
+    const pipeline = await queuePipelineMessages()
+      .then(async staged => ({ ...staged, delivery: await processOutboundQueue(10, undefined, true) }))
+      .catch(() => ({ error: 'pipeline_queue_failed' }));
+    return NextResponse.json({ data, pipeline });
   } catch {
     return NextResponse.json({ error: 'reactivation_worker_failed' }, { status: 500 });
   }

@@ -55,8 +55,7 @@ export async function canSendFreeformWhatsApp(tenantId: string, lastInboundAt?: 
 export async function sendWhatsAppText(tenantId: string, to: string | null | undefined, body: string, replyToProviderId?: string | null) {
   const provider = await getWhatsAppProvider(tenantId);
   if (provider === 'evolution') {
-    if (replyToProviderId) return { delivered: false as const, reason: 'whatsapp_reply_not_supported' };
-    return sendEvolutionText(tenantId, to, body);
+    return sendEvolutionText(tenantId, to, body, replyToProviderId ?? undefined);
   }
   return replyToProviderId ? sendMetaText(tenantId, to, body, replyToProviderId) : sendMetaText(tenantId, to, body);
 }

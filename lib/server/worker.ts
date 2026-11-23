@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { processOutboundQueue } from '@/lib/server/outbound-queue';
+import { processOutboundQueue, queuePipelineMessages } from '@/lib/server/outbound-queue';
 import { processSalesSequences } from '@/lib/server/sequence-worker';
 import { processWebhookDeliveries } from '@/lib/server/webhook-worker';
 import { cleanupExpiredAttachments } from '@/lib/server/retention';
@@ -15,6 +15,7 @@ export async function runOperationalWorkers(tenantId?:string){
   });
 
   try{
+    const pipeline = await queuePipelineMessages(tenantId).catch(() => ({ error: 'pipeline_queue_failed' }));
     const [queue,sequences,webhooks,retention,scoring,reactivation]=await Promise.all([
       processOutboundQueue(50,tenantId),
       processSalesSequences(50,tenantId),
@@ -28,9 +29,9 @@ export async function runOperationalWorkers(tenantId?:string){
     const failed=Number(queue.failed??0)+Number(queue.dead??0)+Number(sequences.failed??0)+Number(webhooks.failed??0)+Number(webhooks.dead??0)+Number(retention.failed??0)+Number(scoring.failed??0);
     await admin.from('worker_runs').update({
       status:'success',processed,succeeded,failed,duration_ms:Date.now()-started,
-      metadata:{queue,sequences,webhooks,retention,scoring,reactivation}
+      metadata:{pipeline,queue,sequences,webhooks,retention,scoring,reactivation}
     }).eq('id',runId);
-    return {queue,sequences,webhooks,retention,scoring,reactivation,processed,succeeded,failed,duration_ms:Date.now()-started};
+    return {pipeline,queue,sequences,webhooks,retention,scoring,reactivation,processed,succeeded,failed,duration_ms:Date.now()-started};
   }catch(e){
     const message=e instanceof Error?e.message.slice(0,1000):'worker_tick_failed';
     await admin.from('worker_runs').update({status:'failed',duration_ms:Date.now()-started,error:message}).eq('id',runId);
