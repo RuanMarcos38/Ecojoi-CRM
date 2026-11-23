@@ -8,7 +8,7 @@ import { audit } from '@/lib/server/audit';
 import { canSendFreeformWhatsApp, getWhatsAppProvider, sendWhatsAppText } from '@/lib/server/whatsapp';
 import { enqueueOutbound } from '@/lib/server/outbound-queue';
 
-const schema = z.object({ body: z.string().min(1).max(4000), reply_to_message_id: z.string().uuid().optional() });
+const schema = z.object({ body: z.string().min(1).max(4000), reply_to_message_id: z.string().uuid().optional(), request_id: z.string().uuid().optional() });
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -26,6 +26,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .maybeSingle();
 
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    const previousRequest = async () => {
+      if (!body.request_id) return null;
+      const { data, error } = await supabase.from('messages').select('*')
+        .eq('id', body.request_id).eq('tenant_id', ctx.tenantId)
+        .eq('conversation_id', id).eq('sender_user_id', ctx.userId)
+        .eq('direction', 'outbound').maybeSingle();
+      if (error) throw error;
+      return data ? NextResponse.json({ data, delivery: data.status }) : null;
+    };
+    const previous = await previousRequest();
+    if (previous) return previous;
+
     if (conversation.attendance_state === 'automatic') {
       return NextResponse.json({ error: 'conversation_in_automatic_mode' }, { status: 409 });
     }
@@ -62,6 +74,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data, error } = await supabase
       .from('messages')
       .insert({
+        ...(body.request_id ? { id: body.request_id } : {}),
         tenant_id: ctx.tenantId,
         conversation_id: id,
         direction: 'outbound',
@@ -74,9 +87,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505' && body.request_id) {
+        const concurrent = await previousRequest();
+        if (concurrent) return concurrent;
+      }
+      throw error;
+    }
 
-    let delivery = initialStatus;
+    let delivery: 'sent' | 'queued' | 'failed' = initialStatus;
     let providerMessageId: string | null = null;
     let queueId: string | null = null;
 
@@ -93,6 +112,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .update({ status: delivery, provider_message_id: providerMessageId })
           .eq('tenant_id', ctx.tenantId)
           .eq('id', data.id);
+      } else if (sent.reason === 'delivery_unconfirmed') {
+        delivery = 'failed';
+        await supabase.from('messages').update({ status: delivery }).eq('tenant_id', ctx.tenantId).eq('id', data.id);
       } else {
         queueId = await enqueueOutbound({
           tenantId: ctx.tenantId,

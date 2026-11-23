@@ -152,6 +152,7 @@ export default function Atendimento() {
   const [sendingText, setSendingText] = useState(false);
   // Ref locks synchronously, before React renders the disabled state.
   const sendingTextRef = useRef(false);
+  const textAttempt = useRef<{ draft: string; id: string; accepted: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [contactNameDraft, setContactNameDraft] = useState<{ id: string; name: string } | null>(null);
@@ -507,27 +508,43 @@ export default function Atendimento() {
     internal: 'Interno'
   } as Record<string, string>)[channel] ?? channel;
 
+  useEffect(() => {
+    if (!text.trim() && textAttempt.current?.accepted) textAttempt.current = null;
+  }, [text]);
+
   async function send(e: FormEvent) {
     e.preventDefault();
     // Enter, a rapid second Enter and a click must never dispatch overlapping requests.
     if (sendingTextRef.current || sendingMedia || recording || !text.trim() || !active || active.attendance_state !== 'in_service') return;
-    sendingTextRef.current = true;
-    setSendingText(true);
-    setError(''); setNotice('');
     const messageBody = text.trim();
     const conversationId = active.id;
     const replyId = replyTarget?.id;
+    const draft = JSON.stringify([conversationId, replyId, messageBody]);
+    const previous = textAttempt.current;
+    if (previous?.draft === draft && previous.accepted) return;
+    const attempt = previous?.draft === draft ? previous : { draft, id: crypto.randomUUID(), accepted: false };
+    textAttempt.current = attempt;
+    sendingTextRef.current = true;
+    setSendingText(true);
+    setError(''); setNotice('');
     try {
       const r = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ body: messageBody, reply_to_message_id: replyId })
+        body: JSON.stringify({ body: messageBody, reply_to_message_id: replyId, request_id: attempt.id })
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
+        attempt.accepted = true;
         setText(current => current.trim() === messageBody ? '' : current);
         setReply(current => current?.conversationId === conversationId && current.message.id === replyId ? null : current);
-        setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
-        await load();
+        if (d.delivery === 'failed') setError('O WhatsApp não confirmou o envio. Confira a conversa antes de enviar novamente.');
+        else setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
+        if (d.data?.id) {
+          const message: Message = { ...d.data, sender_name: null };
+          setItems(current => current.map(item => item.id !== conversationId || item.messages.some(existing => existing.id === message.id)
+            ? item : { ...item, messages: [...item.messages, message] }));
+        }
+        void refreshConversations().catch(() => {});
         return;
       }
       const errors: Record<string, string> = {

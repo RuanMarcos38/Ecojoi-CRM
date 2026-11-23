@@ -186,7 +186,7 @@ export async function processOutboundQueue(limit = 20, tenantId?: string, pipeli
       }
 
       const attempts = Number(job.attempts ?? 0) + 1;
-      const isDead = result.reason === 'whatsapp_window_closed' || attempts >= Number(job.max_attempts ?? 5);
+      const isDead = ['whatsapp_window_closed', 'delivery_unconfirmed'].includes(result.reason) || attempts >= Number(job.max_attempts ?? 5);
       await admin
         .from('outbound_message_queue')
         .update({

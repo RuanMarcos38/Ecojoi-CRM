@@ -52,7 +52,7 @@ async function graphRequest(path: string, init?: RequestInit) {
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {
     const message = data?.error?.message || `Meta Graph API ${response.status}`;
-    throw new Error(message);
+    throw Object.assign(new Error(message), { status: response.status });
   }
   return data;
 }
@@ -151,9 +151,12 @@ export async function sendWhatsAppText(tenantId: string, to: string | null | und
         text: { preview_url: true, body }
       })
     });
-    return { delivered: true as const, providerMessageId: data?.messages?.[0]?.id ?? null };
+    const providerMessageId = data?.messages?.[0]?.id;
+    if (!providerMessageId) return { delivered: false as const, reason: 'delivery_unconfirmed' };
+    return { delivered: true as const, providerMessageId };
   } catch (error) {
-    return { delivered: false as const, reason: error instanceof Error ? error.message : 'meta_send_failed' };
+    const status = error instanceof Error && 'status' in error ? Number(error.status) : 0;
+    return { delivered: false as const, reason: status >= 400 && status < 500 && status !== 408 && error instanceof Error ? error.message : 'delivery_unconfirmed' };
   }
 }
 
