@@ -227,7 +227,73 @@ export default function Atendimento() {
   const audioChunks = useRef<Blob[]>([]);
   const recordStartedAt = useRef<number>(0);
 
+  const refreshSequence = useRef(0);
+  const appliedRefresh = useRef(0);
+  const inboundCursor = useRef<{ time: number; ids: Set<string> } | null>(null);
+  const notificationAudio = useRef<AudioContext | null>(null);
+  const nextNotificationAt = useRef(0);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+
+  function trackIncoming(conversations: Conversation[], initialTime?: number) {
+    const previous = inboundCursor.current;
+    const cursor = { time: previous?.time ?? initialTime ?? 0, ids: new Set(previous?.ids) };
+    let incoming = 0;
+
+    for (const conversation of conversations) {
+      for (const message of conversation.messages ?? []) {
+        if (message.direction !== 'inbound') continue;
+        const time = messageTime(message.created_at);
+        if (previous && (time > previous.time || (time === previous.time && !previous.ids.has(message.id)))) incoming++;
+        if (time > cursor.time) {
+          cursor.time = time;
+          cursor.ids.clear();
+        }
+        if (time === cursor.time) cursor.ids.add(message.id);
+      }
+    }
+    inboundCursor.current = cursor;
+
+    const audio = notificationAudio.current;
+    if (!audio || audio.state !== 'running') return;
+    for (let i = 0; i < incoming; i++) {
+      const start = Math.max(audio.currentTime, nextNotificationAt.current);
+      const tone = audio.createOscillator();
+      const gain = audio.createGain();
+      tone.frequency.value = 740;
+      gain.gain.setValueAtTime(0.08, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
+      tone.connect(gain).connect(audio.destination);
+      tone.start(start);
+      tone.stop(start + 0.15);
+      nextNotificationAt.current = start + 0.22;
+    }
+  }
+
+  useEffect(() => () => {
+    const audio = notificationAudio.current;
+    notificationAudio.current = null;
+    if (audio && audio.state !== 'closed') void audio.close().catch(() => {});
+  }, []);
+
+  async function toggleNotificationSound() {
+    try {
+      const audio = notificationAudio.current ?? new AudioContext();
+      notificationAudio.current = audio;
+      if (audio.state === 'running') {
+        await audio.suspend();
+        setSoundEnabled(false);
+      } else {
+        await audio.resume();
+        nextNotificationAt.current = 0;
+        setSoundEnabled(true);
+      }
+    } catch {
+      setError('O navegador não permitiu ativar o som do Atendimento.');
+    }
+  }
+
   async function refreshConversations() {
+    const sequence = ++refreshSequence.current;
     const response = await fetch('/api/conversations', { cache: 'no-store' });
     if (!response.ok) return;
     const { data } = await response.json();
@@ -237,6 +303,9 @@ export default function Atendimento() {
       const pinned = await fetchConversation(pinnedId);
       if (pinned) next.push(pinned);
     }
+    if (sequence < appliedRefresh.current) return;
+    appliedRefresh.current = sequence;
+    trackIncoming(next);
     setItems(next);
   }
 
@@ -254,7 +323,10 @@ export default function Atendimento() {
       qr.ok ? qr.json() : Promise.resolve(null),
       tr.ok ? tr.json() : Promise.resolve(null)
     ]);
-    if (cr.ok) setItems(cd.data ?? []);
+    if (cr.ok) {
+      trackIncoming(cd.data ?? [], messageTime(cr.headers.get('date') ?? undefined) || Date.now());
+      setItems(cd.data ?? []);
+    }
     if (ct.ok) setContacts(td.data ?? []);
     if (mr.ok) setMe(md?.data ?? null);
     if (qr.ok) setQuickReplies(qd?.data ?? []);
@@ -277,8 +349,11 @@ export default function Atendimento() {
     const supabase = createClient();
     let refreshTimer: number | null = null;
     const refresh = () => {
-      if (refreshTimer) window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(() => void refreshConversations().catch(() => {}), 180);
+      if (refreshTimer !== null) return;
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void refreshConversations().catch(() => {});
+      }, 180);
     };
 
     const channel = supabase
@@ -287,7 +362,7 @@ export default function Atendimento() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${me.tenantId}` }, refresh)
       .subscribe();
 
-    const fallback = window.setInterval(() => void refreshConversations().catch(() => {}), 30000);
+    const fallback = window.setInterval(() => void refreshConversations().catch(() => {}), 5000);
     return () => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
       window.clearInterval(fallback);
@@ -348,7 +423,8 @@ export default function Atendimento() {
       const last = item.messages?.[item.messages.length - 1]?.body ?? '';
       return `${item.contact?.name ?? ''} ${item.contact?.email ?? ''} ${item.contact?.phone ?? ''} ${last}`.toLowerCase().includes(needle);
     }).sort((a, b) => {
-      const comparison = conversationActivity(a) - conversationActivity(b);
+      const comparison = conversationActivity(a) - conversationActivity(b)
+        || String(a.last_inbound_at ?? '').localeCompare(String(b.last_inbound_at ?? ''));
       return oldestFirst ? comparison : -comparison;
     });
   }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
@@ -958,6 +1034,9 @@ export default function Atendimento() {
             <button className="btn btn-secondary" type="button" disabled={!search && !attendantFilter && !tagFilter && !channelFilter && !originFilter && !oldestFirst && !unreadOnly} onClick={() => { setSearch(''); setAttendantFilter(''); setTagFilter(''); setChannelFilter(''); setOriginFilter(''); setOldestFirst(false); setUnreadOnly(false); }}>Limpar filtros</button>
           </div>
         </details>
+        <button type="button" className="btn btn-secondary" aria-pressed={soundEnabled} onClick={() => void toggleNotificationSound()}>
+          {soundEnabled ? 'Silenciar novas mensagens' : 'Ativar som de novas mensagens'}
+        </button>
         <div className={styles.queueTabs} role="tablist">
           {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={queue === state ? styles.queueActive : ''} onClick={() => setQueue(state)}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
         </div>
