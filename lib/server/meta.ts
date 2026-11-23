@@ -465,6 +465,7 @@ async function processWhatsAppValue(value: any) {
         attachment = { ...stored, name: mediaNode.filename || defaultName };
         body = body || mediaNode.caption || (type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : attachment.name || 'Arquivo recebido');
       } catch {
+        console.warn('[meta] Falha ao baixar ou armazenar anexo recebido', { type });
         body = body || (type === 'audio' ? 'Mensagem de voz recebida' : 'Mídia recebida pelo WhatsApp');
       }
     }

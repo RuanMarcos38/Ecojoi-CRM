@@ -482,6 +482,7 @@ export default function Atendimento() {
       if (!r.ok) {
         const messages: Record<string, string> = {
           file_too_large: 'O arquivo deve ter no máximo 25 MB.',
+          attachment_storage_failed: 'O armazenamento do CRM recusou o anexo. O arquivo não foi enviado.',
           unsupported_file_type: 'Este tipo de arquivo não é permitido.',
           ffmpeg_unavailable: 'Conversão de áudio indisponível no servidor. Instale FFmpeg antes de enviar gravações.',
           audio_conversion_failed: 'Não foi possível preparar um áudio compatível. Grave novamente ou use MP3.',
