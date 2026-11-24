@@ -13,14 +13,19 @@ const schema = z.object({
   contact_id: z.string().uuid().optional().nullable()
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const ctx = await requirePermission('deals.view');
     const supabase = await createClient();
-    const { data, error } = await supabase.from('deals')
+    const contactId = new URL(request.url).searchParams.get('contact_id');
+    if (contactId !== null && !z.string().uuid().safeParse(contactId).success) {
+      return NextResponse.json({ error: 'invalid_contact' }, { status: 400 });
+    }
+    let query = supabase.from('deals')
       .select('id,title,stage,value,probability,contact_id,stage_changed_at,created_at,updated_at,contact:contacts(id,name,phone,email)')
-      .eq('tenant_id', ctx.tenantId)
-      .order('created_at', { ascending: false });
+      .eq('tenant_id', ctx.tenantId);
+    if (contactId) query = query.eq('contact_id', contactId);
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) throw error;
     return NextResponse.json({ data });
   } catch (e) {

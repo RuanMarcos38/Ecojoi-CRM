@@ -1,5 +1,6 @@
 'use client';
 
+import { notifyDealsChanged, onDealsChanged } from '@/lib/deal-refresh';
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -166,9 +167,11 @@ export default function Pipeline() {
       if (response.ok) setDeals((await response.json()).data ?? []);
     }
     const refresh = () => { void refreshDeals().catch(() => {}); };
+    const unsubscribe = onDealsChanged(refresh);
     const timer = window.setInterval(refresh, 20000);
     document.addEventListener('visibilitychange', refresh);
     return () => {
+      unsubscribe();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', refresh);
     };
@@ -240,6 +243,7 @@ export default function Pipeline() {
     const r = await fetch('/api/deals', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const payload = await r.json().catch(() => null);
     if (r.ok) {
+      notifyDealsChanged();
       setOpen(false);
       setNotice('Oportunidade criada. O contador da etapa começou agora.');
       await load();
@@ -269,6 +273,7 @@ export default function Pipeline() {
       }
       const { data } = await r.json();
       setDeals(current => current.map(deal => deal.id === id ? { ...deal, ...data } : deal));
+      notifyDealsChanged();
       setNotice(`Oportunidade movida para ${stageLabel[stage]}.`);
     } catch {
       setError('Falha de conexão ao mover a oportunidade. Confira a etapa antes de tentar novamente.');
@@ -281,6 +286,7 @@ export default function Pipeline() {
     if (!confirm('Excluir esta oportunidade?')) return;
     const r = await fetch(`/api/deals/${id}`, { method: 'DELETE' });
     if (!r.ok) setError('Sem permissão para excluir esta oportunidade.');
+    else notifyDealsChanged();
     if (selectedDealId === id) setSelectedDealId(null);
     await load();
   }

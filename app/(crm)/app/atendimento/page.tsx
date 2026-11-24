@@ -1,5 +1,6 @@
 'use client';
 
+import ContactDeals from './contact-deals';
 import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Bot, Check, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
@@ -1197,6 +1198,10 @@ export default function Atendimento() {
           </>}
 
           <hr/>
+          {detailsOpen && active.contact?.id && <>
+            <ContactDeals key={active.contact.id} contactId={active.contact.id} />
+            <hr/>
+          </>}
           <b>Notas internas</b>
           <form onSubmit={addInternalNote} style={{display:'grid',gap:7,marginTop:8,textAlign:'left'}}>
             <textarea className="textarea" rows={3} value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Visível somente para a equipe..." maxLength={4000}/>
