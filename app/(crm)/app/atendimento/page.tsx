@@ -1,5 +1,6 @@
 'use client';
 
+import MessageAudio from './message-audio';
 import ContactDeals from './contact-deals';
 import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -23,6 +24,7 @@ type Message = {
   body: string;
   status: string;
   message_type?: 'text' | 'image' | 'audio' | 'file' | 'system';
+  attachment_path?: string | null;
   attachment_url?: string | null;
   attachment_name?: string | null;
   attachment_mime?: string | null;
@@ -964,10 +966,10 @@ export default function Atendimento() {
           {message.message_type === 'image' && message.attachment_url && (
             <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.imageMessage}><img src={message.attachment_url} alt={message.attachment_name ?? 'Imagem'} /></a>
           )}
-          {message.message_type === 'audio' && message.attachment_url && (
-            <div className={styles.audioMessage}><Mic size={17}/><audio controls preload="metadata" src={message.attachment_url} /></div>
+          {message.message_type === 'audio' && (message.attachment_path || message.attachment_url) && (
+            <div className={styles.audioMessage}><Mic size={17}/><MessageAudio key={message.attachment_path ?? message.id} url={message.attachment_url} /></div>
           )}
-          {message.message_type === 'audio' && !message.attachment_url && <small>Áudio indisponível</small>}
+          {message.message_type === 'audio' && !message.attachment_path && !message.attachment_url && <small>Áudio indisponível</small>}
           {active?.channel === 'whatsapp' && !message.attachment_url && message.provider_message_id
             && !message.provider_message_id.startsWith('wamid.') && ['image', 'audio', 'file'].includes(message.message_type ?? '') && (
               <button type="button" className="btn btn-secondary" disabled={Boolean(recoveringAttachment)}
