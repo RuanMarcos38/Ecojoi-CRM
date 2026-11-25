@@ -23,11 +23,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { message_id, emoji } = body.data;
     const supabase = await createClient();
     const { data: conversation } = await supabase.from('conversations')
-      .select('channel,status,attendance_state,contact:contacts(phone)')
+      .select('channel,assigned_to,status,attendance_state,contact:contacts(phone)')
       .eq('tenant_id', ctx.tenantId).eq('id', id).maybeSingle();
     if (!conversation || conversation.channel !== 'whatsapp') {
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
+    if (conversation.assigned_to !== ctx.userId) return NextResponse.json({ error: 'conversation_assigned_elsewhere' }, { status: 403 });
     if (conversation.status === 'closed' || conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'assume_conversation' }, { status: 409 });
     }

@@ -46,6 +46,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (member.error || current.error) throw member.error ?? current.error;
     if (!member.data || !current.data) return NextResponse.json({ error: 'transfer_target_unavailable' }, { status: 404 });
 
+    if (current.data.assigned_to && current.data.assigned_to !== ctx.userId) return NextResponse.json({ error: 'conversation_assigned_elsewhere' }, { status: 403 });
     const now = new Date().toISOString();
     let query = db.from('conversations').update({
       assigned_to: member.data.id, attendance_state: 'in_service', attendance_changed_at: now, updated_at: now

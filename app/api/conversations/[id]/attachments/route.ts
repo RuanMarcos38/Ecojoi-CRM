@@ -76,13 +76,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const supabase = await createClient();
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
+      .select('id,channel,assigned_to,status,attendance_state,last_inbound_at,first_response_at,contact:contacts(phone)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
 
     if (conversationError) throw conversationError;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (conversation.assigned_to !== ctx.userId) return NextResponse.json({ error: 'conversation_assigned_elsewhere' }, { status: 403 });
+    if (conversation.status === 'closed') return NextResponse.json({ error: 'conversation_closed' }, { status: 409 });
     if (conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'conversation_not_in_human_service' }, { status: 409 });
     }

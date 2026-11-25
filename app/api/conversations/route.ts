@@ -48,6 +48,7 @@ export async function GET(request: Request) {
       .from('conversations')
       .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at,last_inbound_at,last_outbound_at,first_response_at,sla_due_at,ai_summary,ai_next_action,ai_summary_updated_at,assignee:profiles!conversations_assigned_to_fkey(id,full_name),contact:contacts(id,name,email,phone,source,owner_id,attribution,lead_score,lead_temperature,contact_tags(tag:tags(id,name))),messages(id,provider_message_id,reply_to_provider_id,whatsapp_reaction,sender_user_id,direction,body,status,message_type,attachment_path,attachment_name,attachment_mime,attachment_size,audio_duration_ms,created_at)')
       .eq('tenant_id', ctx.tenantId);
+    query = query.or(`assigned_to.eq.${ctx.userId},and(assigned_to.is.null,status.neq.closed,attendance_state.in.(waiting,automatic))`);
     if (target) query = query.eq('id', target);
     if (quoted) query = query.eq('messages.provider_message_id', quoted.trim());
     const { data, error } = await query.order('updated_at', { ascending: false }).limit(target ? 1 : 100);
@@ -146,12 +147,13 @@ export async function POST(req: Request) {
 
     if (body.channel === 'whatsapp') {
       const { data: existing, error: lookupError } = await supabase.from('conversations')
-        .select('id,attendance_state').eq('tenant_id', ctx.tenantId).eq('contact_id', contact.id)
+        .select('id,attendance_state,assigned_to').eq('tenant_id', ctx.tenantId).eq('contact_id', contact.id)
         .eq('channel', 'whatsapp').neq('status', 'closed')
         .order('last_inbound_at', { ascending: false, nullsFirst: false })
       .order('last_outbound_at', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false }).limit(1).maybeSingle();
       if (lookupError) throw lookupError;
+      if (existing?.assigned_to && existing.assigned_to !== ctx.userId) return NextResponse.json({ error: 'conversation_assigned_elsewhere' }, { status: 409 });
       if (existing) return NextResponse.json({ data: existing });
       if (!phone && !contact.phone) return NextResponse.json({ error: 'phone_required' }, { status: 409 });
     }

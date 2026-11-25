@@ -17,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const supabase = await createClient();
     const { data: conversation, error } = await supabase.from('conversations').select('id')
-      .eq('tenant_id', ctx.tenantId).eq('id', id).eq('channel', 'whatsapp').maybeSingle();
+      .eq('tenant_id', ctx.tenantId).eq('assigned_to', ctx.userId).eq('id', id).eq('channel', 'whatsapp').maybeSingle();
     if (error) throw error;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
