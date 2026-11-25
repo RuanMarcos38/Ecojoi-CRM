@@ -1,3 +1,4 @@
+import { canViewTeamAttendance } from '@/lib/attendance-access';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
@@ -16,7 +17,7 @@ export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
 
     const {data:conversation}=await supabase.from('conversations')
       .select('id,assigned_to,status').eq('tenant_id',ctx.tenantId).eq('id',id).maybeSingle();
-    if(!conversation || (conversation.assigned_to && conversation.assigned_to!==ctx.userId))return NextResponse.json({error:'not_found'},{status:404});
+    if(!conversation || (!canViewTeamAttendance(ctx.role) && conversation.assigned_to && conversation.assigned_to!==ctx.userId))return NextResponse.json({error:'not_found'},{status:404});
 
     const {data,error}=await supabase.from('conversation_notes')
       .select('id,body,created_at,user:profiles!conversation_notes_user_id_fkey(id,full_name)')
