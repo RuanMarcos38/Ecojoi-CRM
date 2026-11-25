@@ -704,3 +704,19 @@ export async function recoverEvolutionAttachment(tenantId: string, conversationI
   if (updateError) throw updateError;
   return Boolean(updated);
 }
+
+export async function sendEvolutionReaction(tenantId: string, to: string | null | undefined, id: string, fromMe: boolean, emoji: string) {
+  const settings = await tenantEvolutionSettings(tenantId);
+  const runtime = await tenantRuntime(tenantId);
+  const phone = digits(to);
+  if (!settings.instanceName || !runtime || !phone) return false;
+  try {
+    await evolutionRequest(runtime, `message/sendReaction/${encodeURIComponent(settings.instanceName)}`, {
+      method: 'POST',
+      body: JSON.stringify({ key: { remoteJid: `${phone}@s.whatsapp.net`, fromMe, id }, reaction: emoji })
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}

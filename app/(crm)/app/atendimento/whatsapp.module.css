@@ -1384,3 +1384,9 @@ button.messageQuote { cursor: pointer; }
   .root .headerActions :global(.btn) { min-height: 36px; padding-inline: 7px; }
   .transferForm select { flex-basis: 65%; }
 }
+
+.root[data-message-size="12"] :is(.messageText, .messageInputWrap > textarea) { font-size: 12px; }
+.root[data-message-size="14"] :is(.messageText, .messageInputWrap > textarea) { font-size: 14px; }
+.root[data-message-size="18"] :is(.messageText, .messageInputWrap > textarea) { font-size: 18px; }
+.root[data-message-size="20"] :is(.messageText, .messageInputWrap > textarea) { font-size: 20px; }
+.root[data-message-size="22"] :is(.messageText, .messageInputWrap > textarea) { font-size: 22px; }

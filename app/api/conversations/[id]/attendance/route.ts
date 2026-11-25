@@ -1,3 +1,4 @@
+import { hasAttendanceCapacity } from '@/lib/server/attendance-capacity';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
@@ -20,13 +21,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: current, error: currentError } = await supabase
       .from('conversations')
-      .select('id,attendance_state,channel,contact:contacts(id,name,email,phone),messages(id,direction,body,message_type,created_at)')
+      .select('id,status,assigned_to,attendance_state,channel,contact:contacts(id,name,email,phone),messages(id,direction,body,message_type,created_at)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
 
     if (currentError) throw currentError;
     if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+
+    if (current.status === 'closed') return NextResponse.json({ error: 'conversation_closed' }, { status: 409 });
+    if (state === 'in_service' && current.assigned_to !== ctx.userId && !(await hasAttendanceCapacity(ctx.tenantId, ctx.userId))) {
+      return NextResponse.json({ error: 'attendance_capacity_reached' }, { status: 409 });
+    }
 
     const now = new Date().toISOString();
     const patch = {
@@ -39,6 +45,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data, error } = await supabase
       .from('conversations')
       .update(patch)
+      .neq('status', 'closed')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at')

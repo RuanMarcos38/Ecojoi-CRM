@@ -1,3 +1,4 @@
+import { hasAttendanceCapacity } from '@/lib/server/attendance-capacity';
 import { findAttendanceSurvey, parseAttendanceRating, saveAttendanceRating } from '@/lib/server/attendance-survey';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -269,13 +270,15 @@ export async function ingestLead(input: IngestLeadInput) {
       .maybeSingle();
 
     if (openConversationError) throw openConversationError;
+    const eligibleOwner = ownerId && crmChannel === 'whatsapp' && (!openConversation || openConversation.attendance_state === 'waiting')
+      ? (await hasAttendanceCapacity(input.tenantId, ownerId, true).catch(() => false) ? ownerId : null) : ownerId;
     if (openConversation?.id) {
       conversationId = openConversation.id;
-      if (!openConversation.assigned_to && openConversation.attendance_state === 'waiting' && ownerId) {
+      if (!openConversation.assigned_to && openConversation.attendance_state === 'waiting' && eligibleOwner) {
         await admin
           .from('conversations')
           .update({
-            assigned_to: ownerId,
+            assigned_to: eligibleOwner,
             attendance_state: 'in_service',
             attendance_changed_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -293,8 +296,8 @@ export async function ingestLead(input: IngestLeadInput) {
           contact_id: contactId,
           channel: crmChannel,
           status: 'open',
-          assigned_to: ownerId,
-          attendance_state: ownerId ? 'in_service' : 'waiting',
+          assigned_to: eligibleOwner,
+          attendance_state: eligibleOwner ? 'in_service' : 'waiting',
           attendance_changed_at: new Date().toISOString()
         })
         .select('id')

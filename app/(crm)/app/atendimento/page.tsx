@@ -158,6 +158,19 @@ export default function Atendimento() {
   }
   const [queue, setQueue] = useState<AttendanceState>('waiting');
   const [showFinished, setShowFinished] = useState(false);
+  const [fontSize, setFontSize] = useState(16);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem('ecojoi:attendance:font-size'));
+      if (saved >= 12 && saved <= 22) setFontSize(saved);
+    } catch {}
+  }, []);
+
+  function changeFontSize(delta: number) {
+    const size = Math.max(12, Math.min(22, fontSize + delta));
+    setFontSize(size);
+    try { localStorage.setItem('ecojoi:attendance:font-size', String(size)); } catch {}
+  }
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
   const draftVersion = useRef(0);
@@ -950,7 +963,7 @@ export default function Atendimento() {
     try {
       const r = await fetch(`/api/conversations/${active.id}/attendance`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
       const d = await r.json();
-      if (!r.ok) { setError(d.error === 'attendance_state_update_failed' ? 'Não foi possível alterar a fila.' : 'Você não possui permissão para alterar esta fila.'); return; }
+      if (!r.ok) { setError(d.error === 'attendance_capacity_reached' ? 'Você atingiu o limite de atendimentos. Finalize um atendimento antes de assumir outro.' : d.error === 'attendance_state_update_failed' ? 'Não foi possível alterar a fila.' : 'Você não possui permissão para alterar esta fila.'); return; }
       setQueue(state); setActiveId(active.id); await load();
     } finally { setChangingState(false); }
   }
@@ -1139,7 +1152,7 @@ export default function Atendimento() {
   }
 
   return (
-    <div className={`${styles.root} ${styles.whatsappShell}`} data-mobile-chat={mobileChatOpen ? "open" : "list"} data-details-open={detailsOpen && !!active}>
+    <div className={`${styles.root} ${styles.whatsappShell}`} data-message-size={fontSize} data-mobile-chat={mobileChatOpen ? "open" : "list"} data-details-open={detailsOpen && !!active}>
       <aside className={styles.sidebar}>
         <div className={styles.sidebarTop}>
           <div><strong>Conversas</strong><span>WhatsApp e canais conectados</span></div>
@@ -1210,6 +1223,8 @@ export default function Atendimento() {
             <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
             <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)}{(active.contact?.phone ?? active.contact?.email) && <> · {active.contact?.phone ?? active.contact?.email}</>}</span></div></div>
             <div className={styles.headerActions}>
+              <button type="button" className="btn btn-secondary" aria-label="Diminuir fonte das mensagens" title="Diminuir fonte" disabled={fontSize <= 12} onClick={() => changeFontSize(-2)}>A−</button>
+              <button type="button" className="btn btn-secondary" aria-label="Aumentar fonte das mensagens" title="Aumentar fonte" disabled={fontSize >= 22} onClick={() => changeFontSize(2)}>A+</button>
               {active.status !== 'closed' && active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
               {active.status !== 'closed' && active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
               {active.status !== 'closed' && active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
