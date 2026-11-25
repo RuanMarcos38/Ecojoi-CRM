@@ -1229,18 +1229,18 @@ export default function Atendimento() {
               <button type="button" className="btn btn-secondary" aria-label="Diminuir fonte das mensagens" title="Diminuir fonte" disabled={fontSize <= 12} onClick={() => changeFontSize(-2)}>A−</button>
               <button type="button" className="btn btn-secondary" aria-label="Aumentar fonte das mensagens" title="Aumentar fonte" disabled={fontSize >= 22} onClick={() => changeFontSize(2)}>A+</button>
               {active.status !== 'closed' && active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
-              {ownsActive && active.status !== 'closed' && active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
-              {active.status !== 'closed' && active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
-              {ownsActive && active.status !== 'closed' && active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
+              <button className="btn btn-secondary" disabled={changingState || !ownsActive || active.status === 'closed' || active.attendance_state === 'waiting'} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button>
+              <button className="btn btn-secondary" disabled={changingState || !ownsActive || active.status === 'closed' || active.attendance_state !== 'in_service'} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button>
+              {active.channel === 'whatsapp' && <button className="btn btn-secondary" type="button" disabled={!ownsActive || active.status === 'closed' || templates.length === 0} onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
               {canTransfer && active.status !== 'closed' && <button type="button" className="btn btn-secondary"
                 title="Transferir atendimento" disabled={transferBusy || changingState}
                 aria-expanded={transfer?.conversationId === active.id}
                 onClick={() => transfer?.conversationId === active.id ? setTransfer(null) : void prepareTransfer()}>
                 <ArrowRightLeft size={15}/><span>Transferir</span>
               </button>}
-              {canTransfer && ownsActive && active.status !== 'closed' && active.attendance_state === 'in_service' &&
+              {canTransfer &&
                 <button type="button" className="btn btn-secondary" title="Finalizar atendimento"
-                  disabled={changingState || transferBusy} onClick={() => void finishAttendance()}>
+                  disabled={changingState || transferBusy || !ownsActive || active.status === 'closed' || active.attendance_state !== 'in_service'} onClick={() => void finishAttendance()}>
                   <CheckCircle2 size={15}/><span>Finalizar</span>
                 </button>}
               <button type="button" className={styles.roundButton} onClick={() => toggleDetails(!detailsOpen)} aria-label={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} title={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} aria-expanded={detailsOpen} aria-controls="attendance-contact-details">{detailsOpen ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}</button>

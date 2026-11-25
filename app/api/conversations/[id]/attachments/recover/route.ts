@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { recoverEvolutionAttachment } from '@/lib/server/evolution';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { canViewTeamAttendance } from '@/lib/attendance-access';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -15,9 +16,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-    const { data: conversation, error } = await supabase.from('conversations').select('id')
-      .eq('tenant_id', ctx.tenantId).eq('assigned_to', ctx.userId).eq('id', id).eq('channel', 'whatsapp').maybeSingle();
+    const supabase = createAdminClient();
+    const query = supabase.from('conversations').select('id')
+      .eq('tenant_id', ctx.tenantId).eq('id', id).eq('channel', 'whatsapp');
+    if (!canViewTeamAttendance(ctx.role)) query.eq('assigned_to', ctx.userId);
+    const { data: conversation, error } = await query.maybeSingle();
     if (error) throw error;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
