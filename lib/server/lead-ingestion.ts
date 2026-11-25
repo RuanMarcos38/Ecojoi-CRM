@@ -1,3 +1,4 @@
+import { findAttendanceSurvey, parseAttendanceRating, saveAttendanceRating } from '@/lib/server/attendance-survey';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export type InboundChannel = 'internal' | 'whatsapp' | 'instagram' | 'facebook' | 'email' | 'external';
@@ -246,7 +247,13 @@ export async function ingestLead(input: IngestLeadInput) {
   const shouldCreateConversation = input.createConversation ?? Boolean(input.message || channel !== 'internal');
   let conversationId: string | null = null;
 
-  if (shouldCreateConversation) {
+  const rating = channel === 'whatsapp' && input.providerMessageId && (!input.messageType || input.messageType === 'text')
+    ? parseAttendanceRating(input.message) : undefined;
+  const survey = rating !== undefined
+    ? await findAttendanceSurvey(admin, input.tenantId, contactId, input.replyToProviderId).catch(() => null) : null;
+  if (survey) conversationId = survey.conversation_id;
+
+  if (shouldCreateConversation && !survey) {
     const crmChannel = channel === 'external' ? 'internal' : channel;
     const { data: openConversation, error: openConversationError } = await admin
       .from('conversations')
@@ -342,7 +349,11 @@ export async function ingestLead(input: IngestLeadInput) {
     if (messageError) throw messageError;
   }
 
-  if (conversationId) {
+  if (survey && rating !== undefined) {
+    await saveAttendanceRating(admin, input.tenantId, survey, rating).catch(() => {});
+  }
+
+  if (conversationId && !survey) {
     const now = new Date().toISOString();
     await admin
       .from('conversations')

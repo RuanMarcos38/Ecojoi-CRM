@@ -1,3 +1,4 @@
+import { parseAttendanceRating } from '@/lib/server/attendance-survey';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
@@ -454,7 +455,7 @@ async function processWhatsAppValue(value: any) {
       name: displayName,
       phone: message.from,
       ...metaWhatsAppAttribution(String(phoneNumberId), message.referral),
-      createConversation: true
+      createConversation: type !== 'text' || parseAttendanceRating(whatsappText(message)) === undefined
     });
 
     let attachment: { path?: string | null; name?: string | null; mime?: string | null; size?: number | null } | undefined;

@@ -157,6 +157,7 @@ export default function Atendimento() {
     try { localStorage.setItem('ecojoi:attendance:details', open ? 'open' : 'closed'); } catch {}
   }
   const [queue, setQueue] = useState<AttendanceState>('waiting');
+  const [showFinished, setShowFinished] = useState(false);
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
   const draftVersion = useRef(0);
@@ -441,7 +442,8 @@ export default function Atendimento() {
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return visibleItems.filter(item => {
-      if ((item.attendance_state ?? 'waiting') !== queue) return false;
+      if ((item.status === 'closed') !== showFinished) return false;
+      if (!showFinished && (item.attendance_state ?? 'waiting') !== queue) return false;
       if (unreadOnly && unreadCount(item) === 0) return false;
       if (attendantFilter && (attendantFilter === 'unassigned' ? Boolean(item.assigned_to) : item.assigned_to !== attendantFilter)) return false;
       if (tagFilter && !item.contact?.contact_tags?.some(({ tag }) => tag?.id === tagFilter)) return false;
@@ -455,7 +457,7 @@ export default function Atendimento() {
         || String(a.last_inbound_at ?? '').localeCompare(String(b.last_inbound_at ?? ''));
       return oldestFirst ? comparison : -comparison;
     });
-  }, [visibleItems, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
+  }, [visibleItems, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
   useEffect(() => {
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
@@ -825,6 +827,7 @@ export default function Atendimento() {
     setChannelFilter('');
     setAttendantFilter('');
     setOriginFilter('');
+    setShowFinished(conversation.status === 'closed');
     setQueue(conversation.attendance_state ?? 'waiting');
     setActiveId(id);
     setMobileChatOpen(true);
@@ -907,6 +910,32 @@ export default function Atendimento() {
     }
   }
 
+  async function finishAttendance() {
+    if (!active || changingState || !window.confirm('Finalizar o atendimento e solicitar a avaliação?')) return;
+    setChangingState(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch(`/api/conversations/${active.id}/finish`, { method: 'POST' });
+      const result = await response.json();
+      if (!response.ok) {
+        setError('Não foi possível finalizar o atendimento. Confira seu acesso e tente novamente.');
+        return;
+      }
+      setItems(items => items.map(item => item.id === active.id ? { ...item, status: 'closed' } : item));
+      if (result.survey === 'failed' || result.survey === 'window_closed') {
+        setError('Atendimento finalizado. O WhatsApp não confirmou o envio da avaliação.');
+      } else {
+        setNotice(result.survey === 'sent' ? 'Atendimento finalizado. Avaliação enviada.' : 'Atendimento finalizado.');
+      }
+      void refreshConversations().catch(() => {});
+    } catch {
+      setError('Falha ao finalizar. Confira o estado do atendimento antes de tentar novamente.');
+    } finally {
+      setChangingState(false);
+    }
+  }
+
   async function changeAttendance(state: AttendanceState) {
     if (!active || changingState || active.attendance_state === state) return;
     setChangingState(true); setError(''); setNotice('');
@@ -919,7 +948,7 @@ export default function Atendimento() {
   }
 
   async function sendTemplate(template: WhatsAppTemplate) {
-    if (!active) return;
+    if (!active || active.status === 'closed') return;
     const version = draftVersion.current;
     setError(''); setNotice('');
     const r = await fetch(`/api/conversations/${active.id}/template`, {
@@ -1070,7 +1099,7 @@ export default function Atendimento() {
           )}
           {body && !repeatsFileName && message.message_type !== 'audio' && <div className={styles.messageText}>{body}</div>}
           <div className={styles.reactionBar}>
-            {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id &&
+            {active?.channel === 'whatsapp' && active.status !== 'closed' && active.attendance_state === 'in_service' && message.provider_message_id &&
               <button type="button" className={styles.reactButton} title="Responder" aria-label="Responder à mensagem"
                 onClick={() => replyToMessage(message)}><Reply size={15}/></button>}
             {message.whatsapp_reaction && <span aria-label="Reação enviada">{message.whatsapp_reaction}</span>}
@@ -1142,8 +1171,9 @@ export default function Atendimento() {
           {soundEnabled ? 'Silenciar novas mensagens' : 'Ativar som de novas mensagens'}
         </button>
         <div className={styles.queueTabs} role="tablist">
-          {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={queue === state ? styles.queueActive : ''} onClick={() => setQueue(state)}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
+          {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={!showFinished && queue === state ? styles.queueActive : ''} onClick={() => { setShowFinished(false); setQueue(state); }}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
         </div>
+        <button type="button" className="btn btn-secondary" aria-pressed={showFinished} onClick={() => setShowFinished(value => !value)}>Finalizados</button>
         <div className={styles.conversationList}>
           {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
             const last = conversation.messages?.[conversation.messages.length - 1];
@@ -1172,21 +1202,21 @@ export default function Atendimento() {
             <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
             <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)}{(active.contact?.phone ?? active.contact?.email) && <> · {active.contact?.phone ?? active.contact?.email}</>}</span></div></div>
             <div className={styles.headerActions}>
-              {active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
-              {active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
-              {active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
+              {active.status !== 'closed' && active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
+              {active.status !== 'closed' && active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
+              {active.status !== 'closed' && active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
               {active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
               <button type="button" className={styles.roundButton} onClick={() => toggleDetails(!detailsOpen)} aria-label={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} title={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} aria-expanded={detailsOpen} aria-controls="attendance-contact-details">{detailsOpen ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}</button>
             </div>
           </header>
 
           {templateOpen && active.channel === 'whatsapp' && <div className={styles.templatePanel}><div className={styles.templateHeader}><strong>Templates aprovados</strong><button type="button" className={styles.roundButton} onClick={() => setTemplateOpen(false)}><X size={16}/></button></div><div className={styles.templateList}>{templates.filter(t => t.status?.toUpperCase() === 'APPROVED').map(t => <button key={t.id} type="button" onClick={() => void sendTemplate(t)} disabled={!templatePreview(t)} title={templatePreview(t) || 'Template sem texto sincronizado'}><span><b>{t.name}</b><small>{t.language} · {t.category ?? 'WhatsApp'}</small><small style={{whiteSpace:'pre-wrap', overflowWrap:'anywhere'}}>{templatePreview(t) || 'Sincronize o conteúdo deste template antes de enviar'}</small></span><Send size={14}/></button>)}</div></div>}
-          {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
-          {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
+          {active.status !== 'closed' && active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
+          {active.status !== 'closed' && active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
 
           <div className={styles.messages} ref={messagesRef}>{activeMessages.length ? activeMessages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
 
-          {active.attendance_state === 'in_service' ? <>
+          {active.status !== 'closed' && active.attendance_state === 'in_service' ? <>
             {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
             {pastedImage?.conversationId === active?.id && <div className={styles.pastedAttachment}>
               {pastedPreview && <img src={pastedPreview} alt="Prévia da imagem colada"/>}
@@ -1225,7 +1255,7 @@ export default function Atendimento() {
                 <button className={styles.sendButton} type="submit" disabled={!text.trim() || recording || sendingMedia || sendingText} title="Enviar mensagem" aria-label="Enviar"><Send size={19}/></button>
               </div>
             </form>
-          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
+          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.status === 'closed' ? 'Atendimento finalizado.' : active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
         </> : <div className={styles.chatPlaceholder}><div className={styles.placeholderIcon}><ImageIcon size={28}/></div><h3>Ecojoi Atendimento</h3><p>Selecione uma conversa para iniciar.</p></div>}
       </main>
 
@@ -1267,6 +1297,9 @@ export default function Atendimento() {
               onClick={() => void prepareTransfer()}>Transferir atendimento</button>}
             {transferFeedback && <p role="status">{transferFeedback}</p>}
           </>}
+          {canTransfer && active.status !== 'closed' && active.attendance_state === 'in_service' &&
+            <button type="button" className="btn btn-secondary" disabled={changingState}
+              onClick={() => void finishAttendance()}>Finalizar atendimento</button>}
           <b>Status do atendimento</b>
           <div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div>
 
