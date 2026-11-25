@@ -1,3 +1,4 @@
+import { parseAttendanceRating } from '@/lib/server/attendance-survey';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ingestLead } from '@/lib/server/lead-ingestion';
@@ -549,7 +550,7 @@ async function processInboundMessage(instanceName: string, data: any) {
     phone,
     source: 'WhatsApp',
     attribution: { evolution_instance_name: instanceName },
-    createConversation: true
+    createConversation: type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
   });
 
   const node = mediaNode(message, type);
