@@ -1,5 +1,6 @@
 'use client';
 
+import { canViewTeamAttendance } from '@/lib/attendance-access';
 import MessageAudio from './message-audio';
 import ContactDeals from './contact-deals';
 import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -243,7 +244,7 @@ export default function Atendimento() {
   const [transfer, setTransfer] = useState<{ conversationId: string; members: Assignee[]; target: string } | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferFeedback, setTransferFeedback] = useState('');
-  const canTransfer = ['company_admin', 'super_admin', 'manager'].includes(me?.role ?? '');
+  const canTransfer = canViewTeamAttendance(me?.role);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
@@ -525,7 +526,7 @@ export default function Atendimento() {
   }, [activeId, explicitlyOpened, mobileChatOpen, lastIncoming, readKey, readState]);
 
   function unreadCount(conversation: Conversation) {
-    if ((conversation.assigned_to && conversation.assigned_to !== me?.userId) || conversation.channel !== 'whatsapp' || !readState || readState.key !== readKey) return 0;
+    if ((!canTransfer && conversation.assigned_to && conversation.assigned_to !== me?.userId) || conversation.channel !== 'whatsapp' || !readState || readState.key !== readKey) return 0;
     const after = readState.data.conversations[conversation.id] ?? readState.data.since;
     return (conversation.messages ?? []).filter(message => message.direction === 'inbound' && messageTime(message.created_at) > after).length;
   }
@@ -538,7 +539,7 @@ export default function Atendimento() {
       counts[item.attendance_state ?? 'waiting'] += unreadCount(item);
     }
     return counts;
-  }, [items, readState, readKey, me?.userId]);
+  }, [items, readState, readKey, me?.userId, canTransfer]);
 
   const messagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
