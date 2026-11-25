@@ -474,9 +474,10 @@ export default function Atendimento() {
     });
   }, [visibleItems, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
   useEffect(() => {
+    if (activeId && pinnedConversation.current === activeId && items.some(item => item.id === activeId)) return;
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
-  }, [filtered, activeId]);
+  }, [filtered, activeId, items]);
 
   useEffect(()=>{
     if(!activeId){setNotes([]);return;}
@@ -989,8 +990,15 @@ export default function Atendimento() {
         setAttendanceFeedback({ id, message: messages[d.error] ?? 'Não foi possível alterar a fila. Confira seu acesso e tente novamente.' });
         return;
       }
+      pinnedConversation.current = id;
       setItems(items => items.map(item => item.id === id ? { ...item, ...d.data } : item));
-      setQueue(state); setActiveId(id); await load();
+      setQueue(state); setActiveId(id);
+      if (d.greeting === 'window_closed' || d.greeting === 'failed') {
+        setAttendanceFeedback({ id, message: d.greeting === 'window_closed'
+          ? 'Atendimento assumido. A janela do WhatsApp está fechada para enviar a saudação.'
+          : 'Atendimento assumido. O WhatsApp não confirmou o envio da saudação.' });
+      }
+      void refreshConversations().catch(() => {});
     } catch {
       setAttendanceFeedback({ id, message: 'Falha de conexão. Confira o estado do atendimento antes de tentar novamente.' });
     } finally { setChangingState(false); }
@@ -1228,7 +1236,7 @@ export default function Atendimento() {
             const last = conversation.messages?.[conversation.messages.length - 1];
             const unread = unreadCount(conversation);
             const timestamp = conversationActivity(conversation);
-            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { setActiveId(conversation.id); setExplicitlyOpened(conversation.id); setMobileChatOpen(true); }}>
+            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { pinnedConversation.current = null; setActiveId(conversation.id); setExplicitlyOpened(conversation.id); setMobileChatOpen(true); }}>
               <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} className={styles.avatar}/>
               <span className={styles.conversationCopy}>
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{timestamp ? formatTime(new Date(timestamp).toISOString()) : ''}</small></span>
