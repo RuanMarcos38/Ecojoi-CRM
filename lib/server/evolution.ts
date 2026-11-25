@@ -409,24 +409,48 @@ async function claimEvent(tenantId: string, eventKey: string, eventType: string,
   return false;
 }
 
+function unwrapInboundMessage(message: any) {
+  for (let depth = 0; depth < 8 && message; depth++) {
+    const nested = message.documentWithCaptionMessage?.message
+      ?? message.ephemeralMessage?.message
+      ?? message.viewOnceMessage?.message
+      ?? message.viewOnceMessageV2?.message
+      ?? message.viewOnceMessageV2Extension?.message
+      ?? message.editedMessage?.message
+      ?? message.deviceSentMessage?.message;
+    if (!nested || nested === message) break;
+    message = nested;
+  }
+  return message;
+}
+
 function textFromMessage(message: any) {
   return message?.conversation
     || message?.extendedTextMessage?.text
     || message?.imageMessage?.caption
     || message?.videoMessage?.caption
     || message?.documentMessage?.caption
+    || message?.buttonsResponseMessage?.selectedDisplayText
+    || message?.templateButtonReplyMessage?.selectedDisplayText
+    || message?.listResponseMessage?.title
+    || message?.interactiveResponseMessage?.body?.text
+    || message?.reactionMessage?.text
+    || message?.contactMessage?.displayName
+    || message?.contactsArrayMessage?.contacts?.map((contact: any) => contact?.displayName).filter(Boolean).join(', ')
+    || message?.locationMessage?.name
+    || message?.locationMessage?.address
     || '';
 }
 
 function inboundType(message: any) {
-  if (message?.imageMessage) return 'image';
+  if (message?.imageMessage || message?.stickerMessage) return 'image';
   if (message?.audioMessage) return 'audio';
   if (message?.documentMessage || message?.videoMessage) return 'file';
   return 'text';
 }
 
 function mediaNode(message: any, type: string) {
-  if (type === 'image') return message?.imageMessage;
+  if (type === 'image') return message?.imageMessage || message?.stickerMessage;
   if (type === 'audio') return message?.audioMessage;
   if (type === 'file') return message?.documentMessage || message?.videoMessage;
   return null;
@@ -499,11 +523,11 @@ async function processInboundMessage(instanceName: string, data: any) {
 
   const key = data?.key ?? data?.data?.key;
   const rawMessage = data?.message ?? data?.data?.message;
-  const message = rawMessage?.documentWithCaptionMessage?.message
-    ?? rawMessage?.ephemeralMessage?.message
-    ?? rawMessage;
+  const message = unwrapInboundMessage(rawMessage);
   const remoteJid = String(key?.remoteJid ?? '');
   if (!key?.id || key?.fromMe || !remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
+
+  if (!message || message.protocolMessage || message.senderKeyDistributionMessage && Object.keys(message).length === 1) return;
 
   const phone = digits(remoteJid.split('@')[0]);
   if (!phone) return;
@@ -541,7 +565,7 @@ async function processInboundMessage(instanceName: string, data: any) {
         base64 = inboundBase64(fetched?.base64 ?? fetched?.data?.base64);
       }
       if (!base64) throw new Error('attachment_data_unavailable');
-      const mime = String(node.mimetype || fetched?.mimetype || fetched?.data?.mimetype || 'application/octet-stream')
+      const mime = String(node.mimetype || fetched?.mimetype || fetched?.data?.mimetype || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream'))
         .split(';', 1)[0].trim().toLowerCase();
       const fileName = String(node.fileName || fetched?.fileName || (
         type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'
@@ -553,7 +577,7 @@ async function processInboundMessage(instanceName: string, data: any) {
   }
 
   if (!body) {
-    body = type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : type === 'file' ? 'Arquivo recebido' : 'Nova mensagem recebida';
+    body = message?.stickerMessage ? 'Figurinha recebida' : type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : type === 'file' ? 'Arquivo recebido' : 'Conteúdo indisponível no CRM. Consulte a conversa no WhatsApp.';
   }
 
   const received = await ingestLead({
