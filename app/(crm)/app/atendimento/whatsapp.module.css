@@ -1361,3 +1361,26 @@ button.messageQuote { cursor: pointer; }
 @media (min-width: 761px) {
   .root .messageInputWrap > textarea { min-height: 58px; padding: 14px; font-size: 16px; }
 }
+
+/* Compact actions scoped to the conversation workspace. */
+.root .headerActions { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.root .headerActions :global(.btn) {
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 32px; min-width: 32px; padding: 4px 8px;
+  border-radius: 7px; font-size: 12px; font-weight: 600;
+  box-shadow: none; white-space: nowrap;
+}
+.root .headerActions :global(.btn) svg { width: 14px; height: 14px; flex: none; }
+.root :is(.details, .sidebar, .transferForm, .templatePanel) :global(.btn) {
+  min-height: 30px; padding: 4px 8px; border-radius: 7px; font-size: 12px; box-shadow: none;
+}
+.transferForm {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--chat-surface); border-bottom: 1px solid var(--line);
+}
+.transferForm select { flex: 1 1 160px; min-width: 0; }
+.transferFeedback { margin: 0; padding: 6px 12px; font-size: 12px; }
+@media (max-width: 760px) {
+  .root .headerActions :global(.btn) { min-height: 36px; padding-inline: 7px; }
+  .transferForm select { flex-basis: 65%; }
+}
