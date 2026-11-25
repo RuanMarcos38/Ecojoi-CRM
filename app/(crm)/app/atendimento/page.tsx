@@ -243,7 +243,8 @@ export default function Atendimento() {
   }, [readKey]);
   const [transfer, setTransfer] = useState<{ conversationId: string; members: Assignee[]; target: string } | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
-  const [transferFeedback, setTransferFeedback] = useState('');
+  const [transferFeedback, setTransferFeedback] = useState<{ id: string; message: string } | null>(null);
+  const [attendanceFeedback, setAttendanceFeedback] = useState<{ id: string; message: string } | null>(null);
   const canTransfer = canViewTeamAttendance(me?.role);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
@@ -887,14 +888,14 @@ export default function Atendimento() {
   async function prepareTransfer() {
     if (!active || transferBusy) return;
     const id = active.id;
-    setTransferFeedback('');
+    setTransferFeedback(null);
     setTransferBusy(true);
     try {
       const response = await fetch('/api/conversations/' + id + '/transfer', { cache: 'no-store' });
       if (!response.ok) throw Error();
       setTransfer({ conversationId: id, members: (await response.json()).data ?? [], target: '' });
     } catch {
-      setTransferFeedback('Não foi possível carregar os usuários disponíveis.');
+      setTransferFeedback({ id, message: 'Não foi possível carregar os usuários disponíveis.' });
     } finally {
       setTransferBusy(false);
     }
@@ -905,22 +906,32 @@ export default function Atendimento() {
     if (!active || transfer?.conversationId !== active.id || !transfer.target || transferBusy) return;
     const id = active.id;
     setTransferBusy(true);
-    setTransferFeedback('');
+    setTransferFeedback(null);
     try {
       const response = await fetch('/api/conversations/' + id + '/transfer', {
         method: 'PATCH', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ assignee_id: transfer.target })
       });
-      if (!response.ok) throw Error();
-      const { data } = await response.json();
+      const { data, error } = await response.json();
+      if (!response.ok) {
+        const messages: Record<string, string> = {
+          conversation_closed: 'Este atendimento foi finalizado.',
+          not_found: 'Conversa não encontrada. Atualize a lista de atendimentos.',
+          transfer_target_unavailable: 'O usuário selecionado está indisponível. Selecione outro responsável.',
+          conversation_changed: 'O atendimento mudou durante a transferência. Confira o responsável e tente novamente.',
+          forbidden: 'Seu perfil não permite transferir atendimentos.'
+        };
+        setTransferFeedback({ id, message: messages[error] ?? 'Não foi possível transferir o atendimento.' });
+        return;
+      }
       setItems(current => current.map(item => item.id === id ? { ...item, ...data } : item));
       setQueue('in_service');
       setActiveId(id);
       setAttendantFilter('');
       setTransfer(null);
-      setTransferFeedback('Atendimento transferido.');
+      setTransferFeedback({ id, message: 'Atendimento transferido.' });
     } catch {
-      setTransferFeedback('Não foi possível transferir. Confira se a conversa está aberta e o usuário está ativo.');
+      setTransferFeedback({ id, message: 'Falha de conexão ao transferir. Confira o responsável antes de tentar novamente.' });
     } finally {
       setTransferBusy(false);
     }
@@ -962,12 +973,26 @@ export default function Atendimento() {
 
   async function changeAttendance(state: AttendanceState) {
     if (!active || (active.assigned_to && !ownsActive) || changingState || active.attendance_state === state) return;
-    setChangingState(true); setError(''); setNotice('');
+    const id = active.id;
+    setChangingState(true); setAttendanceFeedback(null); setTransferFeedback(null); setError(''); setNotice('');
     try {
-      const r = await fetch(`/api/conversations/${active.id}/attendance`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
+      const r = await fetch(`/api/conversations/${id}/attendance`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
       const d = await r.json();
-      if (!r.ok) { setError(d.error === 'attendance_capacity_reached' ? 'Você atingiu o limite de atendimentos. Finalize um atendimento antes de assumir outro.' : d.error === 'attendance_state_update_failed' ? 'Não foi possível alterar a fila.' : 'Você não possui permissão para alterar esta fila.'); return; }
-      setQueue(state); setActiveId(active.id); await load();
+      if (!r.ok) {
+        const messages: Record<string, string> = {
+          attendance_capacity_reached: 'Você atingiu o limite de atendimentos. Libere uma vaga ou peça a um gestor para transferir a conversa a outro atendente.',
+          conversation_assigned_elsewhere: 'O atendimento já tem outro responsável.',
+          conversation_closed: 'Este atendimento foi finalizado.',
+          conversation_changed: 'O atendimento mudou. Atualize a lista e confira o responsável.',
+          attendance_state_update_failed: 'Não foi possível alterar a fila.'
+        };
+        setAttendanceFeedback({ id, message: messages[d.error] ?? 'Não foi possível alterar a fila. Confira seu acesso e tente novamente.' });
+        return;
+      }
+      setItems(items => items.map(item => item.id === id ? { ...item, ...d.data } : item));
+      setQueue(state); setActiveId(id); await load();
+    } catch {
+      setAttendanceFeedback({ id, message: 'Falha de conexão. Confira o estado do atendimento antes de tentar novamente.' });
     } finally { setChangingState(false); }
   }
 
@@ -1258,7 +1283,8 @@ export default function Atendimento() {
               <button className="btn btn-primary" disabled={transferBusy || !transfer.target}>Confirmar transferência</button>
               <button type="button" className="btn btn-secondary" disabled={transferBusy} onClick={() => setTransfer(null)}>Cancelar</button>
             </form>}
-          {transferFeedback && <p className={styles.transferFeedback} role="status">{transferFeedback}</p>}
+          {transferFeedback?.id === active.id && <p className={styles.transferFeedback} role="status">{transferFeedback.message}</p>}
+          {attendanceFeedback?.id === active.id && <p className={styles.transferFeedback} role="status">{attendanceFeedback.message}</p>}
 
           {templateOpen && active.channel === 'whatsapp' && <div className={styles.templatePanel}><div className={styles.templateHeader}><strong>Templates aprovados</strong><button type="button" className={styles.roundButton} onClick={() => setTemplateOpen(false)}><X size={16}/></button></div><div className={styles.templateList}>{templates.filter(t => t.status?.toUpperCase() === 'APPROVED').map(t => <button key={t.id} type="button" onClick={() => void sendTemplate(t)} disabled={!templatePreview(t)} title={templatePreview(t) || 'Template sem texto sincronizado'}><span><b>{t.name}</b><small>{t.language} · {t.category ?? 'WhatsApp'}</small><small style={{whiteSpace:'pre-wrap', overflowWrap:'anywhere'}}>{templatePreview(t) || 'Sincronize o conteúdo deste template antes de enviar'}</small></span><Send size={14}/></button>)}</div></div>}
           {active.status !== 'closed' && active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}

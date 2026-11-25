@@ -40,11 +40,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const [member, current] = await Promise.all([
       db.from('profiles').select('id,full_name').eq('tenant_id', ctx.tenantId)
         .eq('id', parsed.data.assignee_id).eq('active', true).is('deleted_at', null).maybeSingle(),
-      db.from('conversations').select('assigned_to,attendance_state').eq('tenant_id', ctx.tenantId)
-        .eq('id', id).neq('status', 'closed').maybeSingle()
+      db.from('conversations').select('assigned_to,attendance_state,status').eq('tenant_id', ctx.tenantId)
+        .eq('id', id).maybeSingle()
     ]);
     if (member.error || current.error) throw member.error ?? current.error;
-    if (!member.data || !current.data) return NextResponse.json({ error: 'transfer_target_unavailable' }, { status: 404 });
+    if (!current.data) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (current.data.status === 'closed') return NextResponse.json({ error: 'conversation_closed' }, { status: 409 });
+    if (!member.data) return NextResponse.json({ error: 'transfer_target_unavailable' }, { status: 404 });
 
     const now = new Date().toISOString();
     let query = db.from('conversations').update({
