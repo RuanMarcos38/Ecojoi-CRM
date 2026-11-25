@@ -142,6 +142,8 @@ export default function Dashboard(){
       <span>{error}</span><button className="btn btn-secondary" type="button" onClick={()=>void load()}>Tentar novamente</button>
     </div>}
 
+    {visible('attendance_queue') && <AttendanceQueue />}
+
     {!data&&!error?<div className="card empty">Carregando painel...</div>:data&&<>
       {customizing&&<section className="card section" style={{marginBottom:12}}>
         <h3>Widgets do painel</h3>
@@ -160,8 +162,6 @@ export default function Dashboard(){
         {visible('forecast')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><TrendingUp size={16}/></span>Forecast ponderado</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.weightedForecast)}</div><div className="approved-kpi-foot"><span>{money(data.openPipeline)}</span><small>pipeline aberto</small></div><div className="approved-mini-chart" aria-hidden="true"><i/><i/><i/><i/></div></article>}
         {visible('won_revenue')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><CircleDollarSign size={16}/></span>Receita ganha</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.wonRevenue)}</div><div className="approved-kpi-foot"><span>{data.conversion}%</span><small>conversão fechados</small></div><Database className="ecojoi-kpi-art" aria-hidden="true"/></article>}
       </section>
-
-      {visible('attendance_queue') && <AttendanceQueue />}
 
       {(visible('priorities')||visible('funnel'))&&<section className="approved-mid-grid">
         {visible('priorities')&&<div className="approved-panel">

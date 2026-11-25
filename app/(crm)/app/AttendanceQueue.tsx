@@ -81,13 +81,12 @@ export default function AttendanceQueue() {
     };
   }, []);
 
-  if (forbidden) return null;
-
   return <section className="approved-panel" aria-label="Fila de atendimento" style={{ marginBlock: 12 }}>
     <div className="approved-panel-head">
       <div><h3>Fila de atendimento</h3>{queue && <p>Atualizado às {new Date(queue.updatedAt).toLocaleTimeString('pt-BR')}</p>}</div>
       <Link href="/app/atendimento" className="btn btn-secondary">Abrir atendimento</Link>
     </div>
+    {forbidden && <p role="status">A fila exige acesso ao módulo Atendimento.</p>}
     {error && <p role="status">{error}</p>}
     {queue ? <>
       <div className="approved-activity-list">
@@ -101,6 +100,6 @@ export default function AttendanceQueue() {
           <div><Link href={`/app/atendimento?conversa=${encodeURIComponent(item.id)}`}>{item.name}</Link></div>
           <em>{waitingTime(item.since, queue.updatedAt)}</em></div>)}
       </div> : <p>Nenhuma conversa esperando.</p>}
-    </> : !error && <p>Carregando fila…</p>}
+    </> : !error && !forbidden && <p>Carregando fila…</p>}
   </section>;
 }
