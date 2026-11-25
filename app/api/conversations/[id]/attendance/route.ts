@@ -7,6 +7,8 @@ import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
 import { notifyAiAgent } from '@/lib/server/ai-agent';
 
+import { canSendFreeformWhatsApp, sendWhatsAppText } from '@/lib/server/whatsapp';
+
 const schema = z.object({
   state: z.enum(['waiting', 'in_service', 'automatic'])
 });
@@ -22,7 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: current, error: currentError } = await supabase
       .from('conversations')
-      .select('id,status,assigned_to,attendance_state,channel,contact:contacts(id,name,email,phone),messages(id,direction,body,message_type,created_at)')
+      .select('id,status,assigned_to,attendance_state,channel,last_inbound_at,contact:contacts(id,name,email,phone),messages(id,direction,body,message_type,created_at)')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
       .maybeSingle();
@@ -59,13 +61,50 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (error) throw error;
     if (!data) return NextResponse.json({ error: 'conversation_changed' }, { status: 409 });
 
+    let greeting = 'not_applicable';
+    if (current.attendance_state === 'waiting' && state === 'in_service' && current.channel === 'whatsapp') {
+      greeting = 'failed';
+      try {
+        const contact = Array.isArray(current.contact) ? current.contact[0] : current.contact;
+        if (!(await canSendFreeformWhatsApp(ctx.tenantId, current.last_inbound_at))) greeting = 'window_closed';
+        else if (contact?.phone) {
+          const { data: profile, error: profileError } = await supabase.from('profiles')
+            .select('full_name').eq('tenant_id', ctx.tenantId).eq('id', ctx.userId).single();
+          if (profileError) throw profileError;
+          const attendant = profile.full_name?.trim();
+          if (!attendant) throw new Error('attendant_name_unavailable');
+          const customer = contact.name?.trim();
+          const body = `Olá${customer ? `, ${customer}` : ''}! Aqui é ${attendant}, da Ecojoi. Vou dar continuidade ao seu atendimento. 😊`;
+          const { data: message, error: insertError } = await supabase.from('messages').insert({
+            tenant_id: ctx.tenantId, conversation_id: id, direction: 'outbound', body,
+            sender_user_id: ctx.userId, status: 'queued', message_type: 'text'
+          }).select('id').single();
+          if (insertError) throw insertError;
+          let providerMessageId: string | null = null;
+          try {
+            const result = await sendWhatsAppText(ctx.tenantId, contact.phone, body);
+            if (result.delivered && result.providerMessageId) {
+              greeting = 'sent';
+              providerMessageId = result.providerMessageId;
+            }
+          } finally {
+            await supabase.from('messages')
+              .update({ status: greeting === 'sent' ? 'sent' : 'failed', provider_message_id: providerMessageId })
+              .eq('tenant_id', ctx.tenantId).eq('id', message.id);
+          }
+        }
+      } catch {
+        greeting = 'failed';
+      }
+    }
+
     await audit({
       tenantId: ctx.tenantId,
       userId: ctx.userId,
       action: 'conversation.attendance_state',
       entity: 'conversation',
       entityId: id,
-      metadata: { from: current.attendance_state, to: state }
+      metadata: { from: current.attendance_state, to: state, greeting }
     });
 
     const recentMessages = [...(current.messages ?? [])]
@@ -81,7 +120,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       messages: recentMessages
     });
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ data, greeting });
   } catch (e) {
     if (e instanceof Response) return e;
     if (e instanceof z.ZodError) return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
