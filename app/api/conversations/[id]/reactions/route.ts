@@ -1,3 +1,4 @@
+import { sendEvolutionReaction } from '@/lib/server/evolution';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePermission } from '@/lib/auth/context';
@@ -22,26 +23,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { message_id, emoji } = body.data;
     const supabase = await createClient();
     const { data: conversation } = await supabase.from('conversations')
-      .select('channel,attendance_state,contact:contacts(phone)')
+      .select('channel,status,attendance_state,contact:contacts(phone)')
       .eq('tenant_id', ctx.tenantId).eq('id', id).maybeSingle();
     if (!conversation || conversation.channel !== 'whatsapp') {
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
-    if (conversation.attendance_state !== 'in_service') {
+    if (conversation.status === 'closed' || conversation.attendance_state !== 'in_service') {
       return NextResponse.json({ error: 'assume_conversation' }, { status: 409 });
     }
-    if (await getWhatsAppProvider(ctx.tenantId) !== 'meta') {
-      return NextResponse.json({ error: 'provider_not_supported' }, { status: 409 });
-    }
+    const provider = await getWhatsAppProvider(ctx.tenantId);
     const { data: message } = await supabase.from('messages')
-      .select('id,provider_message_id,created_at')
+      .select('id,provider_message_id,created_at,direction')
       .eq('tenant_id', ctx.tenantId).eq('conversation_id', id).eq('id', message_id).maybeSingle();
     if (!message?.provider_message_id) return NextResponse.json({ error: 'message_unavailable' }, { status: 409 });
-    if (Date.now() - Date.parse(message.created_at) >= 30 * 86400000) {
+    if (provider === 'meta' && Date.now() - Date.parse(message.created_at) >= 30 * 86400000) {
       return NextResponse.json({ error: 'reaction_expired' }, { status: 409 });
     }
     const contact = Array.isArray(conversation.contact) ? conversation.contact[0] : conversation.contact;
-    if (!(await sendWhatsAppReaction(ctx.tenantId, contact?.phone, message.provider_message_id, emoji))) {
+    const sent = provider === 'evolution'
+      ? !message.provider_message_id.startsWith('wamid.') && await sendEvolutionReaction(ctx.tenantId, contact?.phone, message.provider_message_id, message.direction === 'outbound', emoji)
+      : message.provider_message_id.startsWith('wamid.') && await sendWhatsAppReaction(ctx.tenantId, contact?.phone, message.provider_message_id, emoji);
+    if (!sent) {
       return NextResponse.json({ error: 'reaction_rejected' }, { status: 502 });
     }
     const { error } = await createAdminClient().from('messages').update({ whatsapp_reaction: emoji || null })

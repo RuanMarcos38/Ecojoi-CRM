@@ -1,3 +1,4 @@
+import { admitWaitingAttendance } from '@/lib/server/attendance-capacity';
 import { NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
@@ -17,9 +18,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       .update({ status: 'closed', updated_at: now, attendance_changed_at: now })
       .eq('tenant_id', ctx.tenantId).eq('id', id).neq('status', 'closed')
       .eq('attendance_state', 'in_service')
-      .select('channel,last_inbound_at,contact:contacts(phone)').maybeSingle();
+      .select('channel,assigned_to,last_inbound_at,contact:contacts(phone)').maybeSingle();
     if (error) throw error;
     if (!conversation) return NextResponse.json({ error: 'conversation_unavailable' }, { status: 409 });
+
+    if (conversation.assigned_to) {
+      await admitWaitingAttendance(ctx.tenantId, conversation.assigned_to).catch(() => {
+        console.warn('[attendance] Falha ao admitir próximo atendimento da fila');
+      });
+    }
 
     let surveyMessage = null;
     let survey = 'not_applicable';
