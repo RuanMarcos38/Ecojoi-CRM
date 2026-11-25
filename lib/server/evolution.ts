@@ -518,7 +518,7 @@ async function notifyAutomaticConversation(tenantId: string, conversationId?: st
   });
 }
 
-async function processInboundMessage(instanceName: string, data: any) {
+async function processInboundMessage(instanceName: string, data: any, recovered = false) {
   const tenantId = await tenantByInstance(instanceName);
   if (!tenantId) return;
 
@@ -542,77 +542,84 @@ async function processInboundMessage(instanceName: string, data: any) {
   const fresh = await claimEvent(tenantId, String(key.id), 'whatsapp_message', { instance: instanceName });
   if (!fresh) return;
 
-  const context = [message?.extendedTextMessage, message?.imageMessage, message?.documentMessage,
-    message?.audioMessage, message?.videoMessage].find(node => typeof node?.contextInfo?.stanzaId === 'string')?.contextInfo;
-  const replyToProviderId = typeof context?.stanzaId === 'string' ? context.stanzaId.trim().slice(0, 512) : null;
-  const adContexts = [context, message?.extendedTextMessage?.contextInfo, message?.imageMessage?.contextInfo,
-    message?.contextInfo, data?.contextInfo, data?.data?.contextInfo];
-  const adContext = adContexts.find(value => value?.externalAdReply?.ctwaClid ||
-    value?.ctwaClid || String(value?.externalAdReply?.sourceType ?? '').toLowerCase() === 'ad');
-  const attribution = {
-    evolution_instance_name: instanceName,
-    ...(adContext ? { meta_referral_type: 'ad', meta_ctwa_ad_id: adContext.externalAdReply?.sourceId ?? null,
-      meta_ctwa_clid: adContext.externalAdReply?.ctwaClid ?? adContext.ctwaClid ?? null } : {})
-  };
-  const displayName = data?.pushName || data?.data?.pushName || null;
-  const type = inboundType(message);
-  const base = await ingestLead({
-    tenantId,
-    channel: 'whatsapp',
-    externalId: phone,
-    externalName: displayName,
-    name: displayName,
-    phone,
-    source: 'WhatsApp',
-    attribution,
-    createConversation: type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
-  });
+  try {
+    const context = [message?.extendedTextMessage, message?.imageMessage, message?.documentMessage,
+      message?.audioMessage, message?.videoMessage].find(node => typeof node?.contextInfo?.stanzaId === 'string')?.contextInfo;
+    const replyToProviderId = typeof context?.stanzaId === 'string' ? context.stanzaId.trim().slice(0, 512) : null;
+    const adContexts = [context, message?.extendedTextMessage?.contextInfo, message?.imageMessage?.contextInfo,
+      message?.contextInfo, data?.contextInfo, data?.data?.contextInfo];
+    const adContext = adContexts.find(value => value?.externalAdReply?.ctwaClid ||
+      value?.ctwaClid || String(value?.externalAdReply?.sourceType ?? '').toLowerCase() === 'ad');
+    const attribution = {
+      evolution_instance_name: instanceName,
+      ...(adContext ? { meta_referral_type: 'ad', meta_ctwa_ad_id: adContext.externalAdReply?.sourceId ?? null,
+        meta_ctwa_clid: adContext.externalAdReply?.ctwaClid ?? adContext.ctwaClid ?? null } : {})
+    };
+    const displayName = data?.pushName || data?.data?.pushName || null;
+    const type = inboundType(message);
+    const base = await ingestLead({
+      tenantId,
+      channel: 'whatsapp',
+      externalId: phone,
+      externalName: displayName,
+      name: displayName,
+      phone,
+      source: 'WhatsApp',
+      attribution,
+      createConversation: type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
+    });
 
-  const node = mediaNode(message, type);
-  let attachment: { path?: string | null; name?: string | null; mime?: string | null; size?: number | null } | undefined;
-  let body = textFromMessage(message);
-  if (node && base.conversationId) {
-    try {
-      let base64 = [data?.base64, data?.data?.base64, message?.base64, node.base64]
-        .map(inboundBase64).find(Boolean);
-      let fetched: any;
-      if (!base64) {
-        fetched = await fetchInboundMedia(tenantId, instanceName, String(key.id));
-        base64 = inboundBase64(fetched?.base64 ?? fetched?.data?.base64);
+    const node = mediaNode(message, type);
+    let attachment: { path?: string | null; name?: string | null; mime?: string | null; size?: number | null } | undefined;
+    let body = textFromMessage(message);
+    if (node && base.conversationId) {
+      try {
+        let base64 = [data?.base64, data?.data?.base64, message?.base64, node.base64]
+          .map(inboundBase64).find(Boolean);
+        let fetched: any;
+        if (!base64) {
+          fetched = await fetchInboundMedia(tenantId, instanceName, String(key.id));
+          base64 = inboundBase64(fetched?.base64 ?? fetched?.data?.base64);
+        }
+        if (!base64) throw new Error('attachment_data_unavailable');
+        const mime = String(node.mimetype || fetched?.mimetype || fetched?.data?.mimetype || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream'))
+          .split(';', 1)[0].trim().toLowerCase();
+        const fileName = String(node.fileName || fetched?.fileName || (
+          type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'
+        ));
+        attachment = await saveInboundBase64(tenantId, base.conversationId, base64, mime, fileName);
+      } catch {
+        console.warn('[evolution] Falha ao recuperar ou armazenar anexo recebido', { type });
       }
-      if (!base64) throw new Error('attachment_data_unavailable');
-      const mime = String(node.mimetype || fetched?.mimetype || fetched?.data?.mimetype || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream'))
-        .split(';', 1)[0].trim().toLowerCase();
-      const fileName = String(node.fileName || fetched?.fileName || (
-        type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'
-      ));
-      attachment = await saveInboundBase64(tenantId, base.conversationId, base64, mime, fileName);
-    } catch {
-      console.warn('[evolution] Falha ao recuperar ou armazenar anexo recebido', { type });
     }
+
+    if (!body) {
+      body = message?.stickerMessage ? 'Figurinha recebida' : type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : type === 'file' ? 'Arquivo recebido' : 'Conteúdo indisponível no CRM. Consulte a conversa no WhatsApp.';
+    }
+
+    const received = await ingestLead({
+      tenantId,
+      channel: 'whatsapp',
+      externalId: phone,
+      externalName: displayName,
+      name: displayName,
+      phone,
+      source: 'WhatsApp',
+      message: body,
+      providerMessageId: String(key.id),
+      replyToProviderId,
+      messageType: type,
+      attachment,
+      createConversation: true
+    });
+
+    if (!recovered) await notifyAutomaticConversation(tenantId, received.conversationId);
+    return Boolean(received.conversationId);
+  } catch (error) {
+    await createAdminClient().from('integration_events').delete()
+      .eq('tenant_id', tenantId).eq('provider', 'evolution').eq('event_key', String(key.id));
+    throw error;
   }
-
-  if (!body) {
-    body = message?.stickerMessage ? 'Figurinha recebida' : type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : type === 'file' ? 'Arquivo recebido' : 'Conteúdo indisponível no CRM. Consulte a conversa no WhatsApp.';
-  }
-
-  const received = await ingestLead({
-    tenantId,
-    channel: 'whatsapp',
-    externalId: phone,
-    externalName: displayName,
-    name: displayName,
-    phone,
-    source: 'WhatsApp',
-    message: body,
-    providerMessageId: String(key.id),
-    replyToProviderId,
-    messageType: type,
-    attachment,
-    createConversation: true
-  });
-
-  await notifyAutomaticConversation(tenantId, received.conversationId);
 }
 
 async function processMessageUpdate(instanceName: string, data: any) {
@@ -734,4 +741,51 @@ export async function sendEvolutionReaction(tenantId: string, to: string | null 
   } catch {
     return false;
   }
+}
+
+export async function reconcileRecentEvolutionMessages() {
+  const admin = createAdminClient();
+  const { data: tenants, error } = await admin.from('tenant_settings')
+    .select('tenant_id,evolution_instance_name').eq('whatsapp_provider', 'evolution')
+    .not('evolution_instance_name', 'is', null);
+  if (error) throw error;
+
+  const since = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+  let recovered = 0;
+  let failed = 0;
+  for (const tenant of tenants ?? []) {
+    const instance = tenant.evolution_instance_name?.trim();
+    if (!instance) continue;
+    try {
+      const runtime = await tenantRuntime(tenant.tenant_id);
+      if (!runtime) continue;
+      const response = await evolutionRequest(runtime, `chat/findMessages/${encodeURIComponent(instance)}`, {
+        method: 'POST',
+        body: JSON.stringify({ where: { messageTimestamp: { gte: since } }, offset: 100, page: 1 }),
+        signal: AbortSignal.timeout(8000)
+      });
+      const records = response?.messages?.records ?? response?.records;
+      if (!Array.isArray(records)) throw new Error('invalid_evolution_history');
+      const candidates = records.filter(record =>
+        record?.key?.fromMe === false && record.key.id && Number(record.messageTimestamp) >= since
+      ).sort((a, b) => Number(a.messageTimestamp) - Number(b.messageTimestamp));
+      if (!candidates.length) continue;
+      const { data: events, error: lookupError } = await admin.from('integration_events')
+        .select('event_key').eq('tenant_id', tenant.tenant_id).eq('provider', 'evolution')
+        .in('event_key', candidates.map(record => String(record.key.id)));
+      if (lookupError) throw lookupError;
+      const seen = new Set((events ?? []).map(event => event.event_key));
+      for (const record of candidates.filter(record => !seen.has(String(record.key.id))
+        && inboundType(unwrapInboundMessage(record.message)) === 'text').slice(0, 15)) {
+        try {
+          if (await processInboundMessage(instance, record, true)) recovered++;
+        } catch {
+          failed++;
+        }
+      }
+    } catch {
+      failed++;
+    }
+  }
+  return { recovered, failed };
 }
