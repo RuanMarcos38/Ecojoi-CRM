@@ -530,8 +530,14 @@ async function processInboundMessage(instanceName: string, data: any) {
 
   if (!message || message.protocolMessage || message.senderKeyDistributionMessage && Object.keys(message).length === 1) return;
 
-  const phone = digits(remoteJid.split('@')[0]);
-  if (!phone) return;
+  const phone = [remoteJid, key.remoteJidAlt, key.senderPn, data?.senderPn, data?.data?.senderPn]
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.match(/^([1-9]\d{7,14})(?::\d+)?@(?:s\.whatsapp\.net|c\.us)$/i)?.[1])
+    .find(Boolean);
+  if (!phone) {
+    console.warn('[evolution] Mensagem recebida sem número de WhatsApp resolvido');
+    return;
+  }
 
   const fresh = await claimEvent(tenantId, String(key.id), 'whatsapp_message', { instance: instanceName });
   if (!fresh) return;
@@ -539,6 +545,15 @@ async function processInboundMessage(instanceName: string, data: any) {
   const context = [message?.extendedTextMessage, message?.imageMessage, message?.documentMessage,
     message?.audioMessage, message?.videoMessage].find(node => typeof node?.contextInfo?.stanzaId === 'string')?.contextInfo;
   const replyToProviderId = typeof context?.stanzaId === 'string' ? context.stanzaId.trim().slice(0, 512) : null;
+  const adContexts = [context, message?.extendedTextMessage?.contextInfo, message?.imageMessage?.contextInfo,
+    message?.contextInfo, data?.contextInfo, data?.data?.contextInfo];
+  const adContext = adContexts.find(value => value?.externalAdReply?.ctwaClid ||
+    value?.ctwaClid || String(value?.externalAdReply?.sourceType ?? '').toLowerCase() === 'ad');
+  const attribution = {
+    evolution_instance_name: instanceName,
+    ...(adContext ? { meta_referral_type: 'ad', meta_ctwa_ad_id: adContext.externalAdReply?.sourceId ?? null,
+      meta_ctwa_clid: adContext.externalAdReply?.ctwaClid ?? adContext.ctwaClid ?? null } : {})
+  };
   const displayName = data?.pushName || data?.data?.pushName || null;
   const type = inboundType(message);
   const base = await ingestLead({
@@ -549,7 +564,7 @@ async function processInboundMessage(instanceName: string, data: any) {
     name: displayName,
     phone,
     source: 'WhatsApp',
-    attribution: { evolution_instance_name: instanceName },
+    attribution,
     createConversation: type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
   });
 
