@@ -4,7 +4,7 @@ import MessageAudio from './message-audio';
 import ContactDeals from './contact-deals';
 import { ClipboardEvent, ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, Bot, Check, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
+  AlertCircle, ArrowRightLeft, Bot, Check, CheckCircle2, CheckCheck, ChevronLeft, Clock3, Download, FileText, Headphones, Image as ImageIcon,
   Mic, PanelRightClose, PanelRightOpen, Paperclip, Plus, Reply, Search, Send, Smile, Square, UserCheck, X
 } from 'lucide-react';
 import styles from './whatsapp.module.css';
@@ -1206,9 +1206,33 @@ export default function Atendimento() {
               {active.status !== 'closed' && active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
               {active.status !== 'closed' && active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
               {active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
+              {canTransfer && active.status !== 'closed' && <button type="button" className="btn btn-secondary"
+                title="Transferir atendimento" disabled={transferBusy || changingState}
+                aria-expanded={transfer?.conversationId === active.id}
+                onClick={() => transfer?.conversationId === active.id ? setTransfer(null) : void prepareTransfer()}>
+                <ArrowRightLeft size={15}/><span>Transferir</span>
+              </button>}
+              {canTransfer && active.status !== 'closed' && active.attendance_state === 'in_service' &&
+                <button type="button" className="btn btn-secondary" title="Finalizar atendimento"
+                  disabled={changingState || transferBusy} onClick={() => void finishAttendance()}>
+                  <CheckCircle2 size={15}/><span>Finalizar</span>
+                </button>}
               <button type="button" className={styles.roundButton} onClick={() => toggleDetails(!detailsOpen)} aria-label={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} title={detailsOpen ? "Ocultar detalhes do contato" : "Mostrar detalhes do contato"} aria-expanded={detailsOpen} aria-controls="attendance-contact-details">{detailsOpen ? <PanelRightClose size={20}/> : <PanelRightOpen size={20}/>}</button>
             </div>
           </header>
+          {active.status !== 'closed' && transfer?.conversationId === active.id && <form id="attendance-transfer" className={styles.transferForm} onSubmit={transferConversation}>
+           <label htmlFor="transfer-member">Novo responsável</label>
+              <select className="select" id="transfer-member" value={transfer.target}
+                onChange={event => setTransfer({ ...transfer, target: event.target.value })} required disabled={transferBusy}>
+                <option value="">Selecione um usuário</option>
+                {transfer.members.filter(member => member.id !== active.assigned_to).map(member => (
+                  <option key={member.id} value={member.id}>{member.full_name}</option>
+                ))}
+              </select>
+              <button className="btn btn-primary" disabled={transferBusy || !transfer.target}>Confirmar transferência</button>
+              <button type="button" className="btn btn-secondary" disabled={transferBusy} onClick={() => setTransfer(null)}>Cancelar</button>
+            </form>}
+          {transferFeedback && <p className={styles.transferFeedback} role="status">{transferFeedback}</p>}
 
           {templateOpen && active.channel === 'whatsapp' && <div className={styles.templatePanel}><div className={styles.templateHeader}><strong>Templates aprovados</strong><button type="button" className={styles.roundButton} onClick={() => setTemplateOpen(false)}><X size={16}/></button></div><div className={styles.templateList}>{templates.filter(t => t.status?.toUpperCase() === 'APPROVED').map(t => <button key={t.id} type="button" onClick={() => void sendTemplate(t)} disabled={!templatePreview(t)} title={templatePreview(t) || 'Template sem texto sincronizado'}><span><b>{t.name}</b><small>{t.language} · {t.category ?? 'WhatsApp'}</small><small style={{whiteSpace:'pre-wrap', overflowWrap:'anywhere'}}>{templatePreview(t) || 'Sincronize o conteúdo deste template antes de enviar'}</small></span><Send size={14}/></button>)}</div></div>}
           {active.status !== 'closed' && active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
@@ -1281,25 +1305,6 @@ export default function Atendimento() {
           <div className={styles.ownerCard}><Headphones size={18}/><div><strong>{active.assignee?.full_name ?? 'Sem responsável'}</strong><span>{active.assignee ? 'Distribuição ativa' : 'Aguardando distribuição'}</span></div></div>
 
           <hr/>
-          {canTransfer && active.status !== 'closed' && <>
-            {transfer?.conversationId === active.id ? <form className="field" onSubmit={transferConversation}>
-              <label htmlFor="transfer-member">Novo responsável</label>
-              <select className="select" id="transfer-member" value={transfer.target}
-                onChange={event => setTransfer({ ...transfer, target: event.target.value })} required disabled={transferBusy}>
-                <option value="">Selecione um usuário</option>
-                {transfer.members.filter(member => member.id !== active.assigned_to).map(member => (
-                  <option key={member.id} value={member.id}>{member.full_name}</option>
-                ))}
-              </select>
-              <button className="btn btn-primary" disabled={transferBusy || !transfer.target}>Confirmar transferência</button>
-              <button type="button" className="btn btn-secondary" disabled={transferBusy} onClick={() => setTransfer(null)}>Cancelar</button>
-            </form> : <button type="button" className="btn btn-secondary" disabled={transferBusy}
-              onClick={() => void prepareTransfer()}>Transferir atendimento</button>}
-            {transferFeedback && <p role="status">{transferFeedback}</p>}
-          </>}
-          {canTransfer && active.status !== 'closed' && active.attendance_state === 'in_service' &&
-            <button type="button" className="btn btn-secondary" disabled={changingState}
-              onClick={() => void finishAttendance()}>Finalizar atendimento</button>}
           <b>Status do atendimento</b>
           <div className={styles.ownerCard}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : active.attendance_state === 'in_service' ? <Headphones size={18}/> : <Clock3 size={18}/>}<div><strong>{STATE_LABEL[active.attendance_state]}</strong><span>{active.attendance_state === 'automatic' ? 'Agente de IA' : active.attendance_state === 'in_service' ? 'Operador humano' : 'Fila aguardando'}</span></div></div>
 
