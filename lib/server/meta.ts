@@ -454,7 +454,7 @@ async function processWhatsAppValue(value: any) {
       externalName: displayName,
       name: displayName,
       phone: message.from,
-      ...metaWhatsAppAttribution(String(phoneNumberId), message.referral),
+      ...metaWhatsAppAttribution(String(phoneNumberId), message.referral, message.id),
       createConversation: type !== 'text' || parseAttendanceRating(whatsappText(message)) === undefined
     });
 
