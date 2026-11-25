@@ -2,6 +2,7 @@
 
 import { useEffect,useMemo,useState } from 'react';
 import { CircleDollarSign, Clock3, Database, Flame, Headset, ListChecks, MessageCircle, Settings2, Target, TrendingUp, X } from 'lucide-react';
+import AttendanceQueue from './AttendanceQueue';
 import { DashboardInsights, type Insights } from './DashboardInsights';
 import styles from './dashboard.module.css';
 
@@ -21,6 +22,7 @@ const stageLabel:Record<string,string>={new:'Novo',qualification:'Qualificação
 const widgetLabels:Record<string,string>={
   hot_leads:'Leads quentes',
   attendance:'Atendimentos',
+  attendance_queue:'Fila de atendimento',
   forecast:'Forecast ponderado',
   won_revenue:'Receita ganha',
   priorities:'Prioridades de hoje',
@@ -158,6 +160,8 @@ export default function Dashboard(){
         {visible('forecast')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><TrendingUp size={16}/></span>Forecast ponderado</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.weightedForecast)}</div><div className="approved-kpi-foot"><span>{money(data.openPipeline)}</span><small>pipeline aberto</small></div><div className="approved-mini-chart" aria-hidden="true"><i/><i/><i/><i/></div></article>}
         {visible('won_revenue')&&<article className="approved-kpi"><div className="approved-kpi-label"><span className="approved-kpi-icon"><CircleDollarSign size={16}/></span>Receita ganha</div><div className="approved-kpi-value" style={{fontSize:23}}>{money(data.wonRevenue)}</div><div className="approved-kpi-foot"><span>{data.conversion}%</span><small>conversão fechados</small></div><Database className="ecojoi-kpi-art" aria-hidden="true"/></article>}
       </section>
+
+      {visible('attendance_queue') && <AttendanceQueue />}
 
       {(visible('priorities')||visible('funnel'))&&<section className="approved-mid-grid">
         {visible('priorities')&&<div className="approved-panel">
