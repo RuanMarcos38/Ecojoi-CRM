@@ -21,6 +21,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     if (error) throw error;
     if (!conversation) return NextResponse.json({ error: 'conversation_unavailable' }, { status: 409 });
 
+    let surveyMessage = null;
     let survey = 'not_applicable';
     if (conversation.channel === 'whatsapp') {
       survey = 'failed';
@@ -31,7 +32,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
           const { data: message, error: insertError } = await supabase.from('messages').insert({
             tenant_id: ctx.tenantId, conversation_id: id, direction: 'outbound', body: attendanceSurvey,
             sender_user_id: ctx.userId, status: 'queued', message_type: 'text'
-          }).select('id').single();
+          }).select('*').single();
           if (insertError) throw insertError;
           let providerMessageId: string | null = null;
           try {
@@ -41,6 +42,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
               providerMessageId = result.providerMessageId;
             }
           } finally {
+            surveyMessage = { ...message, status: survey === 'sent' ? 'sent' : 'failed', provider_message_id: providerMessageId };
             await supabase.from('messages').update({ status: survey === 'sent' ? 'sent' : 'failed', provider_message_id: providerMessageId })
               .eq('tenant_id', ctx.tenantId).eq('id', message.id);
           }
@@ -52,7 +54,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
 
     await audit({ tenantId: ctx.tenantId, userId: ctx.userId, action: 'conversation.finish',
       entity: 'conversation', entityId: id, metadata: { survey } }).catch(() => {});
-    return NextResponse.json({ survey });
+    return NextResponse.json({ survey, message: surveyMessage });
   } catch (error) {
     if (error instanceof Response) return error;
     return NextResponse.json({ error: 'conversation_finish_failed' }, { status: 500 });

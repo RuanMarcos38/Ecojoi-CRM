@@ -350,7 +350,7 @@ export async function ingestLead(input: IngestLeadInput) {
   }
 
   if (survey && rating !== undefined) {
-    await saveAttendanceRating(admin, input.tenantId, survey, rating).catch(() => {});
+    await saveAttendanceRating(admin, input.tenantId, survey, rating, phone).catch(() => { console.warn('[attendance-survey] Falha ao registrar nota ou enviar convite'); });
   }
 
   if (conversationId && !survey) {

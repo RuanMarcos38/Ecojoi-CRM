@@ -922,11 +922,19 @@ export default function Atendimento() {
         setError('Não foi possível finalizar o atendimento. Confira seu acesso e tente novamente.');
         return;
       }
-      setItems(items => items.map(item => item.id === active.id ? { ...item, status: 'closed' } : item));
+      pinnedConversation.current = active.id;
+      setShowFinished(true);
+      setUnreadOnly(false);
+      setSearch('');
+      setItems(items => items.map(item => item.id === active.id ? {
+        ...item, status: 'closed',
+        messages: result.message && !item.messages.some(message => message.id === result.message.id)
+          ? [...item.messages, result.message] : item.messages
+      } : item));
       if (result.survey === 'failed' || result.survey === 'window_closed') {
         setError('Atendimento finalizado. O WhatsApp não confirmou o envio da avaliação.');
       } else {
-        setNotice(result.survey === 'sent' ? 'Atendimento finalizado. Avaliação enviada.' : 'Atendimento finalizado.');
+        setNotice(result.survey === 'sent' ? 'Atendimento finalizado. Pedido de nota enviado.' : 'Atendimento finalizado.');
       }
       void refreshConversations().catch(() => {});
     } catch {
