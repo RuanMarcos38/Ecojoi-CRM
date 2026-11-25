@@ -1,6 +1,7 @@
 import { parseAttendanceRating } from '@/lib/server/attendance-survey';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { metaAdPreview } from '@/lib/server/meta-attribution';
 import { ingestLead } from '@/lib/server/lead-ingestion';
 import { notifyAiAgentMessage } from '@/lib/server/ai-agent';
 
@@ -553,10 +554,14 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       message?.contextInfo, data?.contextInfo, data?.data?.contextInfo];
     const adContext = adContexts.find(value => value?.externalAdReply?.ctwaClid ||
       value?.ctwaClid || String(value?.externalAdReply?.sourceType ?? '').toLowerCase() === 'ad');
+    const ad = adContext?.externalAdReply;
+    const jpeg = Array.isArray(ad?.thumbnail?.data) && ad.thumbnail.data.length <= 24576
+      ? Buffer.from(ad.thumbnail.data).toString('base64') : ad?.thumbnail;
     const attribution = {
       evolution_instance_name: instanceName,
       ...(adContext ? { meta_referral_type: 'ad', meta_ctwa_ad_id: adContext.externalAdReply?.sourceId ?? null,
-        meta_ctwa_clid: adContext.externalAdReply?.ctwaClid ?? adContext.ctwaClid ?? null } : {})
+        meta_ctwa_clid: ad?.ctwaClid ?? adContext.ctwaClid ?? null,
+        ...metaAdPreview(key.id, ad?.title, ad?.mediaUrl, ad?.thumbnailUrl, jpeg) } : {})
     };
     const displayName = data?.pushName || data?.data?.pushName || null;
     const type = inboundType(message);
