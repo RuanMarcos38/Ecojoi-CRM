@@ -475,9 +475,17 @@ export default function Atendimento() {
 
   const active = items.find(item => item.id === activeId) ?? null;
   const replyTarget = reply && reply.conversationId === active?.id ? reply.message : null;
-  const activeMessages = active?.messages;
+  const [loadedQuote, setLoadedQuote] = useState<{ conversationId: string; messages: Message[] } | null>(null);
+  const [quoteJump, setQuoteJump] = useState<{ conversationId: string; messageId: string } | null>(null);
+  const activeMessages = useMemo(() => {
+    const messages = active?.messages ?? [];
+    if (!loadedQuote || loadedQuote.conversationId !== active?.id) return messages;
+    const ids = new Set(messages.map(message => message.id));
+    return [...messages, ...loadedQuote.messages.filter(message => !ids.has(message.id))]
+      .sort((left, right) => left.created_at.localeCompare(right.created_at));
+  }, [active?.id, active?.messages, loadedQuote]);
   const messageByProviderId = useMemo(() => new Map(
-    (activeMessages ?? []).flatMap(message => message.provider_message_id ? [[message.provider_message_id, message] as const] : [])
+    (activeMessages ?? []).flatMap(message => message.provider_message_id ? [[message.provider_message_id.trim(), message] as const] : [])
   ), [activeMessages]);
   useEffect(() => { draftVersion.current++; setReply(null); }, [activeId]);
   const lastIncoming = active?.channel === 'whatsapp'
@@ -517,6 +525,42 @@ export default function Atendimento() {
   }, [items, readState, readKey]);
 
   const messagesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!quoteJump || quoteJump.conversationId !== activeId) return;
+    const target = document.getElementById(`message-${quoteJump.messageId}`);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center' });
+    target.focus({ preventScroll: true });
+  }, [activeId, quoteJump]);
+
+  async function jumpToQuote(reference: string, original?: Message) {
+    if (!active) return;
+    const conversationId = active.id;
+    if (original) {
+      setQuoteJump({ conversationId, messageId: original.id });
+      return;
+    }
+
+    setError('');
+    try {
+      const params = new URLSearchParams({ id: conversationId, quoted: reference.trim() });
+      const response = await fetch(`/api/conversations?${params}`, { cache: 'no-store' });
+      if (!response.ok) throw new Error();
+      const result = await response.json();
+      const message: Message | undefined = result.data?.[0]?.messages?.[0];
+      if (!message || message.provider_message_id !== reference.trim()) {
+        setError('A mensagem citada não foi encontrada no histórico deste atendimento.');
+        return;
+      }
+      setLoadedQuote(current => ({
+        conversationId,
+        messages: [...(current?.conversationId === conversationId ? current.messages.filter(item => item.id !== message.id) : []), message]
+      }));
+      setQuoteJump({ conversationId, messageId: message.id });
+    } catch {
+      setError('Não foi possível buscar a mensagem citada. Tente novamente.');
+    }
+  }
   useEffect(() => {
     const container=messagesRef.current;
     if(container) container.scrollTop=container.scrollHeight;
@@ -979,7 +1023,7 @@ export default function Atendimento() {
   }
 
   function renderMessage(message: Message) {
-    const original = message.reply_to_provider_id ? messageByProviderId.get(message.reply_to_provider_id) : undefined;
+    const original = message.reply_to_provider_id ? messageByProviderId.get(message.reply_to_provider_id.trim()) : undefined;
     const agentName = message.direction === 'outbound' && message.sender_user_id
       ? message.sender_name
       : null;
@@ -997,15 +1041,15 @@ export default function Atendimento() {
           {message.direction === 'outbound' && message.sender_user_id && message.sender_name && (
             <div className="message-agent"><AgentAvatar name={message.sender_name} userId={message.sender_user_id}/><strong>{message.sender_name}</strong></div>
           )}
-          {original ? <button type="button" className={styles.messageQuote} onClick={() => {
-            const target = document.getElementById(`message-${original.id}`);
-            target?.scrollIntoView({ block: 'center' });
-            target?.focus({ preventScroll: true });
-          }}><b>{quoteAuthor(original)}</b><span>{quoteSummary(original)}</span></button>
-            : message.reply_to_provider_id && <div className={styles.messageQuote}><span>Mensagem original indisponível</span></div>}
+          {message.reply_to_provider_id && <button type="button" className={styles.messageQuote}
+            onClick={() => void jumpToQuote(message.reply_to_provider_id!, original)}>
+            {original && <b>{quoteAuthor(original)}</b>}
+            <span>{original ? quoteSummary(original) : 'Localizar mensagem citada'}</span>
+          </button>}
           {message.message_type === 'image' && message.attachment_url && (
             <a href={message.attachment_url} target="_blank" rel="noreferrer" className={styles.imageMessage}><img src={message.attachment_url} alt={message.attachment_name ?? 'Imagem'} /></a>
           )}
+          {message.message_type === 'image' && !message.attachment_url && <small>Imagem indisponível</small>}
           {message.message_type === 'audio' && (message.attachment_path || message.attachment_url) && (
             <div className={styles.audioMessage}><Mic size={17}/><MessageAudio key={message.attachment_path ?? message.id} url={message.attachment_url} /></div>
           )}
@@ -1140,7 +1184,7 @@ export default function Atendimento() {
           {active.attendance_state === 'automatic' && <div className={`${styles.modeBanner} ${styles.aiBanner}`}><Bot size={17}/><div><b>{aiAgentEnabled ? 'Agente de IA atendendo' : 'Modo automático selecionado'}</b><span>{aiAgentEnabled ? 'Assuma o atendimento para responder manualmente.' : 'Ative o Agente de IA nas configurações da empresa para respostas automáticas.'}</span></div></div>}
           {active.attendance_state === 'waiting' && <div className={`${styles.modeBanner} ${styles.waitingBanner}`}><Clock3 size={17}/><div><b>Aguardando atendimento</b><span>Assuma esta conversa para liberar texto, áudio, emojis e anexos.</span></div></div>}
 
-          <div className={styles.messages} ref={messagesRef}>{active.messages?.length ? active.messages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
+          <div className={styles.messages} ref={messagesRef}>{activeMessages.length ? activeMessages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
 
           {active.attendance_state === 'in_service' ? <>
             {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
