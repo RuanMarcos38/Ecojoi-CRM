@@ -17,7 +17,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const { data: conversation, error } = await supabase.from('conversations')
       .update({ status: 'closed', updated_at: now, attendance_changed_at: now })
       .eq('tenant_id', ctx.tenantId).eq('id', id).neq('status', 'closed')
-      .eq('attendance_state', 'in_service')
+      .eq('assigned_to', ctx.userId).eq('attendance_state', 'in_service')
       .select('channel,assigned_to,last_inbound_at,contact:contacts(phone)').maybeSingle();
     if (error) throw error;
     if (!conversation) return NextResponse.json({ error: 'conversation_unavailable' }, { status: 409 });

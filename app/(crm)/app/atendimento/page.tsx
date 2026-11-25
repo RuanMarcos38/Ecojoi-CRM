@@ -489,6 +489,7 @@ export default function Atendimento() {
   },[activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
+  const ownsActive = Boolean(me?.userId && active?.assigned_to === me.userId);
   const replyTarget = reply && reply.conversationId === active?.id ? reply.message : null;
   const [loadedQuote, setLoadedQuote] = useState<{ conversationId: string; messages: Message[] } | null>(null);
   const [quoteJump, setQuoteJump] = useState<{ conversationId: string; messageId: string } | null>(null);
@@ -524,7 +525,7 @@ export default function Atendimento() {
   }, [activeId, explicitlyOpened, mobileChatOpen, lastIncoming, readKey, readState]);
 
   function unreadCount(conversation: Conversation) {
-    if (conversation.channel !== 'whatsapp' || !readState || readState.key !== readKey) return 0;
+    if ((conversation.assigned_to && conversation.assigned_to !== me?.userId) || conversation.channel !== 'whatsapp' || !readState || readState.key !== readKey) return 0;
     const after = readState.data.conversations[conversation.id] ?? readState.data.since;
     return (conversation.messages ?? []).filter(message => message.direction === 'inbound' && messageTime(message.created_at) > after).length;
   }
@@ -537,7 +538,7 @@ export default function Atendimento() {
       counts[item.attendance_state ?? 'waiting'] += unreadCount(item);
     }
     return counts;
-  }, [items, readState, readKey]);
+  }, [items, readState, readKey, me?.userId]);
 
   const messagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -609,7 +610,7 @@ export default function Atendimento() {
   async function send(e: FormEvent) {
     e.preventDefault();
     // Enter, a rapid second Enter and a click must never dispatch overlapping requests.
-    if (sendingTextRef.current || sendingMedia || recording || !text.trim() || !active || active.attendance_state !== 'in_service') return;
+    if (sendingTextRef.current || sendingMedia || recording || !text.trim() || !active || !ownsActive || active.attendance_state !== 'in_service') return;
     const messageBody = text.trim();
     const version = draftVersion.current;
     const conversationId = active.id;
@@ -688,7 +689,7 @@ export default function Atendimento() {
   }
 
   async function sendFile(file: File, durationMs?: number) {
-    if (!active || active.attendance_state !== 'in_service' || sendingMedia) return false;
+    if (!active || !ownsActive || active.attendance_state !== 'in_service' || sendingMedia) return false;
     const version = draftVersion.current;
     setSendingMedia(true); setError(''); setNotice('');
     const form = new FormData();
@@ -728,7 +729,7 @@ export default function Atendimento() {
   function pasteImage(event: ClipboardEvent<HTMLElement>) {
     const item = Array.from(event.clipboardData.items).find(entry => entry.kind === 'file' && entry.type.startsWith('image/'));
     const file = item?.getAsFile();
-    if (!file || !active || active.attendance_state !== 'in_service') return;
+    if (!file || !active || !ownsActive || active.attendance_state !== 'in_service') return;
     event.preventDefault();
     if (sendingMedia || recording) return;
     setPastedImage({ conversationId: active.id, file });
@@ -778,7 +779,7 @@ export default function Atendimento() {
   }
 
   async function startRecording() {
-    if (!active || active.attendance_state !== 'in_service') return;
+    if (!active || !ownsActive || active.attendance_state !== 'in_service') return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setError('Seu navegador não permite gravação de áudio neste dispositivo.');
       return;
@@ -866,6 +867,7 @@ export default function Atendimento() {
       if (!response.ok) {
         const messages: Record<string, string> = {
           invalid_phone: 'Informe um telefone válido com DDD. Para outros países, inclua o código do país com +.',
+          conversation_assigned_elsewhere: 'O atendimento já está com outro responsável.',
           phone_required: 'O contato selecionado precisa ter um telefone cadastrado.',
           forbidden: 'Seu perfil não tem permissão para iniciar este atendimento.'
         };
@@ -958,7 +960,7 @@ export default function Atendimento() {
   }
 
   async function changeAttendance(state: AttendanceState) {
-    if (!active || changingState || active.attendance_state === state) return;
+    if (!active || (active.assigned_to && !ownsActive) || changingState || active.attendance_state === state) return;
     setChangingState(true); setError(''); setNotice('');
     try {
       const r = await fetch(`/api/conversations/${active.id}/attendance`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ state }) });
@@ -969,7 +971,7 @@ export default function Atendimento() {
   }
 
   async function sendTemplate(template: WhatsAppTemplate) {
-    if (!active || active.status === 'closed') return;
+    if (!active || !ownsActive || active.status === 'closed') return;
     const version = draftVersion.current;
     setError(''); setNotice('');
     const r = await fetch(`/api/conversations/${active.id}/template`, {
@@ -1120,11 +1122,11 @@ export default function Atendimento() {
           )}
           {body && !repeatsFileName && message.message_type !== 'audio' && <div className={styles.messageText}>{body}</div>}
           <div className={styles.reactionBar}>
-            {active?.channel === 'whatsapp' && active.status !== 'closed' && active.attendance_state === 'in_service' && message.provider_message_id &&
+            {active?.channel === 'whatsapp' && ownsActive && active.status !== 'closed' && active.attendance_state === 'in_service' && message.provider_message_id &&
               <button type="button" className={styles.reactButton} title="Responder" aria-label="Responder à mensagem"
                 onClick={() => replyToMessage(message)}><Reply size={15}/></button>}
             {message.whatsapp_reaction && <span aria-label="Reação enviada">{message.whatsapp_reaction}</span>}
-            {active?.channel === 'whatsapp' && active.attendance_state === 'in_service' && message.provider_message_id && <>
+            {ownsActive && active?.channel === 'whatsapp' && active.status !== 'closed' && active.attendance_state === 'in_service' && message.provider_message_id && <>
               <button type="button" className={styles.reactButton} aria-label="Reagir à mensagem" aria-expanded={reactionPicker === message.id}
                 onClick={() => setReactionPicker(reactionPicker === message.id ? null : message.id)}><Smile size={14}/></button>
               {reactionPicker === message.id && <div className={styles.reactionOptions} aria-label="Escolher reação">
@@ -1226,16 +1228,16 @@ export default function Atendimento() {
               <button type="button" className="btn btn-secondary" aria-label="Diminuir fonte das mensagens" title="Diminuir fonte" disabled={fontSize <= 12} onClick={() => changeFontSize(-2)}>A−</button>
               <button type="button" className="btn btn-secondary" aria-label="Aumentar fonte das mensagens" title="Aumentar fonte" disabled={fontSize >= 22} onClick={() => changeFontSize(2)}>A+</button>
               {active.status !== 'closed' && active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
-              {active.status !== 'closed' && active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
+              {ownsActive && active.status !== 'closed' && active.attendance_state === 'in_service' && <><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Esperar</button><button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('automatic')}><Bot size={15}/>Agente IA</button></>}
               {active.status !== 'closed' && active.attendance_state === 'automatic' && <button className="btn btn-secondary" disabled={changingState} onClick={() => void changeAttendance('waiting')}><Clock3 size={15}/>Espera</button>}
-              {active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
+              {ownsActive && active.status !== 'closed' && active.channel === 'whatsapp' && templates.length > 0 && <button className="btn btn-secondary" type="button" onClick={() => setTemplateOpen(v => !v)}><FileText size={15}/>Template</button>}
               {canTransfer && active.status !== 'closed' && <button type="button" className="btn btn-secondary"
                 title="Transferir atendimento" disabled={transferBusy || changingState}
                 aria-expanded={transfer?.conversationId === active.id}
                 onClick={() => transfer?.conversationId === active.id ? setTransfer(null) : void prepareTransfer()}>
                 <ArrowRightLeft size={15}/><span>Transferir</span>
               </button>}
-              {canTransfer && active.status !== 'closed' && active.attendance_state === 'in_service' &&
+              {canTransfer && ownsActive && active.status !== 'closed' && active.attendance_state === 'in_service' &&
                 <button type="button" className="btn btn-secondary" title="Finalizar atendimento"
                   disabled={changingState || transferBusy} onClick={() => void finishAttendance()}>
                   <CheckCircle2 size={15}/><span>Finalizar</span>
@@ -1263,7 +1265,7 @@ export default function Atendimento() {
 
           <div className={styles.messages} ref={messagesRef}>{activeMessages.length ? activeMessages.map(renderMessage) : <div className={styles.empty}>Envie a primeira mensagem deste atendimento.</div>}</div>
 
-          {active.status !== 'closed' && active.attendance_state === 'in_service' ? <>
+          {ownsActive && active.status !== 'closed' && active.attendance_state === 'in_service' ? <>
             {(error || notice) && <div className={error ? styles.errorBar : styles.noticeBar}>{error || notice}</div>}
             {pastedImage?.conversationId === active?.id && <div className={styles.pastedAttachment}>
               {pastedPreview && <img src={pastedPreview} alt="Prévia da imagem colada"/>}
@@ -1302,7 +1304,7 @@ export default function Atendimento() {
                 <button className={styles.sendButton} type="submit" disabled={!text.trim() || recording || sendingMedia || sendingText} title="Enviar mensagem" aria-label="Enviar"><Send size={19}/></button>
               </div>
             </form>
-          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.status === 'closed' ? 'Atendimento finalizado.' : active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
+          </> : <div className={styles.lockedComposer}>{active.attendance_state === 'automatic' ? <Bot size={18}/> : <Clock3 size={18}/>}<span>{active.status === 'closed' ? 'Atendimento finalizado.' : active.assigned_to && !ownsActive ? 'Atendimento reservado ao responsável.' : active.attendance_state === 'automatic' ? 'Envio humano bloqueado enquanto o agente automático estiver responsável.' : 'Assuma o atendimento para responder.'}</span></div>}
         </> : <div className={styles.chatPlaceholder}><div className={styles.placeholderIcon}><ImageIcon size={28}/></div><h3>Ecojoi Atendimento</h3><p>Selecione uma conversa para iniciar.</p></div>}
       </main>
 

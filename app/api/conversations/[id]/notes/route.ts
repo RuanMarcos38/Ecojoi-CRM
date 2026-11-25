@@ -15,8 +15,8 @@ export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
     const supabase=await createClient();
 
     const {data:conversation}=await supabase.from('conversations')
-      .select('id').eq('tenant_id',ctx.tenantId).eq('id',id).maybeSingle();
-    if(!conversation)return NextResponse.json({error:'not_found'},{status:404});
+      .select('id,assigned_to,status').eq('tenant_id',ctx.tenantId).eq('id',id).maybeSingle();
+    if(!conversation || (conversation.assigned_to && conversation.assigned_to!==ctx.userId))return NextResponse.json({error:'not_found'},{status:404});
 
     const {data,error}=await supabase.from('conversation_notes')
       .select('id,body,created_at,user:profiles!conversation_notes_user_id_fkey(id,full_name)')
@@ -41,8 +41,8 @@ export async function POST(req:Request,{params}:{params:Promise<{id:string}>}){
     const supabase=await createClient();
 
     const {data:conversation}=await supabase.from('conversations')
-      .select('id').eq('tenant_id',ctx.tenantId).eq('id',id).maybeSingle();
-    if(!conversation)return NextResponse.json({error:'not_found'},{status:404});
+      .select('id,assigned_to,status').eq('tenant_id',ctx.tenantId).eq('id',id).maybeSingle();
+    if(!conversation || conversation.assigned_to!==ctx.userId)return NextResponse.json({error:'not_found'},{status:404});
 
     const {data,error}=await supabase.from('conversation_notes')
       .insert({

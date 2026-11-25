@@ -29,6 +29,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (currentError) throw currentError;
     if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+    if (current.assigned_to && current.assigned_to !== ctx.userId) return NextResponse.json({ error: 'conversation_assigned_elsewhere' }, { status: 403 });
     if (current.status === 'closed') return NextResponse.json({ error: 'conversation_closed' }, { status: 409 });
     if (state === 'in_service' && current.assigned_to !== ctx.userId && !(await hasAttendanceCapacity(ctx.tenantId, ctx.userId))) {
       return NextResponse.json({ error: 'attendance_capacity_reached' }, { status: 409 });
@@ -45,6 +46,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data, error } = await supabase
       .from('conversations')
       .update(patch)
+      .or(`assigned_to.eq.${ctx.userId},assigned_to.is.null`)
       .neq('status', 'closed')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)

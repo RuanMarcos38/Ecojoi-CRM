@@ -1,14 +1,14 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest';
 import {POST} from '../app/api/conversations/[id]/messages/route';
 import {signAgentMessage} from '../lib/server/agent-signature';
-const m=vi.hoisted(()=>({send:vi.fn(),queue:vi.fn(),insert:vi.fn(),name:vi.fn(),eq:vi.fn()}));
+const m=vi.hoisted(()=>({send:vi.fn(),queue:vi.fn(),insert:vi.fn(),name:vi.fn(),owner:vi.fn(),eq:vi.fn()}));
 vi.mock('../lib/auth/context',()=>({requirePermission:async()=>({tenantId:'tenant-a',userId:'actual-sender'})}));
 vi.mock('../lib/server/feature',()=>({requireFeature:async()=>{}}));
 vi.mock('../lib/server/audit',()=>({audit:async()=>{}}));
 vi.mock('../lib/server/whatsapp',()=>({canSendFreeformWhatsApp:async()=>true,sendWhatsAppText:m.send}));
 vi.mock('../lib/server/outbound-queue',()=>({enqueueOutbound:m.queue}));
-vi.mock('../lib/supabase/server',()=>({createClient:async()=>({from:(table:string)=>{const q={select:()=>q,eq:(...args:unknown[])=>{m.eq(...args);return q;},insert:(v:unknown)=>{m.insert(v);return q;},update:()=>q,single:async()=>table==='profiles'?{data:{full_name:m.name()}}:{data:{id:'msg'}},maybeSingle:async()=>({data:{channel:'whatsapp',attendance_state:'in_service',contact:{phone:'+5547999371478'}}})};return q;}})}));
-beforeEach(()=>{vi.clearAllMocks();m.name.mockReturnValue('Gelson');m.send.mockResolvedValue({delivered:true});});
+vi.mock('../lib/supabase/server',()=>({createClient:async()=>({from:(table:string)=>{const q={select:()=>q,eq:(...args:unknown[])=>{m.eq(...args);return q;},insert:(v:unknown)=>{m.insert(v);return q;},update:()=>q,single:async()=>table==='profiles'?{data:{full_name:m.name()}}:{data:{id:'msg'}},maybeSingle:async()=>({data:{channel:'whatsapp',assigned_to:m.owner(),status:'open',attendance_state:'in_service',contact:{phone:'+5547999371478'}}})};return q;}})}));
+beforeEach(()=>{vi.clearAllMocks();m.name.mockReturnValue('Gelson');m.owner.mockReturnValue('actual-sender');m.send.mockResolvedValue({delivered:true});});
 const send=()=>POST(new Request('https://crm.example/api/conversations/x/messages',{method:'POST',body:JSON.stringify({body:'Olá, tudo bem?'})}),{params:Promise.resolve({id:'conversation'})});
 describe('nome visível ao cliente WhatsApp',()=>{
  it('assina pelo usuário autenticado e registra o mesmo texto enviado',async()=>{
@@ -16,6 +16,12 @@ describe('nome visível ao cliente WhatsApp',()=>{
  });
  it('mantém o autor original ao reenviar pela fila',async()=>{
   m.name.mockReturnValue('Ruan');m.send.mockResolvedValue({delivered:false,reason:'offline'});await send();expect(m.queue).toHaveBeenCalledWith(expect.objectContaining({payload:expect.objectContaining({body:'*Ruan*\nOlá, tudo bem?'})}));
+ });
+ it('bloqueia envio quando a conversa pertence a outro usuário',async()=>{
+  m.owner.mockReturnValue('other-user');
+  expect((await send()).status).toBe(403);
+  expect(m.insert).not.toHaveBeenCalled();
+  expect(m.send).not.toHaveBeenCalled();
  });
  it('evita formatação e quebra de linha no nome',()=>{expect(signAgentMessage('*Ruan*\nAdmin','Olá')).toBe('*Ruan Admin*\nOlá');});
 });

@@ -49,13 +49,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('id,channel,contact:contacts(phone,consent_status)')
+      .select('id,channel,assigned_to,status,contact:contacts(phone,consent_status)')
       .eq('tenant_id', ctx.tenantId)
       .eq('id', id)
       .maybeSingle();
 
     if (conversationError) throw conversationError;
     if (!conversation) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (conversation.assigned_to !== ctx.userId) return NextResponse.json({ error: 'conversation_assigned_elsewhere' }, { status: 403 });
+    if (conversation.status === 'closed') return NextResponse.json({ error: 'conversation_closed' }, { status: 409 });
     if (conversation.channel !== 'whatsapp') return NextResponse.json({ error: 'whatsapp_only' }, { status: 409 });
     if (await getWhatsAppProvider(ctx.tenantId) !== 'meta') {
       return NextResponse.json({ error: 'templates_require_meta_provider' }, { status: 409 });
