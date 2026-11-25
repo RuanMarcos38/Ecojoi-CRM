@@ -1,5 +1,6 @@
 import { hasAttendanceCapacity } from '@/lib/server/attendance-capacity';
 import { findAttendanceSurvey, parseAttendanceRating, saveAttendanceRating } from '@/lib/server/attendance-survey';
+import { sendWhatsAppText } from '@/lib/server/whatsapp';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export type InboundChannel = 'internal' | 'whatsapp' | 'instagram' | 'facebook' | 'email' | 'external';
@@ -28,6 +29,7 @@ type IngestLeadInput = {
   } | null;
   createConversation?: boolean;
   contactOnly?: boolean;
+  suppressWelcome?: boolean;
   preserveExisting?: boolean;
 };
 
@@ -130,6 +132,32 @@ async function findContactByPhoneOrEmail(
   }
 
   return null;
+}
+
+async function sendAttendanceWelcome(
+  admin: ReturnType<typeof createAdminClient>,
+  tenantId: string,
+  conversationId: string,
+  phone: string,
+  customerName: string | null
+) {
+  const body = `Olá${customerName ? `, ${customerName}` : ''}! Seja bem-vindo à Ecojoi. 😊 Já recebemos sua mensagem e vamos dar continuidade ao seu atendimento por aqui.`;
+  const { data: message, error } = await admin.from('messages').insert({
+    tenant_id: tenantId, conversation_id: conversationId, direction: 'outbound',
+    body, status: 'queued', message_type: 'text'
+  }).select('id').single();
+  if (error) throw error;
+
+  let providerMessageId: string | null = null;
+  try {
+    const result = await sendWhatsAppText(tenantId, phone, body);
+    if (result.delivered) providerMessageId = result.providerMessageId ?? null;
+  } finally {
+    const { error: updateError } = await admin.from('messages')
+      .update({ status: providerMessageId ? 'sent' : 'failed', provider_message_id: providerMessageId })
+      .eq('tenant_id', tenantId).eq('id', message.id);
+    if (updateError) throw updateError;
+  }
 }
 
 export async function ingestLead(input: IngestLeadInput) {
@@ -358,6 +386,19 @@ export async function ingestLead(input: IngestLeadInput) {
 
   if (conversationId && !survey) {
     const now = new Date().toISOString();
+    if (channel === 'whatsapp' && input.providerMessageId && phone && !input.suppressWelcome) {
+      // Only one inbound event can move the conversation from no inbound messages to its first.
+      const { data: firstInbound, error: claimError } = await admin.from('conversations')
+        .update({ last_inbound_at: now, updated_at: now })
+        .eq('tenant_id', input.tenantId).eq('id', conversationId).neq('status', 'closed')
+        .is('last_inbound_at', null).select('id').maybeSingle();
+      if (claimError) console.warn('[attendance] Falha ao verificar primeiro contato');
+      if (firstInbound) {
+        await sendAttendanceWelcome(admin, input.tenantId, conversationId, phone, providedName).catch(() => {
+          console.warn('[attendance] Falha ao enviar boas-vindas');
+        });
+      }
+    }
     await admin
       .from('conversations')
       .update({
