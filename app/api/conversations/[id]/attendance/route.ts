@@ -1,7 +1,7 @@
 import { hasAttendanceCapacity } from '@/lib/server/attendance-capacity';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { audit } from '@/lib/server/audit';
@@ -17,7 +17,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await requireFeature(ctx, 'atendimento');
     const { id } = await params;
     const { state } = schema.parse(await req.json());
-    const supabase = await createClient();
+    if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
+    const supabase = createAdminClient();
 
     const { data: current, error: currentError } = await supabase
       .from('conversations')
@@ -43,17 +44,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       assigned_to: state === 'in_service' ? ctx.userId : null
     };
 
-    const { data, error } = await supabase
+    const update = supabase
       .from('conversations')
       .update(patch)
-      .or(`assigned_to.eq.${ctx.userId},assigned_to.is.null`)
       .neq('status', 'closed')
       .eq('id', id)
       .eq('tenant_id', ctx.tenantId)
-      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at')
-      .single();
+      .eq('attendance_state', current.attendance_state);
+    if (current.assigned_to) update.eq('assigned_to', current.assigned_to);
+    else update.is('assigned_to', null);
+    const { data, error } = await update
+      .select('id,status,channel,assigned_to,attendance_state,attendance_changed_at,updated_at').maybeSingle();
 
     if (error) throw error;
+    if (!data) return NextResponse.json({ error: 'conversation_changed' }, { status: 409 });
 
     await audit({
       tenantId: ctx.tenantId,
