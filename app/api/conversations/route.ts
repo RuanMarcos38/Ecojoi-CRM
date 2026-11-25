@@ -142,7 +142,9 @@ export async function POST(req: Request) {
       const { data: existing, error: lookupError } = await supabase.from('conversations')
         .select('id,attendance_state').eq('tenant_id', ctx.tenantId).eq('contact_id', contact.id)
         .eq('channel', 'whatsapp').neq('status', 'closed')
-        .order('updated_at', { ascending: false }).limit(1).maybeSingle();
+        .order('last_inbound_at', { ascending: false, nullsFirst: false })
+      .order('last_outbound_at', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false }).limit(1).maybeSingle();
       if (lookupError) throw lookupError;
       if (existing) return NextResponse.json({ data: existing });
       if (!phone && !contact.phone) return NextResponse.json({ error: 'phone_required' }, { status: 409 });

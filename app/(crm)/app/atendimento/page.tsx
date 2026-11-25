@@ -114,6 +114,15 @@ function messageTime(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function whatsappConversationKeys(conversation: Conversation) {
+  if (conversation.channel !== 'whatsapp' || conversation.status === 'closed') return [];
+  const keys = conversation.contact?.id ? [`contact:${conversation.contact.id}`] : [];
+  const phone = conversation.contact?.phone?.trim() ?? '';
+  const digits = phone.replace(/\D/g, '');
+  if (/^\+?[\d\s().-]+$/.test(phone) && /^[1-9]\d{10,14}$/.test(digits)) keys.push(`phone:${digits}`);
+  return keys;
+}
+
 function conversationActivity(conversation: Conversation) {
   const last = conversation.messages?.[conversation.messages.length - 1];
   return Math.max(messageTime(last?.created_at), messageTime(conversation.last_inbound_at), messageTime(conversation.last_outbound_at))
@@ -150,6 +159,8 @@ export default function Atendimento() {
   const [queue, setQueue] = useState<AttendanceState>('waiting');
   const [search, setSearch] = useState('');
   const [text, setText] = useState('');
+  const draftVersion = useRef(0);
+  const openingConversationLock = useRef(false);
   const [reply, setReply] = useState<{ conversationId: string; message: Message } | null>(null);
   const textInput = useRef<HTMLTextAreaElement>(null);
   const [sendingText, setSendingText] = useState(false);
@@ -414,9 +425,22 @@ export default function Atendimento() {
     return { attendants: [...attendants].sort(byLabel), tags: [...tags].sort(byLabel), channels: [...channels].sort(), origins: [...origins].sort() };
   }, [items, registeredTags]);
 
+  const visibleItems = useMemo(() => {
+    const occupied = new Set(items.filter(item =>
+      item.messages?.length || item.last_inbound_at || item.last_outbound_at
+    ).flatMap(whatsappConversationKeys));
+    return items.filter(item => {
+      const keys = whatsappConversationKeys(item);
+      if (!keys.length || item.messages?.length || item.last_inbound_at || item.last_outbound_at) return true;
+      if (keys.some(key => occupied.has(key))) return false;
+      keys.forEach(key => occupied.add(key));
+      return true;
+    });
+  }, [items]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return items.filter(item => {
+    return visibleItems.filter(item => {
       if ((item.attendance_state ?? 'waiting') !== queue) return false;
       if (unreadOnly && unreadCount(item) === 0) return false;
       if (attendantFilter && (attendantFilter === 'unassigned' ? Boolean(item.assigned_to) : item.assigned_to !== attendantFilter)) return false;
@@ -431,7 +455,7 @@ export default function Atendimento() {
         || String(a.last_inbound_at ?? '').localeCompare(String(b.last_inbound_at ?? ''));
       return oldestFirst ? comparison : -comparison;
     });
-  }, [items, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
+  }, [visibleItems, queue, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
   useEffect(() => {
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
@@ -455,7 +479,7 @@ export default function Atendimento() {
   const messageByProviderId = useMemo(() => new Map(
     (activeMessages ?? []).flatMap(message => message.provider_message_id ? [[message.provider_message_id, message] as const] : [])
   ), [activeMessages]);
-  useEffect(() => { setReply(null); }, [activeId]);
+  useEffect(() => { draftVersion.current++; setReply(null); }, [activeId]);
   const lastIncoming = active?.channel === 'whatsapp'
     ? (active.messages ?? []).reduce((latest, message) => message.direction === 'inbound'
       ? Math.max(latest, messageTime(message.created_at)) : latest, 0)
@@ -515,11 +539,20 @@ export default function Atendimento() {
     if (!text.trim() && textAttempt.current?.accepted) textAttempt.current = null;
   }, [text]);
 
+  function clearSentDraft(version: number, conversationId: string) {
+    if (draftVersion.current !== version) return;
+    draftVersion.current++;
+    setText('');
+    setReply(current => current?.conversationId === conversationId ? null : current);
+    setEmojiOpen(false);
+  }
+
   async function send(e: FormEvent) {
     e.preventDefault();
     // Enter, a rapid second Enter and a click must never dispatch overlapping requests.
     if (sendingTextRef.current || sendingMedia || recording || !text.trim() || !active || active.attendance_state !== 'in_service') return;
     const messageBody = text.trim();
+    const version = draftVersion.current;
     const conversationId = active.id;
     const replyId = replyTarget?.id;
     const draft = JSON.stringify([conversationId, replyId, messageBody]);
@@ -538,8 +571,7 @@ export default function Atendimento() {
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         attempt.accepted = true;
-        setText(current => current.trim() === messageBody ? '' : current);
-        setReply(current => current?.conversationId === conversationId && current.message.id === replyId ? null : current);
+        clearSentDraft(version, conversationId);
         if (d.delivery === 'failed') setError('O WhatsApp não confirmou o envio. Confira a conversa antes de enviar novamente.');
         else setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
         if (d.data?.id) {
@@ -598,6 +630,7 @@ export default function Atendimento() {
 
   async function sendFile(file: File, durationMs?: number) {
     if (!active || active.attendance_state !== 'in_service' || sendingMedia) return false;
+    const version = draftVersion.current;
     setSendingMedia(true); setError(''); setNotice('');
     const form = new FormData();
     form.append('file', file);
@@ -620,6 +653,7 @@ export default function Atendimento() {
         setError(messages[d.error] ?? (r.status === 413 ? 'O servidor recusou o tamanho do arquivo. Envie um arquivo menor.' : 'Não foi possível enviar o arquivo.'));
         return false;
       }
+      clearSentDraft(version, active.id);
       setNotice(d.data?.status === 'queued' ? 'Arquivo enfileirado para envio no canal.' : 'Arquivo aceito pelo provedor. Aguarde a confirmação de entrega no WhatsApp.');
       await refreshConversations().catch(() => {});
       return true;
@@ -755,12 +789,13 @@ export default function Atendimento() {
 
   async function createConversation(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (openingConversation) return;
+    if (openingConversationLock.current) return;
     const form = new FormData(e.currentTarget);
     const name = String(form.get('name') ?? '').trim();
     const body = phoneMode
       ? { phone: form.get('phone'), channel: 'whatsapp', ...(name ? { name } : {}) }
       : { contact_id: form.get('contact_id'), channel: form.get('channel') };
+    openingConversationLock.current = true;
     setOpeningConversation(true);
     setOpeningError('');
     try {
@@ -781,6 +816,7 @@ export default function Atendimento() {
     } catch {
       setOpeningError('Falha de conexão ao abrir a conversa.');
     } finally {
+      openingConversationLock.current = false;
       setOpeningConversation(false);
     }
   }
@@ -840,6 +876,7 @@ export default function Atendimento() {
 
   async function sendTemplate(template: WhatsAppTemplate) {
     if (!active) return;
+    const version = draftVersion.current;
     setError(''); setNotice('');
     const r = await fetch(`/api/conversations/${active.id}/template`, {
       method: 'POST',
@@ -848,6 +885,7 @@ export default function Atendimento() {
     });
     const d = await r.json().catch(() => null);
     if (r.ok) {
+      clearSentDraft(version, active.id);
       setTemplateOpen(false);
       setNotice(d?.data?.delivery === 'sent' ? 'Template enviado.' : 'Template enfileirado para retentativa.');
       await refreshConversations();
@@ -890,6 +928,7 @@ export default function Atendimento() {
   }
 
   function applyQuickReply(reply: QuickReply) {
+    draftVersion.current++;
     setText(reply.body);
   }
 
@@ -933,6 +972,7 @@ export default function Atendimento() {
 
   function replyToMessage(message: Message) {
     if (!active) return;
+    draftVersion.current++;
     setReply({ conversationId: active.id, message });
     setReactionPicker(null);
     textInput.current?.focus();
@@ -1120,15 +1160,15 @@ export default function Atendimento() {
               {replyTarget && <div className={styles.replyPreview} aria-label="Mensagem a que você está respondendo">
                 <div className={styles.messageQuote}><b>{quoteAuthor(replyTarget)}</b><span>{quoteSummary(replyTarget)}</span></div>
                 <button type="button" className={styles.roundButton} aria-label="Cancelar resposta" title="Cancelar resposta"
-                  onClick={() => setReply(null)}><X size={18}/></button>
+                  onClick={() => { draftVersion.current++; setReply(null); }}><X size={18}/></button>
               </div>}
               <div className={styles.composerTools}>
                 <button type="button" className={styles.composerIcon} onClick={() => setEmojiOpen(v => !v)} title="Emojis" aria-label="Emoji" aria-expanded={emojiOpen}><Smile size={22}/></button>
                 <button type="button" className={styles.composerIcon} onClick={() => fileInput.current?.click()} disabled={sendingMedia} title="Anexar arquivo" aria-label="Anexar arquivo"><Paperclip size={22}/></button>
                 <input ref={fileInput} type="file" hidden onChange={onFileChange} accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
-                {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
+                {emojiOpen && <div className={styles.emojiPicker}>{EMOJIS.map(emoji => <button key={emoji} type="button" onClick={() => { draftVersion.current++; setText(value => value + emoji); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
               </div>
-              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<textarea ref={textInput} lang="pt-BR" spellCheck={true} rows={1} value={text} onChange={e => setText(e.target.value)}
+              {recording ? <div className={styles.recording}><span className={styles.recordDot}/><b>Gravando áudio</b><span>{String(Math.floor(recordSeconds / 60)).padStart(2,'0')}:{String(recordSeconds % 60).padStart(2,'0')}</span></div> : <div className={styles.messageInputWrap}>{quickMatches.length > 0 && <div className={styles.quickReplies}>{quickMatches.map(reply => <button type="button" key={reply.id} onClick={() => applyQuickReply(reply)}><b>/{reply.shortcut}</b><span>{reply.title}</span></button>)}</div>}<textarea ref={textInput} lang="pt-BR" spellCheck={true} rows={1} value={text} onChange={e => { draftVersion.current++; setText(e.target.value); }}
                 onKeyDown={e => {
                   if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
                   e.preventDefault();

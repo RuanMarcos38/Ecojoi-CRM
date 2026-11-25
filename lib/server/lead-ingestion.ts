@@ -255,6 +255,8 @@ export async function ingestLead(input: IngestLeadInput) {
       .eq('contact_id', contactId)
       .eq('channel', crmChannel)
       .neq('status', 'closed')
+      .order('last_inbound_at', { ascending: false, nullsFirst: false })
+      .order('last_outbound_at', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
