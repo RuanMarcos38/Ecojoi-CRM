@@ -611,6 +611,7 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       message: body,
       providerMessageId: String(key.id),
       replyToProviderId,
+      suppressWelcome: recovered,
       messageType: type,
       attachment,
       createConversation: true
