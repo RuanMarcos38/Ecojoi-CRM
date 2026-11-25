@@ -1118,6 +1118,10 @@ export default function Atendimento() {
     const body = signature && message.body?.startsWith(signature)
       ? message.body.slice(signature.length)
       : message.body;
+    const preview = active?.contact?.attribution?.meta_ad_preview as
+      { messageId?: string; headline?: string; image?: string | null } | undefined;
+    const adPreview = preview?.messageId && preview.messageId === message.provider_message_id
+      && message.direction === 'inbound' ? preview : undefined;
     const repeatsFileName = message.message_type === 'file' && message.attachment_url
       && body === message.attachment_name;
 
@@ -1127,6 +1131,16 @@ export default function Atendimento() {
           {message.direction === 'outbound' && message.sender_user_id && message.sender_name && (
             <div className="message-agent"><AgentAvatar name={message.sender_name} userId={message.sender_user_id}/><strong>{message.sender_name}</strong></div>
           )}
+          {adPreview && <div className={styles.messageQuote}>
+            {adPreview.image && /^(https:\/\/|data:image\/jpeg;base64,\/9j\/)/.test(adPreview.image) && (
+              <div className={styles.imageMessage}>
+                <img src={adPreview.image} alt="Imagem do anúncio da Meta" loading="lazy" referrerPolicy="no-referrer"
+                  onError={event => { event.currentTarget.hidden = true; }}/>
+              </div>
+            )}
+            <b>Anúncio da Meta</b>
+            {adPreview.headline && <span>{adPreview.headline}</span>}
+          </div>}
           {message.reply_to_provider_id && <button type="button" className={styles.messageQuote}
             onClick={() => void jumpToQuote(message.reply_to_provider_id!, original)}>
             {original && <b>{quoteAuthor(original)}</b>}
