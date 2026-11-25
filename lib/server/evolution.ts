@@ -440,6 +440,9 @@ function textFromMessage(message: any) {
     || message?.contactsArrayMessage?.contacts?.map((contact: any) => contact?.displayName).filter(Boolean).join(', ')
     || message?.locationMessage?.name
     || message?.locationMessage?.address
+    || message?.liveLocationMessage?.caption
+    || message?.pollCreationMessage?.name
+    || message?.pollCreationMessageV3?.name
     || '';
 }
 
@@ -530,7 +533,7 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
 
   if (!message || message.protocolMessage || message.senderKeyDistributionMessage && Object.keys(message).length === 1) return;
 
-  const phone = [remoteJid, key.remoteJidAlt, key.senderPn, data?.senderPn, data?.data?.senderPn]
+  const phone = [remoteJid, key.remoteJidAlt, key.senderPn, data?.remoteJidAlt, data?.data?.remoteJidAlt, data?.senderPn, data?.data?.senderPn]
     .filter((value): value is string => typeof value === 'string')
     .map(value => value.match(/^([1-9]\d{7,14})(?::\d+)?@(?:s\.whatsapp\.net|c\.us)$/i)?.[1])
     .find(Boolean);
@@ -697,8 +700,13 @@ export async function recoverEvolutionAttachment(tenantId: string, conversationI
 
   const fetched = await fetchInboundMedia(tenantId, settings.instanceName, providerId);
   const media = fetched?.data ?? fetched;
-  const base64 = inboundBase64(media?.base64);
-  const mime = String(media?.mimetype ?? '').split(';', 1)[0].trim().toLowerCase();
+  const rawBase64 = media?.base64 ?? fetched?.base64;
+  const base64 = inboundBase64(rawBase64);
+  const reportedMime = String(media?.mimetype || media?.mimeType || '').split(';', 1)[0].trim().toLowerCase();
+  const dataUrlMime = typeof rawBase64 === 'string' ? rawBase64.match(/^data:([^;,]+);base64,/i)?.[1]?.toLowerCase() : null;
+  const mime = message.message_type === 'file' && base64?.startsWith('JVBERi0')
+    ? 'application/pdf'
+    : reportedMime && reportedMime !== 'application/octet-stream' ? reportedMime : dataUrlMime;
   if (!base64 || !mime) return null;
   if (message.message_type === 'image' && !mime.startsWith('image/')) return null;
   if (message.message_type === 'audio' && !mime.startsWith('audio/')) return null;
@@ -764,7 +772,8 @@ export async function reconcileRecentEvolutionMessages() {
         body: JSON.stringify({ where: { messageTimestamp: { gte: since } }, offset: 100, page: 1 }),
         signal: AbortSignal.timeout(8000)
       });
-      const records = response?.messages?.records ?? response?.records;
+      const history = response?.data ?? response;
+      const records = history?.messages?.records ?? history?.records ?? history?.messages ?? history;
       if (!Array.isArray(records)) throw new Error('invalid_evolution_history');
       const candidates = records.filter(record =>
         record?.key?.fromMe === false && record.key.id && Number(record.messageTimestamp) >= since
@@ -776,7 +785,7 @@ export async function reconcileRecentEvolutionMessages() {
       if (lookupError) throw lookupError;
       const seen = new Set((events ?? []).map(event => event.event_key));
       for (const record of candidates.filter(record => !seen.has(String(record.key.id))
-        && inboundType(unwrapInboundMessage(record.message)) === 'text').slice(0, 15)) {
+        && textFromMessage(unwrapInboundMessage(record.message)) && inboundType(unwrapInboundMessage(record.message)) === 'text').slice(0, 15)) {
         try {
           if (await processInboundMessage(instance, record, true)) recovered++;
         } catch {
