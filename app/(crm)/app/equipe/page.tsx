@@ -23,6 +23,7 @@ export default function Equipe(){
   const [viewer,setViewer]=useState({id:'',role:''});
   const [showDeleted,setShowDeleted]=useState(false);
   const [busyId,setBusyId]=useState('');
+  const [rename,setRename]=useState<{id:string;name:string}|null>(null);
   const master=viewer.role==='company_admin'||viewer.role==='super_admin';
   const [open,setOpen]=useState(false);
   const [error,setError]=useState('');
@@ -41,7 +42,7 @@ export default function Equipe(){
   async function change(id:string,patch:Record<string,unknown>){
     setError('');setNotice('');setBusyId(id);
     try{const r=await fetch(`/api/team/${id}`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(patch)});const d=await r.json();
-    if(!r.ok)setError(errorMessage(d.error));else{setNotice('Cadastro atualizado. Atendimentos abertos de usuários inativados retornam à fila de espera.');await load();}}
+    if(!r.ok)setError(errorMessage(d.error));else{if('full_name' in patch){setRename(null);setNotice('Nome atualizado.');}else setNotice('Cadastro atualizado.');await load();}}
     catch{setError('Falha de conexão. Tente novamente.');}finally{setBusyId('');}
   }
   async function remove(member:Member){
@@ -107,6 +108,17 @@ export default function Equipe(){
           </label></td>
           <td><span style={{whiteSpace: 'nowrap'}} className={r.active?'badge':'badge badge-off'}>{r.deleted_at?'Excluído':r.active?availabilityLabel[r.availability_state]:'Inativo'}</span></td>
           <td><div style={{display:'flex',gap:8,flexWrap:'wrap',minWidth:200}}>
+            {master && !r.deleted_at && (r.role !== 'super_admin' || viewer.role === 'super_admin') &&
+              (rename?.id === r.id ? <form className="field" onSubmit={event => {
+                event.preventDefault();
+                if (!busyId && rename.name.trim().length >= 2) void change(r.id,{full_name:rename.name});
+              }}>
+                <input className="input" required minLength={2} maxLength={140} aria-label="Nome do usuário"
+                  value={rename.name} onChange={event => setRename({id:r.id,name:event.target.value})} disabled={!!busyId}/>
+                <button className="btn btn-primary" disabled={!!busyId}>Salvar nome</button>
+                <button type="button" className="btn btn-secondary" disabled={!!busyId} onClick={() => setRename(null)}>Cancelar</button>
+              </form> : <button type="button" className="btn btn-secondary" disabled={!!busyId}
+                onClick={() => setRename({id:r.id,name:r.full_name})}>Editar nome</button>)}
             {master&&!r.deleted_at&&r.active&&<><button className="btn btn-secondary" disabled={!!busyId} onClick={()=>void accessLink(r,'email')}>Enviar link de acesso</button><button className="btn btn-secondary" disabled={!!busyId} onClick={()=>void accessLink(r,'link')}>Copiar novo link</button></>}
             {r.id!==viewer.id&&!r.deleted_at&&(master||(viewer.role==='manager'&&r.role==='user'&&r.active))&&<button className="btn btn-secondary" disabled={!!busyId} onClick={()=>void change(r.id,{active:!r.active})}>{r.active?'Inativar':'Ativar'}</button>}
             {master&&r.id!==viewer.id&&!r.deleted_at&&<button className="btn btn-danger" disabled={!!busyId} onClick={()=>void remove(r)}>Excluir acesso</button>}
