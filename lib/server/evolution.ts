@@ -469,6 +469,14 @@ function inboundBase64(value: unknown) {
   return clean;
 }
 
+function detectedImageMime(base64: string) {
+  const head = Buffer.from(base64.slice(0, 16), 'base64');
+  if (head.subarray(0, 3).toString('hex') === 'ffd8ff') return 'image/jpeg';
+  if (head.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') return 'image/png';
+  if (head.toString('ascii', 0, 4) === 'RIFF' && head.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
+
 async function fetchInboundMedia(tenantId: string, instanceName: string, messageId: string) {
   const runtime = await tenantRuntime(tenantId);
   if (!runtime) return null;
@@ -595,7 +603,8 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
           .map(value => String(value ?? '').split(';', 1)[0].trim().toLowerCase())
           .find(value => value && value !== 'application/octet-stream');
         const mime = type === 'audio' && base64.startsWith('T2dnUw') ? 'audio/ogg'
-          : reportedMime || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream');
+          : (type === 'image' ? detectedImageMime(base64) : null)
+            || reportedMime || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream');
         const fileName = String(node.fileName || fetched?.fileName || (
           type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'
         ));
@@ -714,10 +723,11 @@ export async function recoverEvolutionAttachment(tenantId: string, conversationI
   const base64 = inboundBase64(rawBase64);
   const reportedMime = String(media?.mimetype || media?.mimeType || '').split(';', 1)[0].trim().toLowerCase();
   const dataUrlMime = typeof rawBase64 === 'string' ? rawBase64.match(/^data:([^;,]+);base64,/i)?.[1]?.toLowerCase() : null;
-  const mime = message.message_type === 'audio' && base64?.startsWith('T2dnUw') ? 'audio/ogg'
+  const detectedImage = message.message_type === 'image' && base64 ? detectedImageMime(base64) : null;
+  const mime = detectedImage || (message.message_type === 'audio' && base64?.startsWith('T2dnUw') ? 'audio/ogg'
     : message.message_type === 'file' && base64?.startsWith('JVBERi0')
     ? 'application/pdf'
-    : reportedMime && reportedMime !== 'application/octet-stream' ? reportedMime : dataUrlMime;
+    : reportedMime && reportedMime !== 'application/octet-stream' ? reportedMime : dataUrlMime);
   if (!base64 || !mime) return null;
   if (message.message_type === 'image' && !mime.startsWith('image/')) return null;
   if (message.message_type === 'audio' && !mime.startsWith('audio/')) return null;
@@ -804,12 +814,35 @@ export async function reconcileRecentEvolutionMessages() {
         const message = unwrapInboundMessage(record.message, false);
         return Boolean(message?.audioMessage && !message.audioMessage.viewOnce);
       }).slice(0, 2);
-      for (const record of [...texts, ...audios]) {
+      const files = pending.filter(record => {
+        const message = unwrapInboundMessage(record.message, false);
+        return Boolean((message?.imageMessage && !message.imageMessage.viewOnce) || message?.documentMessage);
+      }).slice(0, 2);
+      for (const record of [...texts, ...audios, ...files]) {
         try {
           if (await processInboundMessage(instance, record, true)) recovered++;
         } catch {
           failed++;
         }
+      }
+
+      const photoIds = candidates.filter(record => {
+        const message = unwrapInboundMessage(record.message, false);
+        return Boolean((message?.imageMessage && !message.imageMessage.viewOnce) || message?.documentMessage);
+      }).map(record => String(record.key.id));
+      if (!photoIds.length) continue;
+      const { data: missing, error: missingError } = await admin.from('messages')
+        .select('id,conversation_id')
+        .eq('tenant_id', tenant.tenant_id).eq('direction', 'inbound')
+        .is('attachment_path', null).in('message_type', ['image', 'file'])
+        .in('provider_message_id', photoIds)
+        .order('created_at', { ascending: false }).limit(50);
+      if (missingError) throw missingError;
+      const batch = missing ?? [];
+      if (batch.length > 0) {
+        // Rotate attempts so a missing file on the provider cannot block the next one.
+        const message = batch[Math.floor(Date.now() / 60000) % batch.length];
+        if (await recoverEvolutionAttachment(tenant.tenant_id, message.conversation_id, message.id)) recovered++;
       }
     } catch {
       failed++;
