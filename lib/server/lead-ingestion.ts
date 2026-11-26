@@ -139,12 +139,23 @@ async function sendAttendanceWelcome(
   tenantId: string,
   conversationId: string,
   phone: string,
-  customerName: string | null
+  customerName: string | null,
+  assigneeId: string | null
 ) {
-  const body = `Olá${customerName ? `, ${customerName}` : ''}! Seja bem-vindo à Ecojoi. 😊 Já recebemos sua mensagem e vamos dar continuidade ao seu atendimento por aqui.`;
+  let attendant: string | null = null;
+  if (assigneeId) {
+    const { data: profile } = await admin.from('profiles').select('full_name')
+      .eq('tenant_id', tenantId).eq('id', assigneeId).eq('active', true).maybeSingle();
+    attendant = clean(profile?.full_name);
+  }
+  const greeting = `Olá${customerName ? `, ${customerName}` : ''}!`;
+  const body = attendant
+    ? `${greeting} Aqui é ${attendant}, da Ecojoi. 😊 Recebi sua mensagem e vou dar continuidade ao seu atendimento por aqui.`
+    : `${greeting} Seja bem-vindo à Ecojoi. 😊 Já recebemos sua mensagem e vamos dar continuidade ao seu atendimento por aqui.`;
   const { data: message, error } = await admin.from('messages').insert({
     tenant_id: tenantId, conversation_id: conversationId, direction: 'outbound',
-    body, status: 'queued', message_type: 'text'
+    body, status: 'queued', message_type: 'text',
+    ...(attendant ? { sender_user_id: assigneeId } : {})
   }).select('id').single();
   if (error) throw error;
 
@@ -391,10 +402,11 @@ export async function ingestLead(input: IngestLeadInput) {
       const { data: firstInbound, error: claimError } = await admin.from('conversations')
         .update({ last_inbound_at: now, updated_at: now })
         .eq('tenant_id', input.tenantId).eq('id', conversationId).neq('status', 'closed')
-        .is('last_inbound_at', null).select('id').maybeSingle();
+        .is('last_inbound_at', null).select('id,assigned_to,attendance_state').maybeSingle();
       if (claimError) console.warn('[attendance] Falha ao verificar primeiro contato');
       if (firstInbound) {
-        await sendAttendanceWelcome(admin, input.tenantId, conversationId, phone, providedName).catch(() => {
+        const assigneeId = firstInbound.attendance_state === 'in_service' ? firstInbound.assigned_to : null;
+        await sendAttendanceWelcome(admin, input.tenantId, conversationId, phone, providedName, assigneeId).catch(() => {
           console.warn('[attendance] Falha ao enviar boas-vindas');
         });
       }
