@@ -1,3 +1,4 @@
+import { whatsappPhoneVariants } from '@/lib/whatsapp-phone-variants';
 import { hasAttendanceCapacity } from '@/lib/server/attendance-capacity';
 import { findAttendanceSurvey, parseAttendanceRating, saveAttendanceRating } from '@/lib/server/attendance-survey';
 import { sendWhatsAppText } from '@/lib/server/whatsapp';
@@ -112,7 +113,7 @@ async function findContactByPhoneOrEmail(
       .from('contacts')
       .select('id')
       .eq('tenant_id', tenantId)
-      .eq('phone', phone)
+      .in('phone', whatsappPhoneVariants(phone))
       .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
