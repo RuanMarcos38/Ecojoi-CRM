@@ -411,8 +411,9 @@ async function claimEvent(tenantId: string, eventKey: string, eventType: string,
   return false;
 }
 
-function unwrapInboundMessage(message: any) {
+function unwrapInboundMessage(message: any, allowViewOnce = true) {
   for (let depth = 0; depth < 8 && message; depth++) {
+    if (!allowViewOnce && (message.viewOnceMessage || message.viewOnceMessageV2 || message.viewOnceMessageV2Extension)) return null;
     const nested = message.documentWithCaptionMessage?.message
       ?? message.ephemeralMessage?.message
       ?? message.viewOnceMessage?.message
@@ -800,9 +801,8 @@ export async function reconcileRecentEvolutionMessages() {
         return inboundType(message) === 'text' && Boolean(textFromMessage(message));
       }).slice(0, 15);
       const audios = pending.filter(record => {
-        const raw = record.message;
-        return inboundType(unwrapInboundMessage(raw)) === 'audio'
-          && !raw?.viewOnceMessage && !raw?.viewOnceMessageV2 && !raw?.viewOnceMessageV2Extension;
+        const message = unwrapInboundMessage(record.message, false);
+        return Boolean(message?.audioMessage && !message.audioMessage.viewOnce);
       }).slice(0, 2);
       for (const record of [...texts, ...audios]) {
         try {
