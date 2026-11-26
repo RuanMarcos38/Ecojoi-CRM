@@ -618,6 +618,9 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       body = message?.stickerMessage ? 'Figurinha recebida' : type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : type === 'file' ? 'Arquivo recebido' : 'Conteúdo indisponível no CRM. Consulte a conversa no WhatsApp.';
     }
 
+    const messageAgeSeconds = Date.now() / 1000 - Number(data?.messageTimestamp);
+    // A recent message can be recovered after a missed webhook. Older history stays silent.
+    const recentRecovery = messageAgeSeconds >= 0 && messageAgeSeconds <= 60 * 60;
     const received = await ingestLead({
       tenantId,
       channel: 'whatsapp',
@@ -629,7 +632,7 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       message: body,
       providerMessageId: String(key.id),
       replyToProviderId,
-      suppressWelcome: recovered,
+      suppressWelcome: recovered && !recentRecovery,
       messageType: type,
       attachment,
       createConversation: true
