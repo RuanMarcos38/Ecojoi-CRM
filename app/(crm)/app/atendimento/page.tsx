@@ -173,7 +173,14 @@ export default function Atendimento() {
     try { localStorage.setItem('ecojoi:attendance:font-size', String(size)); } catch {}
   }
   const [search, setSearch] = useState('');
-  const [text, setText] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const text = activeId ? drafts[activeId] ?? '' : '';
+  function setText(value: string | ((current: string) => string)) {
+    if (!activeId) return;
+    setDrafts(current => ({ ...current,
+      [activeId]: typeof value === 'function' ? value(current[activeId] ?? '') : value
+    }));
+  }
   const draftVersion = useRef(0);
   const openingConversationLock = useRef(false);
   const [reply, setReply] = useState<{ conversationId: string; message: Message } | null>(null);
@@ -602,10 +609,18 @@ export default function Atendimento() {
     if (!text.trim() && textAttempt.current?.accepted) textAttempt.current = null;
   }, [text]);
 
-  function clearSentDraft(version: number, conversationId: string) {
-    if (draftVersion.current !== version) return;
+  function clearSentDraft(version: number, conversationId: string, sentBody?: string) {
+    const sameVersion = draftVersion.current === version;
+    if (!sameVersion && sentBody === undefined) return;
+    setDrafts(current => {
+      if (sentBody !== undefined && current[conversationId]?.trim() !== sentBody) return current;
+      if (!(conversationId in current)) return current;
+      const next = { ...current };
+      delete next[conversationId];
+      return next;
+    });
+    if (!sameVersion) return;
     draftVersion.current++;
-    setText('');
     setReply(current => current?.conversationId === conversationId ? null : current);
     setEmojiOpen(false);
   }
@@ -634,7 +649,7 @@ export default function Atendimento() {
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         attempt.accepted = true;
-        clearSentDraft(version, conversationId);
+        clearSentDraft(version, conversationId, messageBody);
         if (d.delivery === 'failed') setError('O WhatsApp não confirmou o envio. Confira a conversa antes de enviar novamente.');
         else setNotice(d.delivery === 'queued' ? 'Mensagem enfileirada para o provedor do canal.' : 'Mensagem enviada.');
         if (d.data?.id) {
