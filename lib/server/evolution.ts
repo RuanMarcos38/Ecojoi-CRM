@@ -411,8 +411,9 @@ async function claimEvent(tenantId: string, eventKey: string, eventType: string,
   return false;
 }
 
-function unwrapInboundMessage(message: any) {
+function unwrapInboundMessage(message: any, allowViewOnce = true) {
   for (let depth = 0; depth < 8 && message; depth++) {
+    if (!allowViewOnce && (message.viewOnceMessage || message.viewOnceMessageV2 || message.viewOnceMessageV2Extension)) return null;
     const nested = message.documentWithCaptionMessage?.message
       ?? message.ephemeralMessage?.message
       ?? message.viewOnceMessage?.message
@@ -587,11 +588,14 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
         let fetched: any;
         if (!base64) {
           fetched = await fetchInboundMedia(tenantId, instanceName, String(key.id));
-          base64 = inboundBase64(fetched?.base64 ?? fetched?.data?.base64);
+          base64 = [fetched?.base64, fetched?.data?.base64].map(inboundBase64).find(Boolean);
         }
         if (!base64) throw new Error('attachment_data_unavailable');
-        const mime = String(node.mimetype || fetched?.mimetype || fetched?.data?.mimetype || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream'))
-          .split(';', 1)[0].trim().toLowerCase();
+        const reportedMime = [node.mimetype, fetched?.mimetype, fetched?.mimeType, fetched?.data?.mimetype, fetched?.data?.mimeType]
+          .map(value => String(value ?? '').split(';', 1)[0].trim().toLowerCase())
+          .find(value => value && value !== 'application/octet-stream');
+        const mime = type === 'audio' && base64.startsWith('T2dnUw') ? 'audio/ogg'
+          : reportedMime || (message?.stickerMessage ? 'image/webp' : 'application/octet-stream');
         const fileName = String(node.fileName || fetched?.fileName || (
           type === 'image' ? 'imagem-whatsapp' : type === 'audio' ? 'audio-whatsapp' : 'arquivo-whatsapp'
         ));
@@ -710,7 +714,8 @@ export async function recoverEvolutionAttachment(tenantId: string, conversationI
   const base64 = inboundBase64(rawBase64);
   const reportedMime = String(media?.mimetype || media?.mimeType || '').split(';', 1)[0].trim().toLowerCase();
   const dataUrlMime = typeof rawBase64 === 'string' ? rawBase64.match(/^data:([^;,]+);base64,/i)?.[1]?.toLowerCase() : null;
-  const mime = message.message_type === 'file' && base64?.startsWith('JVBERi0')
+  const mime = message.message_type === 'audio' && base64?.startsWith('T2dnUw') ? 'audio/ogg'
+    : message.message_type === 'file' && base64?.startsWith('JVBERi0')
     ? 'application/pdf'
     : reportedMime && reportedMime !== 'application/octet-stream' ? reportedMime : dataUrlMime;
   if (!base64 || !mime) return null;
@@ -790,8 +795,16 @@ export async function reconcileRecentEvolutionMessages() {
         .in('event_key', candidates.map(record => String(record.key.id)));
       if (lookupError) throw lookupError;
       const seen = new Set((events ?? []).map(event => event.event_key));
-      for (const record of candidates.filter(record => !seen.has(String(record.key.id))
-        && textFromMessage(unwrapInboundMessage(record.message)) && inboundType(unwrapInboundMessage(record.message)) === 'text').slice(0, 15)) {
+      const pending = candidates.filter(record => !seen.has(String(record.key.id)));
+      const texts = pending.filter(record => {
+        const message = unwrapInboundMessage(record.message);
+        return inboundType(message) === 'text' && Boolean(textFromMessage(message));
+      }).slice(0, 15);
+      const audios = pending.filter(record => {
+        const message = unwrapInboundMessage(record.message, false);
+        return Boolean(message?.audioMessage && !message.audioMessage.viewOnce);
+      }).slice(0, 2);
+      for (const record of [...texts, ...audios]) {
         try {
           if (await processInboundMessage(instance, record, true)) recovered++;
         } catch {
