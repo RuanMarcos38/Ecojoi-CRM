@@ -1,3 +1,4 @@
+import { whatsappPhoneVariants } from '@/lib/whatsapp-phone-variants';
 import { canViewTeamAttendance } from '@/lib/attendance-access';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -20,17 +21,6 @@ function normalizeWhatsAppPhone(raw: string) {
   const local = !raw.startsWith('+') && (digits.length === 10 || digits.length === 11);
   const normalized = local ? `55${digits}` : digits;
   return /^[1-9]\d{7,14}$/.test(normalized) ? `+${normalized}` : null;
-}
-
-function phoneVariants(phone: string, raw: string) {
-  const variants = [phone, phone.slice(1), raw];
-  const local = phone.startsWith('+55') ? phone.slice(3) : '';
-  if (local.length === 10 || local.length === 11) {
-    const area = local.slice(0, 2);
-    const number = `${local.slice(2, -4)}-${local.slice(-4)}`;
-    variants.push(local, `(${area}) ${number}`, `(${area})${number}`, `${area} ${number}`, `+55 (${area}) ${number}`);
-  }
-  return [...new Set(variants)];
 }
 
 export async function GET(request: Request) {
@@ -117,7 +107,7 @@ export async function POST(req: Request) {
       contactId = channelContact?.contact_id;
       if (!contactId) {
         const { data: match, error: matchError } = await supabase.from('contacts')
-          .select('id').eq('tenant_id', ctx.tenantId).in('phone', phoneVariants(phone, body.phone))
+          .select('id').eq('tenant_id', ctx.tenantId).in('phone', whatsappPhoneVariants(phone, body.phone))
           .order('created_at', { ascending: true }).limit(1).maybeSingle();
         if (matchError) throw matchError;
         contactId = match?.id;
