@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { canViewTeamAttendance } from '@/lib/attendance-access';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 export async function GET(request: Request) {
@@ -29,9 +30,10 @@ export async function GET(request: Request) {
 
     for (let offset = 0; ; offset += pageSize) {
       let query = supabase.from('conversations')
-        .select('id,channel,contact:contacts(id,name,phone),assignee:profiles!conversations_assigned_to_fkey(full_name),messages(id,direction,body,message_type,attachment_name,created_at)')
+        .select('id,channel,contact_id,contact:contacts(id,name,phone),assignee:profiles!conversations_assigned_to_fkey(full_name),messages(id,direction,body,message_type,attachment_name,created_at)')
         .eq('tenant_id', ctx.tenantId)
         .neq('status', 'closed')
+        .eq('attendance_state', 'in_service')
         .or('direction.eq.inbound,and(direction.eq.outbound,status.in.(sent,delivered,read))', { referencedTable: 'messages' })
         .order('created_at', { referencedTable: 'messages', ascending: false })
         .order('id', { referencedTable: 'messages', ascending: false })
@@ -51,8 +53,24 @@ export async function GET(request: Request) {
       if (data.length < pageSize) break;
     }
 
-    pending.sort((a, b) => Date.parse(a.last.created_at) - Date.parse(b.last.created_at));
-    return NextResponse.json({ data: pending, tenantId: ctx.tenantId, canViewTeam, attendants }, {
+    // Attendance permissions can differ from deal permissions. Check only contacts
+    // already visible to this operator and return no deal data to the browser.
+    const contactIds = [...new Set(pending.flatMap(row => row.contact_id ? [row.contact_id] : []))];
+    const excluded = new Set<string>();
+    if (contactIds.length) {
+      const admin = createAdminClient();
+      for (let start = 0; start < contactIds.length; start += 100) {
+        const { data, error } = await admin.from('deals').select('contact_id')
+          .eq('tenant_id', ctx.tenantId)
+          .in('contact_id', contactIds.slice(start, start + 100))
+          .in('stage', ['won', 'lost']);
+        if (error) throw error;
+        for (const deal of data ?? []) excluded.add(deal.contact_id);
+      }
+    }
+    const eligible = pending.filter(row => !row.contact_id || !excluded.has(row.contact_id));
+    eligible.sort((a, b) => Date.parse(a.last.created_at) - Date.parse(b.last.created_at));
+    return NextResponse.json({ data: eligible, tenantId: ctx.tenantId, canViewTeam, attendants }, {
       headers: { 'Cache-Control': 'no-store' }
     });
   } catch (error) {
