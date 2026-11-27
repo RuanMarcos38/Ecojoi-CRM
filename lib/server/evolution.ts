@@ -309,8 +309,7 @@ async function sendTextOnce(
 }
 
 export async function sendEvolutionText(tenantId: string, to: string | null | undefined, body: string, replyToProviderId?: string) {
-  const settings = await tenantEvolutionSettings(tenantId);
-  const runtime = await tenantRuntime(tenantId);
+  const [settings, runtime] = await Promise.all([tenantEvolutionSettings(tenantId), tenantRuntime(tenantId)]);
   const recipient = digits(to);
   if (!settings.instanceName || !recipient || !runtime) {
     return { delivered: false as const, reason: 'not_configured' };
@@ -786,15 +785,26 @@ export async function sendEvolutionReaction(tenantId: string, to: string | null 
   }
 }
 
-export async function reconcileRecentEvolutionMessages() {
+const fastRecoveryStarts = new Map<string, number>();
+
+export async function recoverRecentEvolutionReplies(tenantId: string) {
+  const now = Date.now();
+  if (now - (fastRecoveryStarts.get(tenantId) ?? 0) < 12000) return { recovered: 0 };
+  fastRecoveryStarts.set(tenantId, now);
+  return reconcileRecentEvolutionMessages(tenantId);
+}
+
+export async function reconcileRecentEvolutionMessages(fastTenantId?: string) {
   const admin = createAdminClient();
-  const { data: tenants, error } = await admin.from('tenant_settings')
+  let tenantQuery = admin.from('tenant_settings')
     .select('tenant_id,evolution_instance_name').eq('whatsapp_provider', 'evolution')
     .not('evolution_instance_name', 'is', null);
+  if (fastTenantId) tenantQuery = tenantQuery.eq('tenant_id', fastTenantId);
+  const { data: tenants, error } = await tenantQuery;
   if (error) throw error;
 
   const now = Math.floor(Date.now() / 1000);
-  const since = now - 7 * 24 * 60 * 60;
+  const since = now - (fastTenantId ? 180 : 7 * 24 * 60 * 60);
   let outboundRecovered = 0;
   let recovered = 0;
   let failed = 0;
@@ -804,7 +814,7 @@ export async function reconcileRecentEvolutionMessages() {
     try {
       const runtime = await tenantRuntime(tenant.tenant_id);
       if (!runtime) continue;
-      const pageSize = 100;
+      const pageSize = fastTenantId ? 30 : 100;
       async function fetchPage(page: number) {
         const response = await evolutionRequest(runtime!, `chat/findMessages/${encodeURIComponent(instance!)}`, {
           method: 'POST',
@@ -817,12 +827,16 @@ export async function reconcileRecentEvolutionMessages() {
         return { records, pages: Number(history?.messages?.pages ?? history?.pages ?? 1) };
       }
       const latest = await fetchPage(1);
-      const olderPage = latest.pages > 1 ? 2 + (Math.floor(now / 60) % (latest.pages - 1)) : 1;
+      const olderPage = !fastTenantId && latest.pages > 1 ? 2 + (Math.floor(now / 60) % (latest.pages - 1)) : 1;
       const records = olderPage > 1 ? [...latest.records, ...(await fetchPage(olderPage)).records] : latest.records;
       const candidates = [...new Map(records.filter(record => {
         const timestamp = Number(record?.messageTimestamp);
         if (typeof record?.key?.fromMe !== 'boolean' || !record.key.id || !(timestamp >= since && timestamp <= now)) return false;
         // Allow CRM sends to record the provider ID before matching device echoes.
+        if (fastTenantId) {
+          const message = unwrapInboundMessage(record.message, false);
+          return !record.key.fromMe && inboundType(message) === 'text' && Boolean(textFromMessage(message));
+        }
         return !record.key.fromMe || timestamp <= now - 90;
       }).map(record => [String(record.key.id), record])).values()]
         .sort((a, b) => Number(a.messageTimestamp) - Number(b.messageTimestamp));
@@ -841,7 +855,7 @@ export async function reconcileRecentEvolutionMessages() {
       const texts = pending.filter(record => {
         const message = unwrapInboundMessage(record.message, false);
         return !message?.reactionMessage && !message?.protocolMessage && inboundType(message) === 'text' && Boolean(textFromMessage(message));
-      }).slice(0, 40);
+      }).slice(0, fastTenantId ? 8 : 40);
       const audios = pending.filter(record => {
         const message = unwrapInboundMessage(record.message, false);
         return Boolean(message?.audioMessage && !message.audioMessage.viewOnce);
@@ -861,6 +875,7 @@ export async function reconcileRecentEvolutionMessages() {
         }
       }
 
+      if (fastTenantId) continue;
       const photoIds = candidates.filter(record => {
         const message = unwrapInboundMessage(record.message, false);
         return Boolean((message?.imageMessage && !message.imageMessage.viewOnce) || message?.documentMessage);

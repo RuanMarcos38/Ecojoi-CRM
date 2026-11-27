@@ -17,3 +17,12 @@ export function whatsappPhoneVariants(phone: string, raw = phone) {
   }
   return [...new Set(variants)];
 }
+
+export function whatsappPhoneKey(raw?: string | null) {
+  const phone = raw?.trim() ?? '';
+  if (!/^\+?[\d\s().-]+$/.test(phone)) return null;
+  let digits = phone.replace(/\D/g, '');
+  if (!phone.startsWith('+') && /^\d{10,11}$/.test(digits)) digits = '55' + digits;
+  if (!/^[1-9]\d{7,14}$/.test(digits)) return null;
+  return digits.replace(/^(55\d{2})([6-9]\d{7})$/, (_, area, subscriber) => area + '9' + subscriber);
+}
