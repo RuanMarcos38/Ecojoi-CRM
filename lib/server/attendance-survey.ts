@@ -8,7 +8,7 @@ export const attendanceSurvey = 'De 0 a 10, que nota você dá ao atendimento da
 const reviewInvitation = 'Obrigado pela nota e por falar com a Ecojoi! 😊 Se quiser, conte como foi sua experiência no Google:\nhttps://g.page/r/CZEiyMj9j4CCEBM/review';
 
 export function parseAttendanceRating(message?: string | null) {
-  const match = message?.trim().match(/^(?:nota\s*)?(10|[0-9])[.!]?$/i);
+  const match = message?.trim().match(/^(?:nota\s*[:=-]?\s*)?(10|[0-9])[.!]?$/i);
   return match ? Number(match[1]) : undefined;
 }
 
@@ -51,7 +51,7 @@ export async function findAttendanceSurvey(admin: Admin, tenantId: string, conta
 
 export async function saveAttendanceRating(admin: Admin, tenantId: string, survey: Survey, rating: number, phone?: string | null) {
   const { data: recorded, error } = await admin.from('conversation_notes').upsert({
-    id: survey.id, tenant_id: tenantId, conversation_id: survey.conversation_id, user_id: survey.sender_user_id,
+    id: survey.id, tenant_id: tenantId, conversation_id: survey.conversation_id, author_id: survey.sender_user_id,
     body: `Avaliação do cliente: ${rating}/10.${rating <= 8 ? ' Acompanhamento da equipe recomendado.' : ''}`
   }, { onConflict: 'id', ignoreDuplicates: true }).select('id').maybeSingle();
   if (error) throw error;
