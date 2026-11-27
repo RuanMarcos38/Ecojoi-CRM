@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { onDealsChanged } from '@/lib/deal-refresh';
 import { Clock3, MessageCircle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import styles from '../commercial.module.css';
@@ -103,9 +104,11 @@ export default function Acompanhamento() {
     }
 
     void refresh();
+    const unsubscribeDeals = onDealsChanged(refreshAfterChange);
     const timer = window.setInterval(refresh, 5000);
     return () => {
       controller.abort();
+      unsubscribeDeals();
       window.clearInterval(timer);
       if (channel) void supabase.removeChannel(channel);
     };
@@ -115,7 +118,7 @@ export default function Acompanhamento() {
     <header className={styles.hero}>
       <div>
         <h1>Acompanhamento</h1>
-        <p>Clientes aguardando resposta há mais de 10 minutos.</p>
+        <p>Atendimentos em andamento aguardando resposta há mais de 10 minutos.</p>
       </div>
       {team && <label className="field">
         <span>Atendente</span>
