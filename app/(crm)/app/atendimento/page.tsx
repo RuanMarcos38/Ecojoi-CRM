@@ -419,14 +419,6 @@ export default function Atendimento() {
   const [registeredTags, setRegisteredTags] = useState<{ id: string; name: string }[]>([]);
   const [oldestFirst, setOldestFirst] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const [followUp, setFollowUp] = useState(false);
-  const [followUpClock, setFollowUpClock] = useState(Date.now);
-  useEffect(() => {
-    if (!followUp) return;
-    setFollowUpClock(Date.now());
-    const timer = window.setInterval(() => setFollowUpClock(Date.now()), 5000);
-    return () => window.clearInterval(timer);
-  }, [followUp]);
   useEffect(() => {
     let cancelled = false;
     void fetch('/api/tags', { cache: 'no-store' }).then(async response => {
@@ -473,14 +465,9 @@ export default function Atendimento() {
     const needle = search.trim().toLowerCase();
     return visibleItems.filter(item => {
       if ((item.status === 'closed') !== showFinished) return false;
-      if (followUp) {
-        const last = [...(item.messages ?? [])].reverse().find(message => message.direction === 'inbound' || message.direction === 'outbound');
-        const receivedAt = messageTime(last?.created_at);
-        if (last?.direction !== 'inbound' || !receivedAt || followUpClock - receivedAt < 10 * 60 * 1000) return false;
-      } else {
-        if (!showFinished && (item.attendance_state ?? 'waiting') !== queue) return false;
-        if (unreadOnly && unreadCount(item) === 0) return false;
-      }
+      if (!showFinished && (item.attendance_state ?? 'waiting') !== queue) return false;
+      if (unreadOnly && unreadCount(item) === 0) return false;
+
       if (attendantFilter && (attendantFilter === 'unassigned' ? Boolean(item.assigned_to) : item.assigned_to !== attendantFilter)) return false;
       if (tagFilter && !item.contact?.contact_tags?.some(({ tag }) => tag?.id === tagFilter)) return false;
       if (channelFilter && item.channel !== channelFilter) return false;
@@ -493,14 +480,14 @@ export default function Atendimento() {
         || String(a.last_inbound_at ?? '').localeCompare(String(b.last_inbound_at ?? ''));
       return oldestFirst ? comparison : -comparison;
     });
-  }, [visibleItems, queue, showFinished, followUp, followUpClock, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
+  }, [visibleItems, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey]);
   useEffect(() => {
     if (activeId && pinnedConversation.current === activeId && items.some(item => item.id === activeId)) return;
-    if (!followUp && unreadOnly && activeId === explicitlyOpened && items.some(item => item.id === activeId
+    if (unreadOnly && activeId === explicitlyOpened && items.some(item => item.id === activeId
       && (item.status === 'closed') === showFinished && (showFinished || item.attendance_state === queue))) return;
     if (filtered.some(item => item.id === activeId)) return;
     setActiveId(filtered[0]?.id ?? null);
-  }, [filtered, activeId, items, explicitlyOpened, followUp, queue, showFinished, unreadOnly]);
+  }, [filtered, activeId, items, explicitlyOpened, queue, showFinished, unreadOnly]);
 
   useEffect(()=>{
     if(!activeId){setNotes([]);return;}
@@ -1273,12 +1260,11 @@ export default function Atendimento() {
           {soundEnabled ? 'Silenciar novas mensagens' : 'Ativar som de novas mensagens'}
         </button>
         <div className={styles.queueTabs} role="tablist">
-          {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={!followUp && !showFinished && queue === state ? styles.queueActive : ''} onClick={() => { setFollowUp(false); setShowFinished(false); setQueue(state); }}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
+          {QUEUES.map(({ state, label, Icon }) => <button key={state} type="button" className={!showFinished && queue === state ? styles.queueActive : ''} onClick={() => { setShowFinished(false); setQueue(state); }}><Icon size={14}/><span>{label}</span><b>{queueCounts[state]}</b></button>)}
         </div>
-        <button type="button" className="btn btn-secondary" aria-pressed={followUp} onClick={() => { setShowFinished(false); setFollowUp(true); }}>Acompanhamento</button>
-        <button type="button" className="btn btn-secondary" aria-pressed={showFinished} onClick={() => { setFollowUp(false); setShowFinished(value => !value); }}>Finalizados</button>
+        <button type="button" className="btn btn-secondary" aria-pressed={showFinished} onClick={() => setShowFinished(value => !value)}>Finalizados</button>
         <div className={styles.conversationList}>
-          {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>{followUp ? 'Nenhum cliente aguardando resposta há mais de 10 minutos.' : 'Nenhuma conversa nesta fila.'}</div> : filtered.map(conversation => {
+          {loading ? <div className={styles.empty}>Carregando...</div> : filtered.length === 0 ? <div className={styles.empty}>Nenhuma conversa nesta fila.</div> : filtered.map(conversation => {
             const last = conversation.messages?.[conversation.messages.length - 1];
             const unread = unreadCount(conversation);
             const timestamp = conversationActivity(conversation);
