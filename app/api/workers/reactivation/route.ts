@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { cleanupExpiredAttachments } from '@/lib/server/retention';
 import { enqueueLeadFollowUps, workReactivationQueue } from '@/lib/server/reactivation';
 
 import { reconcileRecentEvolutionMessages } from '@/lib/server/evolution';
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
       .then(async staged => ({ ...staged, delivery: await processOutboundQueue(10, undefined, true) }))
       .catch(() => ({ error: 'pipeline_queue_failed' }));
     const whatsappHistory = await reconcileRecentEvolutionMessages().catch(() => ({ error: 'evolution_history_failed' }));
-    return NextResponse.json({ data, pipeline, whatsappHistory });
+    const retention = await cleanupExpiredAttachments(undefined, 10, true)
+      .catch(() => ({ error: 'attachment_retention_failed' }));
+    return NextResponse.json({ data, pipeline, whatsappHistory, retention });
   } catch {
     return NextResponse.json({ error: 'reactivation_worker_failed' }, { status: 500 });
   }
