@@ -537,11 +537,17 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
 
   const key = data?.key ?? data?.data?.key;
   const rawMessage = data?.message ?? data?.data?.message;
-  const message = unwrapInboundMessage(rawMessage);
+  const message = unwrapInboundMessage(rawMessage, !recovered);
+  const outbound = key?.fromMe === true;
+  const timestamp = Number(data?.messageTimestamp);
+  const historicalMessage = recovered ? {
+    direction: outbound ? 'outbound' as const : 'inbound' as const,
+    sentAt: new Date(timestamp * 1000).toISOString()
+  } : undefined;
   const remoteJid = String(key?.remoteJid ?? '');
-  if (!key?.id || key?.fromMe || !remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
+  if (!key?.id || (outbound && !recovered) || !remoteJid || remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
 
-  if (!message || message.protocolMessage || message.senderKeyDistributionMessage && Object.keys(message).length === 1) return;
+  if (!message || (recovered && message.reactionMessage) || message.protocolMessage || message.senderKeyDistributionMessage && Object.keys(message).length === 1) return;
 
   const phone = [remoteJid, key.remoteJidAlt, key.senderPn, data?.remoteJidAlt, data?.data?.remoteJidAlt, data?.senderPn, data?.data?.senderPn]
     .filter((value): value is string => typeof value === 'string')
@@ -552,7 +558,10 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
     return;
   }
 
-  const fresh = await claimEvent(tenantId, String(key.id), 'whatsapp_message', { instance: instanceName });
+  const fresh = await claimEvent(tenantId, String(key.id), 'whatsapp_message', {
+    instance: instanceName,
+    ...(historicalMessage ? { recovered_direction: historicalMessage.direction, original_timestamp: historicalMessage.sentAt } : {})
+  });
   if (!fresh) return;
 
   try {
@@ -572,7 +581,7 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
         meta_ctwa_clid: ad?.ctwaClid ?? adContext.ctwaClid ?? null,
         ...metaAdPreview(key.id, ad?.title, ad?.mediaUrl, ad?.thumbnailUrl, jpeg) } : {})
     };
-    const displayName = data?.pushName || data?.data?.pushName || null;
+    const displayName = outbound ? null : data?.pushName || data?.data?.pushName || null;
     const type = inboundType(message);
     const base = await ingestLead({
       tenantId,
@@ -583,7 +592,8 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       phone,
       source: 'WhatsApp',
       attribution,
-      createConversation: type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
+      preserveExisting: outbound,
+      createConversation: recovered || type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
     });
 
     const node = mediaNode(message, type);
@@ -615,12 +625,9 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
     }
 
     if (!body) {
-      body = message?.stickerMessage ? 'Figurinha recebida' : type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem recebida' : type === 'file' ? 'Arquivo recebido' : 'Conteúdo indisponível no CRM. Consulte a conversa no WhatsApp.';
+      body = message?.stickerMessage ? 'Figurinha recebida' : type === 'audio' ? 'Mensagem de voz' : type === 'image' ? 'Imagem' : type === 'file' ? 'Arquivo' : 'Conteúdo indisponível no CRM. Consulte a conversa no WhatsApp.';
     }
 
-    const messageAgeSeconds = Date.now() / 1000 - Number(data?.messageTimestamp);
-    // A recent message can be recovered after a missed webhook. Older history stays silent.
-    const recentRecovery = messageAgeSeconds >= 0 && messageAgeSeconds <= 60 * 60;
     const received = await ingestLead({
       tenantId,
       channel: 'whatsapp',
@@ -632,12 +639,17 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       message: body,
       providerMessageId: String(key.id),
       replyToProviderId,
-      suppressWelcome: recovered && !recentRecovery,
+      historicalMessage,
+      preserveExisting: outbound,
+      suppressWelcome: recovered,
       messageType: type,
       attachment,
       createConversation: true
     });
 
+    if (attachment?.path && !received.conversationId) {
+      await createAdminClient().storage.from(BUCKET).remove([attachment.path]);
+    }
     if (!recovered) await notifyAutomaticConversation(tenantId, received.conversationId);
     return Boolean(received.conversationId);
   } catch (error) {
@@ -782,7 +794,9 @@ export async function reconcileRecentEvolutionMessages() {
     .not('evolution_instance_name', 'is', null);
   if (error) throw error;
 
-  const since = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+  const now = Math.floor(Date.now() / 1000);
+  const since = now - 7 * 24 * 60 * 60;
+  let outboundRecovered = 0;
   let recovered = 0;
   let failed = 0;
   for (const tenant of tenants ?? []) {
@@ -791,39 +805,58 @@ export async function reconcileRecentEvolutionMessages() {
     try {
       const runtime = await tenantRuntime(tenant.tenant_id);
       if (!runtime) continue;
-      const response = await evolutionRequest(runtime, `chat/findMessages/${encodeURIComponent(instance)}`, {
-        method: 'POST',
-        body: JSON.stringify({ where: { messageTimestamp: { gte: since } }, offset: 100, page: 1 }),
-        signal: AbortSignal.timeout(8000)
-      });
-      const history = response?.data ?? response;
-      const records = history?.messages?.records ?? history?.records ?? history?.messages ?? history;
-      if (!Array.isArray(records)) throw new Error('invalid_evolution_history');
-      const candidates = records.filter(record =>
-        record?.key?.fromMe === false && record.key.id && Number(record.messageTimestamp) >= since
-      ).sort((a, b) => Number(a.messageTimestamp) - Number(b.messageTimestamp));
+      const pageSize = 100;
+      async function fetchPage(page: number) {
+        const response = await evolutionRequest(runtime!, `chat/findMessages/${encodeURIComponent(instance!)}`, {
+          method: 'POST',
+          body: JSON.stringify({ where: { messageTimestamp: { gte: since } }, offset: pageSize, page }),
+          signal: AbortSignal.timeout(8000)
+        });
+        const history = response?.data ?? response;
+        const records = history?.messages?.records ?? history?.records ?? history?.messages ?? history;
+        if (!Array.isArray(records)) throw new Error('invalid_evolution_history');
+        return { records, pages: Number(history?.messages?.pages ?? history?.pages ?? 1) };
+      }
+      const latest = await fetchPage(1);
+      const olderPage = latest.pages > 1 ? 2 + (Math.floor(now / 60) % (latest.pages - 1)) : 1;
+      const records = olderPage > 1 ? [...latest.records, ...(await fetchPage(olderPage)).records] : latest.records;
+      const candidates = [...new Map(records.filter(record => {
+        const timestamp = Number(record?.messageTimestamp);
+        if (typeof record?.key?.fromMe !== 'boolean' || !record.key.id || !(timestamp >= since && timestamp <= now)) return false;
+        // Allow CRM sends to record the provider ID before matching device echoes.
+        return !record.key.fromMe || timestamp <= now - 90;
+      }).map(record => [String(record.key.id), record])).values()]
+        .sort((a, b) => Number(a.messageTimestamp) - Number(b.messageTimestamp));
       if (!candidates.length) continue;
       const { data: events, error: lookupError } = await admin.from('integration_events')
         .select('event_key').eq('tenant_id', tenant.tenant_id).eq('provider', 'evolution')
         .in('event_key', candidates.map(record => String(record.key.id)));
       if (lookupError) throw lookupError;
       const seen = new Set((events ?? []).map(event => event.event_key));
+      const { data: stored, error: storedError } = await admin.from('messages')
+        .select('provider_message_id').eq('tenant_id', tenant.tenant_id)
+        .in('provider_message_id', candidates.map(record => String(record.key.id)));
+      if (storedError) throw storedError;
+      for (const message of stored ?? []) seen.add(message.provider_message_id);
       const pending = candidates.filter(record => !seen.has(String(record.key.id)));
       const texts = pending.filter(record => {
-        const message = unwrapInboundMessage(record.message);
-        return inboundType(message) === 'text' && Boolean(textFromMessage(message));
-      }).slice(0, 15);
+        const message = unwrapInboundMessage(record.message, false);
+        return !message?.reactionMessage && !message?.protocolMessage && inboundType(message) === 'text' && Boolean(textFromMessage(message));
+      }).slice(0, 40);
       const audios = pending.filter(record => {
         const message = unwrapInboundMessage(record.message, false);
         return Boolean(message?.audioMessage && !message.audioMessage.viewOnce);
       }).slice(0, 2);
       const files = pending.filter(record => {
         const message = unwrapInboundMessage(record.message, false);
-        return Boolean((message?.imageMessage && !message.imageMessage.viewOnce) || message?.documentMessage);
+        return Boolean((message?.imageMessage && !message.imageMessage.viewOnce) || message?.documentMessage || message?.videoMessage || message?.stickerMessage);
       }).slice(0, 2);
       for (const record of [...texts, ...audios, ...files]) {
         try {
-          if (await processInboundMessage(instance, record, true)) recovered++;
+          if (await processInboundMessage(instance, record, true)) {
+            recovered++;
+            if (record.key.fromMe) outboundRecovered++;
+          }
         } catch {
           failed++;
         }
@@ -836,7 +869,7 @@ export async function reconcileRecentEvolutionMessages() {
       if (!photoIds.length) continue;
       const { data: missing, error: missingError } = await admin.from('messages')
         .select('id,conversation_id')
-        .eq('tenant_id', tenant.tenant_id).eq('direction', 'inbound')
+        .eq('tenant_id', tenant.tenant_id)
         .is('attachment_path', null).in('message_type', ['image', 'file'])
         .in('provider_message_id', photoIds)
         .order('created_at', { ascending: false }).limit(50);
@@ -851,5 +884,5 @@ export async function reconcileRecentEvolutionMessages() {
       failed++;
     }
   }
-  return { recovered, failed };
+  return { recovered, outboundRecovered, failed };
 }

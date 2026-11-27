@@ -32,6 +32,7 @@ type IngestLeadInput = {
   contactOnly?: boolean;
   suppressWelcome?: boolean;
   preserveExisting?: boolean;
+  historicalMessage?: { direction: 'inbound' | 'outbound'; sentAt: string };
 };
 
 function clean(value?: string | null) {
@@ -175,6 +176,7 @@ async function sendAttendanceWelcome(
 export async function ingestLead(input: IngestLeadInput) {
   const admin = createAdminClient();
   const channel = input.channel ?? 'internal';
+  const outboundHistory = input.historicalMessage?.direction === 'outbound';
   const phone = normalizePhone(input.phone);
   const email = clean(input.email)?.toLowerCase() ?? null;
   const externalId = clean(input.externalId);
@@ -214,7 +216,7 @@ export async function ingestLead(input: IngestLeadInput) {
       ...(input.attribution ?? {})
     };
 
-    const shouldPromote = channel === 'whatsapp' && Boolean(input.providerMessageId)
+    const shouldPromote = !outboundHistory && channel === 'whatsapp' && Boolean(input.providerMessageId)
       && current.status === 'active' && mergedAttribution.waiting_for_whatsapp === true;
     const defaultWhatsAppName = /^(WhatsApp(?: \d{4})?|Contato WhatsApp)$/i.test(current.name?.trim() ?? '');
     const refreshedName = input.preserveExisting
@@ -288,7 +290,7 @@ export async function ingestLead(input: IngestLeadInput) {
   const shouldCreateConversation = input.createConversation ?? Boolean(input.message || channel !== 'internal');
   let conversationId: string | null = null;
 
-  const rating = channel === 'whatsapp' && input.providerMessageId && (!input.messageType || input.messageType === 'text')
+  const rating = !input.historicalMessage && channel === 'whatsapp' && input.providerMessageId && (!input.messageType || input.messageType === 'text')
     ? parseAttendanceRating(input.message) : undefined;
   const survey = rating !== undefined
     ? await findAttendanceSurvey(admin, input.tenantId, contactId, input.replyToProviderId).catch(() => null) : null;
@@ -314,7 +316,7 @@ export async function ingestLead(input: IngestLeadInput) {
       ? (await hasAttendanceCapacity(input.tenantId, ownerId, true).catch(() => false) ? ownerId : null) : ownerId;
     if (openConversation?.id) {
       conversationId = openConversation.id;
-      if (!openConversation.assigned_to && openConversation.attendance_state === 'waiting' && eligibleOwner) {
+      if (!outboundHistory && !openConversation.assigned_to && openConversation.attendance_state === 'waiting' && eligibleOwner) {
         await admin
           .from('conversations')
           .update({
@@ -367,9 +369,10 @@ export async function ingestLead(input: IngestLeadInput) {
       const { error: messageError } = await admin.from('messages').insert({
         tenant_id: input.tenantId,
         conversation_id: conversationId,
-        direction: 'inbound',
+        direction: outboundHistory ? 'outbound' : 'inbound',
         body,
-        status: 'received',
+        status: outboundHistory ? 'sent' : 'received',
+        ...(input.historicalMessage ? { created_at: input.historicalMessage.sentAt } : {}),
         provider_message_id: input.providerMessageId,
         ...(input.replyToProviderId ? { reply_to_provider_id: input.replyToProviderId } : {}),
         message_type: type,
@@ -396,7 +399,17 @@ export async function ingestLead(input: IngestLeadInput) {
     await saveAttendanceRating(admin, input.tenantId, survey, rating, phone).catch(() => { console.warn('[attendance-survey] Falha ao registrar nota ou enviar convite'); });
   }
 
-  if (conversationId && !survey) {
+  if (conversationId && input.historicalMessage) {
+    const activity = outboundHistory ? 'last_outbound_at' : 'last_inbound_at';
+    const { sentAt } = input.historicalMessage;
+    const { error } = await admin.from('conversations')
+      .update({ [activity]: sentAt, updated_at: new Date().toISOString() })
+      .eq('tenant_id', input.tenantId).eq('id', conversationId)
+      .or(`${activity}.is.null,${activity}.lt.${sentAt}`);
+    if (error) throw error;
+  }
+
+  if (conversationId && !survey && !input.historicalMessage) {
     const now = new Date().toISOString();
     if (channel === 'whatsapp' && input.providerMessageId && phone && !input.suppressWelcome) {
       // Only one inbound event can move the conversation from no inbound messages to its first.
