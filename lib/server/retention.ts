@@ -55,7 +55,7 @@ export async function cleanupExpiredAttachments(tenantId?:string,limit=100,onlyT
         const { data: objects, error: listError } = await bucket.list(path.slice(0, separator), { search: fileName, limit: 100 });
         if (listError) throw listError;
         const object = objects?.find(item => item.name === fileName && item.id);
-        if (!object || !RETAINED_FILE_TYPES.includes(object.metadata?.mimetype)) continue;
+        if (!object || !RETAINED_FILE_TYPES.includes(String(object.metadata?.mimetype ?? ''))) continue;
         const modifiedAt = Date.parse(object.updated_at || object.created_at || '');
         if (!Number.isFinite(modifiedAt) || modifiedAt >= Date.parse(cutoff)) continue;
 
