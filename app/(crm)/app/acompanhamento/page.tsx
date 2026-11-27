@@ -11,8 +11,10 @@ type PendingConversation = {
   channel: string;
   contact: { name: string; phone: string | null } | null;
   assignee: { full_name: string } | null;
-  last: { body: string | null; message_type: string | null; attachment_name: string | null; created_at: string };
+  last: { id: string; body: string | null; message_type: string | null; attachment_name: string | null; created_at: string };
 };
+
+type Attendant = { id: string; full_name: string };
 
 function waitLabel(receivedAt: string, now: number) {
   const minutes = Math.max(0, Math.floor((now - Date.parse(receivedAt)) / 60000));
@@ -28,6 +30,8 @@ function messageLabel(message: PendingConversation['last']) {
 }
 
 export default function Acompanhamento() {
+  const [scope, setScope] = useState('mine');
+  const [team, setTeam] = useState<Attendant[] | null>(null);
   const [rows, setRows] = useState<PendingConversation[] | null>(null);
   const [error, setError] = useState(false);
   const [now, setNow] = useState(Date.now);
@@ -38,6 +42,27 @@ export default function Acompanhamento() {
     let channel: ReturnType<typeof supabase.channel> | undefined;
     let loading = false;
     let refreshPending = false;
+    let changeVersion = 0;
+
+    function refreshAfterChange() {
+      changeVersion++;
+      void refresh();
+    }
+
+    function onMessageChange(change: { new: Record<string, unknown> }) {
+      const { conversation_id, created_at, direction, status, id } = change.new;
+      const messageTime = Date.parse(String(created_at));
+      const clearsPending = direction === 'outbound' && ['sent', 'delivered', 'read'].includes(String(status));
+      const restartsWait = direction === 'inbound' && messageTime >= Date.now() - 10 * 60 * 1000;
+      if (clearsPending || restartsWait) {
+        setRows(current => current?.filter(row => {
+          if (row.id !== conversation_id) return true;
+          const lastTime = Date.parse(row.last.created_at);
+          return !(messageTime > lastTime || (messageTime === lastTime && String(id) > row.last.id));
+        }) ?? null);
+      }
+      refreshAfterChange();
+    }
 
     async function refresh() {
       if (controller.signal.aborted) return;
@@ -46,22 +71,25 @@ export default function Acompanhamento() {
         return;
       }
       loading = true;
+      const requestVersion = changeVersion;
       try {
-        const response = await fetch('/api/conversations/follow-up', { cache: 'no-store', signal: controller.signal });
+        const response = await fetch('/api/conversations/follow-up?scope=' + encodeURIComponent(scope), { cache: 'no-store', signal: controller.signal });
+        if (controller.signal.aborted) return;
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) setRows(null);
           throw new Error('follow_up_fetch_failed');
         }
-        const { data, tenantId } = await response.json();
+        const { data, tenantId, canViewTeam, attendants } = await response.json();
         if (controller.signal.aborted) return;
-        setRows(data);
+        setTeam(canViewTeam ? attendants : null);
+        if (requestVersion === changeVersion) setRows(data);
         setNow(Date.now());
         setError(false);
         if (!channel) {
           channel = supabase.channel(`ecojoi-follow-up-${tenantId}`)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `tenant_id=eq.${tenantId}` }, refresh)
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${tenantId}` }, refresh)
-            .subscribe();
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `tenant_id=eq.${tenantId}` }, onMessageChange)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${tenantId}` }, refreshAfterChange)
+            .subscribe(status => { if (status === 'SUBSCRIBED') refreshAfterChange(); });
         }
       } catch {
         if (!controller.signal.aborted) setError(true);
@@ -81,7 +109,7 @@ export default function Acompanhamento() {
       window.clearInterval(timer);
       if (channel) void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [scope]);
 
   return <div className={`content ${styles.page}`}>
     <header className={styles.hero}>
@@ -89,6 +117,19 @@ export default function Acompanhamento() {
         <h1>Acompanhamento</h1>
         <p>Clientes aguardando resposta há mais de 10 minutos.</p>
       </div>
+      {team && <label className="field">
+        <span>Atendente</span>
+        <select className="select" value={scope} onChange={event => {
+          setRows(null);
+          setError(false);
+          setScope(event.target.value);
+        }}>
+          <option value="mine">Meus clientes</option>
+          <option value="all">Todos os atendentes</option>
+          <option value="unassigned">Sem responsável</option>
+          {team.map(attendant => <option key={attendant.id} value={attendant.id}>{attendant.full_name}</option>)}
+        </select>
+      </label>}
     </header>
     {error && <p role="alert">Não foi possível atualizar o acompanhamento. Tentando novamente.</p>}
     {!error && rows === null && <p role="status">Carregando atendimentos…</p>}
