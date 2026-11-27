@@ -490,10 +490,22 @@ export default function Atendimento() {
     return { attendants: [...attendants].sort(byLabel), tags: [...tags].sort(byLabel), channels: [...channels].sort(), origins: [...origins].sort() };
   }, [items, registeredTags]);
 
+  const openWhatsApp = useMemo(() => {
+    const byIdentity = new Map<string, Conversation>();
+    for (const item of items) {
+      if (item.channel !== 'whatsapp' || item.status === 'closed') continue;
+      const key = conversationListKey(item);
+      const previous = byIdentity.get(key);
+      if (!previous || conversationActivity(item) > conversationActivity(previous)) byIdentity.set(key, item);
+    }
+    return byIdentity;
+  }, [items]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     const matching = items.filter(item => {
       if ((item.status === 'closed') !== showFinished) return false;
+      if (showFinished && item.channel === 'whatsapp' && openWhatsApp.has(conversationListKey(item))) return false;
       if (!showFinished && (item.attendance_state ?? 'waiting') !== queue) return false;
       if (unreadOnly && unreadCount(item) === 0 && !(item.id === activeId && item.id === explicitlyOpened)) return false;
       if (attendantFilter && (attendantFilter === 'unassigned' ? Boolean(item.assigned_to) : item.assigned_to !== attendantFilter)) return false;
@@ -518,14 +530,24 @@ export default function Atendimento() {
     }
     const grouped = [...distinct.values()].sort((a, b) => conversationActivity(b) - conversationActivity(a));
     return oldestFirst ? grouped.reverse() : grouped;
-  }, [items, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey, activeId, explicitlyOpened]);
+  }, [items, openWhatsApp, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey, activeId, explicitlyOpened]);
   useEffect(() => {
-    if (activeId && pinnedConversation.current === activeId && items.some(item => item.id === activeId)) return;
     const current = items.find(item => item.id === activeId);
+    const reopened = showFinished && current?.status === 'closed' && current.channel === 'whatsapp'
+      ? openWhatsApp.get(conversationListKey(current)) : undefined;
+    if (reopened) {
+      pinnedConversation.current = null;
+      setShowFinished(false);
+      setQueue(reopened.attendance_state ?? 'waiting');
+      setActiveId(reopened.id);
+      setExplicitlyOpened(null);
+      return;
+    }
+    if (current && pinnedConversation.current === activeId) return;
     if (current && Boolean(current.status === 'closed') === showFinished &&
       filtered.some(item => conversationListKey(item) === conversationListKey(current))) return;
     setActiveId(filtered[0]?.id ?? null);
-  }, [filtered, activeId, items, showFinished]);
+  }, [filtered, activeId, items, openWhatsApp, showFinished]);
 
   useEffect(()=>{
     if(!activeId){setNotes([]);return;}
@@ -901,7 +923,7 @@ export default function Atendimento() {
     return (await response.json()).data?.[0] ?? null;
   }
 
-  async function focusConversation(id: string) {
+  async function focusConversation(id: string, keepCurrentQueue = false) {
     const conversation = await fetchConversation(id);
     if (!conversation) {
       setOpeningError('Conversa não encontrada ou indisponível.');
@@ -917,8 +939,10 @@ export default function Atendimento() {
     setChannelFilter('');
     setAttendantFilter('');
     setOriginFilter('');
-    setShowFinished(conversation.status === 'closed');
-    setQueue(conversation.attendance_state ?? 'waiting');
+    if (!keepCurrentQueue) {
+      setShowFinished(conversation.status === 'closed');
+      setQueue(conversation.attendance_state ?? 'waiting');
+    }
     setActiveId(id);
     setMobileChatOpen(true);
     setCreating(false);
@@ -1357,7 +1381,7 @@ export default function Atendimento() {
             <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)}{(active.contact?.phone ?? active.contact?.email) && <> · {active.contact?.phone ?? active.contact?.email}</>}</span></div></div>
             <div className={styles.headerActions}>
               {relatedSessions.length > 1 && <select className="select" aria-label="Histórico de atendimentos do cliente"
-                value={active.id} onChange={event => { void focusConversation(event.target.value).catch(() => {}); }}>
+                value={active.id} onChange={event => { void focusConversation(event.target.value, true).catch(() => {}); }}>
                 {!relatedSessions.some(session => session.id === active.id) && <option value={active.id}>Atendimento atual</option>}
                 {relatedSessions.map((session, index) => <option key={session.id} value={session.id}>
                   {session.status === 'closed' ? 'Finalizado' : 'Em atendimento'} · {new Date(conversationActivity(session)).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {index + 1}
