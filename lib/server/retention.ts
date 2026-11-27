@@ -1,8 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const BUCKET='ecojoi-message-attachments';
+const RETAINED_FILE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp',
+  'image/gif', 'image/heic', 'image/heif', 'image/avif'];
 
-export async function cleanupExpiredAttachments(tenantId?:string,limit=100){
+export async function cleanupExpiredAttachments(tenantId?:string,limit=100,onlyThirtyDayTenants=false){
   const admin=createAdminClient();
 
   let settingsQuery=admin.from('tenant_settings')
@@ -10,6 +12,8 @@ export async function cleanupExpiredAttachments(tenantId?:string,limit=100){
     .order('tenant_id')
     .limit(500);
   if(tenantId)settingsQuery=settingsQuery.eq('tenant_id',tenantId);
+
+  if(onlyThirtyDayTenants)settingsQuery=settingsQuery.eq('attachment_retention_days',30);
 
   const {data:settings,error:settingsError}=await settingsQuery;
   if(settingsError)throw settingsError;
@@ -28,7 +32,8 @@ export async function cleanupExpiredAttachments(tenantId?:string,limit=100){
     const {data:messages,error}=await admin.from('messages')
       .select('id,attachment_path,created_at')
       .eq('tenant_id',setting.tenant_id)
-      .not('attachment_path','is',null)
+      .like('attachment_path',`${setting.tenant_id}/%`)
+      .in('attachment_mime', RETAINED_FILE_TYPES)
       .lt('created_at',cutoff)
       .order('created_at',{ascending:true})
       .limit(remaining);
@@ -44,7 +49,17 @@ export async function cleanupExpiredAttachments(tenantId?:string,limit=100){
       const path=message.attachment_path;
       if(!path)continue;
       try{
-        const {error:removeError}=await admin.storage.from(BUCKET).remove([path]);
+        const bucket = admin.storage.from(BUCKET);
+        const separator = path.lastIndexOf('/');
+        const fileName = path.slice(separator + 1);
+        const { data: objects, error: listError } = await bucket.list(path.slice(0, separator), { search: fileName, limit: 100 });
+        if (listError) throw listError;
+        const object = objects?.find(item => item.name === fileName && item.id);
+        if (!object || !RETAINED_FILE_TYPES.includes(String(object.metadata?.mimetype ?? ''))) continue;
+        const modifiedAt = Date.parse(object.updated_at || object.created_at || '');
+        if (!Number.isFinite(modifiedAt) || modifiedAt >= Date.parse(cutoff)) continue;
+
+        const {error:removeError}=await bucket.remove([path]);
         if(removeError)throw removeError;
 
         const {error:updateError}=await admin.from('messages').update({
@@ -53,7 +68,7 @@ export async function cleanupExpiredAttachments(tenantId?:string,limit=100){
           attachment_mime:null,
           attachment_size:null,
           audio_duration_ms:null
-        }).eq('tenant_id',setting.tenant_id).eq('id',message.id);
+        }).eq('tenant_id',setting.tenant_id).eq('id',message.id).eq('attachment_path',path);
         if(updateError)throw updateError;
         removed+=1;
       }catch{
