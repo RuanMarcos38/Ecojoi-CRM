@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     const params = new URL(request.url).searchParams;
     const target = params.get('id');
     const quoted = params.get('quoted');
+    const hydrate = params.get('hydrate');
     if (quoted !== null && (!target || !quoted.trim() || quoted.length > 512)) {
       return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
     }
@@ -47,7 +48,8 @@ export async function GET(request: Request) {
     const { data, error } = await query.order('updated_at', { ascending: false }).limit(target ? 1 : 100);
 
     if (error) throw error;
-    const senderIds = [...new Set((data ?? []).flatMap(conversation =>
+    const detailed = !target && hydrate !== null ? (data ?? []).filter(conversation => conversation.id === hydrate) : data ?? [];
+    const senderIds = [...new Set(detailed.flatMap(conversation =>
       (conversation.messages ?? []).flatMap(message => message.sender_user_id ? [String(message.sender_user_id)] : [])
     ))];
     const names = new Map<string, string>();
@@ -60,7 +62,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const paths = [...new Set((data ?? []).flatMap(conversation =>
+    const paths = [...new Set(detailed.flatMap(conversation =>
       (conversation.messages ?? []).flatMap(message => message.attachment_path ? [String(message.attachment_path)] : [])
     ))];
     const signedUrls = new Map<string, string>();
@@ -102,7 +104,7 @@ export async function POST(req: Request) {
       if (!phone) return NextResponse.json({ error: 'invalid_phone' }, { status: 400 });
       const digits = phone.slice(1);
       const { data: channelContact, error: channelError } = await createAdminClient().from('contact_channels')
-        .select('contact_id').eq('tenant_id', ctx.tenantId).eq('channel', 'whatsapp').eq('external_id', digits).limit(1).maybeSingle();
+        .select('contact_id').eq('tenant_id', ctx.tenantId).eq('channel', 'whatsapp').in('external_id', whatsappPhoneVariants(phone).filter(value => /^55\d{10,11}$/.test(value) || value === digits)).order('created_at').limit(1).maybeSingle();
       if (channelError) throw channelError;
       contactId = channelContact?.contact_id;
       if (!contactId) {

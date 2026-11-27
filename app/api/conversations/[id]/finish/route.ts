@@ -1,5 +1,5 @@
 import { admitWaitingAttendance } from '@/lib/server/attendance-capacity';
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth/context';
 import { requireFeature } from '@/lib/server/feature';
 import { createClient } from '@/lib/supabase/server';
@@ -20,12 +20,21 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       .eq('assigned_to', ctx.userId).eq('attendance_state', 'in_service')
       .select('channel,assigned_to,last_inbound_at,contact:contacts(phone)').maybeSingle();
     if (error) throw error;
-    if (!conversation) return NextResponse.json({ error: 'conversation_unavailable' }, { status: 409 });
+    if (!conversation) {
+      const { data: current, error } = await supabase.from('conversations').select('status,assigned_to')
+        .eq('tenant_id', ctx.tenantId).eq('id', id).maybeSingle();
+      if (error) throw error;
+      if (current?.status === 'closed' && current.assigned_to === ctx.userId) {
+        return NextResponse.json({ survey: 'already_closed', message: null });
+      }
+      return NextResponse.json({ error: 'conversation_unavailable' }, { status: 409 });
+    }
 
     if (conversation.assigned_to) {
-      await admitWaitingAttendance(ctx.tenantId, conversation.assigned_to).catch(() => {
+      const assignee = conversation.assigned_to;
+      after(() => admitWaitingAttendance(ctx.tenantId, assignee).catch(() => {
         console.warn('[attendance] Falha ao admitir próximo atendimento da fila');
-      });
+      }));
     }
 
     let surveyMessage = null;
@@ -41,18 +50,22 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
             sender_user_id: ctx.userId, status: 'queued', message_type: 'text'
           }).select('*').single();
           if (insertError) throw insertError;
-          let providerMessageId: string | null = null;
-          try {
-            const result = await sendWhatsAppText(ctx.tenantId, contact.phone, attendanceSurvey);
-            if (result.delivered && result.providerMessageId) {
-              survey = 'sent';
-              providerMessageId = result.providerMessageId;
+          const phone = contact.phone;
+          survey = 'queued';
+          surveyMessage = message;
+          after(async () => {
+            let providerMessageId: string | null = null;
+            try {
+              const result = await sendWhatsAppText(ctx.tenantId, phone, attendanceSurvey);
+              if (result.delivered) providerMessageId = result.providerMessageId ?? null;
+            } catch {
+              console.warn('[attendance] Falha ao enviar avaliação');
             }
-          } finally {
-            surveyMessage = { ...message, status: survey === 'sent' ? 'sent' : 'failed', provider_message_id: providerMessageId };
-            await supabase.from('messages').update({ status: survey === 'sent' ? 'sent' : 'failed', provider_message_id: providerMessageId })
+            const { error } = await supabase.from('messages')
+              .update({ status: providerMessageId ? 'sent' : 'failed', provider_message_id: providerMessageId })
               .eq('tenant_id', ctx.tenantId).eq('id', message.id);
-          }
+            if (error) console.warn('[attendance] Falha ao atualizar o envio da avaliação');
+          });
         }
       } catch {
         survey = 'failed';

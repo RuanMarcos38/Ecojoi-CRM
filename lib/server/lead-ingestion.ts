@@ -191,6 +191,19 @@ export async function ingestLead(input: IngestLeadInput) {
   );
 
   let contactId = await findContactByIdentity(admin, input.tenantId, channel, externalId);
+  if (channel === 'whatsapp' && phone) {
+    const { data: equivalent, error } = await admin.from('contacts').select('id')
+      .eq('tenant_id', input.tenantId).in('phone', whatsappPhoneVariants(phone));
+    if (error) throw error;
+    const ids = [...new Set([...(contactId ? [contactId] : []), ...(equivalent ?? []).map(row => row.id)])];
+    if (ids.length > 1) {
+      const { data: existing, error: lookupError } = await admin.from('conversations').select('contact_id')
+        .eq('tenant_id', input.tenantId).eq('channel', 'whatsapp').neq('status', 'closed')
+        .in('contact_id', ids).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (existing) contactId = existing.contact_id;
+    }
+  }
   if (!contactId) contactId = await findContactByPhoneOrEmail(admin, input.tenantId, phone, email);
 
   let ownerId: string | null = null;
@@ -290,10 +303,10 @@ export async function ingestLead(input: IngestLeadInput) {
   const shouldCreateConversation = input.createConversation ?? Boolean(input.message || channel !== 'internal');
   let conversationId: string | null = null;
 
-  const rating = !input.historicalMessage && channel === 'whatsapp' && input.providerMessageId && (!input.messageType || input.messageType === 'text')
+  const rating = !outboundHistory && channel === 'whatsapp' && input.providerMessageId && (!input.messageType || input.messageType === 'text')
     ? parseAttendanceRating(input.message) : undefined;
   const survey = rating !== undefined
-    ? await findAttendanceSurvey(admin, input.tenantId, contactId, input.replyToProviderId).catch(() => null) : null;
+    ? await findAttendanceSurvey(admin, input.tenantId, contactId, input.replyToProviderId, phone, input.historicalMessage?.sentAt) : null;
   if (survey) conversationId = survey.conversation_id;
 
   if (shouldCreateConversation && !survey) {
@@ -399,7 +412,7 @@ export async function ingestLead(input: IngestLeadInput) {
     await saveAttendanceRating(admin, input.tenantId, survey, rating, phone).catch(() => { console.warn('[attendance-survey] Falha ao registrar nota ou enviar convite'); });
   }
 
-  if (conversationId && input.historicalMessage) {
+  if (conversationId && input.historicalMessage && !survey) {
     const activity = outboundHistory ? 'last_outbound_at' : 'last_inbound_at';
     const { sentAt } = input.historicalMessage;
     const { error } = await admin.from('conversations')
@@ -457,5 +470,5 @@ export async function ingestLead(input: IngestLeadInput) {
     .eq('id', contactId)
     .single();
 
-  return { contact, conversationId, assignedTo: ownerId };
+  return { contact, conversationId, assignedTo: ownerId, isSurveyReply: Boolean(survey) };
 }

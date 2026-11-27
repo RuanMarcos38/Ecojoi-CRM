@@ -144,6 +144,9 @@ export default function Atendimento() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const activeConversationId = useRef<string | null>(null);
+  const refreshingList = useRef(false);
+  const refreshQueued = useRef(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [explicitlyOpened, setExplicitlyOpened] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -331,8 +334,26 @@ export default function Atendimento() {
   }
 
   async function refreshConversations() {
+    if (refreshingList.current) {
+      refreshQueued.current = true;
+      return;
+    }
+    refreshingList.current = true;
+    try {
+      await refreshConversationList();
+    } finally {
+      refreshingList.current = false;
+      if (refreshQueued.current) {
+        refreshQueued.current = false;
+        void refreshConversations().catch(() => {});
+      }
+    }
+  }
+
+  async function refreshConversationList() {
+    const hydratedId = activeConversationId.current;
     const sequence = ++refreshSequence.current;
-    const response = await fetch('/api/conversations', { cache: 'no-store' });
+    const response = await fetch('/api/conversations?hydrate=' + encodeURIComponent(hydratedId ?? ''), { cache: 'no-store' });
     if (!response.ok) return;
     const { data } = await response.json();
     const next: Conversation[] = data ?? [];
@@ -344,31 +365,33 @@ export default function Atendimento() {
     if (sequence < appliedRefresh.current) return;
     appliedRefresh.current = sequence;
     trackIncoming(next);
-    setItems(next);
+    setItems(current => {
+      const selected = activeConversationId.current;
+      if (selected && selected !== hydratedId) {
+        const cached = current.find(item => item.id === selected);
+        return next.map(item => item.id === selected && cached ? { ...item, messages: cached.messages } : item);
+      }
+      return next;
+    });
   }
 
   async function load() {
     setLoading(true);
-    const [cr, ct, mr, qr, tr] = await Promise.all([
-      fetch('/api/conversations', { cache: 'no-store' }),
-      fetch('/api/contacts', { cache: 'no-store' }),
-      fetch('/api/me', { cache: 'no-store' }),
-      fetch('/api/quick-replies', { cache: 'no-store' }),
-      fetch('/api/integrations/meta/templates', { cache: 'no-store' })
+    const [cr, mr] = await Promise.all([
+      fetch('/api/conversations?hydrate=', { cache: 'no-store' }),
+      fetch('/api/me', { cache: 'no-store' })
     ]);
-    const [cd, td, md, qd, templatesData] = await Promise.all([
-      cr.json(), ct.json(), mr.ok ? mr.json() : Promise.resolve(null),
-      qr.ok ? qr.json() : Promise.resolve(null),
-      tr.ok ? tr.json() : Promise.resolve(null)
-    ]);
+    const [cd, md] = await Promise.all([cr.json(), mr.ok ? mr.json() : null]);
     if (cr.ok) {
       trackIncoming(cd.data ?? [], messageTime(cr.headers.get('date') ?? undefined) || Date.now());
       setItems(cd.data ?? []);
     }
-    if (ct.ok) setContacts(td.data ?? []);
     if (mr.ok) setMe(md?.data ?? null);
-    if (qr.ok) setQuickReplies(qd?.data ?? []);
-    if (tr.ok) setTemplates(templatesData?.data ?? []);
+    void Promise.all([
+      fetch('/api/contacts', { cache: 'no-store' }).then(async r => { if (r.ok) setContacts((await r.json()).data ?? []); }),
+      fetch('/api/quick-replies', { cache: 'no-store' }).then(async r => { if (r.ok) setQuickReplies((await r.json()).data ?? []); }),
+      fetch('/api/integrations/meta/templates', { cache: 'no-store' }).then(async r => { if (r.ok) setTemplates((await r.json()).data ?? []); })
+    ]).catch(() => {});
     setLoading(false);
   }
 
@@ -386,6 +409,8 @@ export default function Atendimento() {
     if (!me?.tenantId) return;
     const supabase = createClient();
     let refreshTimer: number | null = null;
+    let connected = false;
+    let lastFallback = 0;
     const refresh = () => {
       if (refreshTimer !== null) return;
       refreshTimer = window.setTimeout(() => {
@@ -398,12 +423,23 @@ export default function Atendimento() {
       .channel(`ecojoi-attendance-${me.tenantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `tenant_id=eq.${me.tenantId}` }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `tenant_id=eq.${me.tenantId}` }, refresh)
-      .subscribe();
+      .subscribe(status => {
+        connected = status === 'SUBSCRIBED';
+        if (connected) refresh();
+      });
 
-    const fallback = window.setInterval(() => void refreshConversations().catch(() => {}), 5000);
+    const onVisibility = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const fallback = window.setInterval(() => {
+      const now = Date.now();
+      if (document.hidden || (connected && now - lastFallback < 30000)) return;
+      lastFallback = now;
+      refresh();
+    }, 5000);
     return () => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
       window.clearInterval(fallback);
+      document.removeEventListener('visibilitychange', onVisibility);
       void supabase.removeChannel(channel);
     };
   }, [me?.tenantId]);
@@ -497,6 +533,18 @@ export default function Atendimento() {
       .catch(()=>{if(!cancelled)setNotes([]);});
     return()=>{cancelled=true;};
   },[activeId]);
+
+  useEffect(() => {
+    activeConversationId.current = activeId;
+    if (!activeId) return;
+    let cancelled = false;
+    const sequence = refreshSequence.current;
+    void fetchConversation(activeId).then(conversation => {
+      if (cancelled || !conversation || appliedRefresh.current > sequence) return;
+      setItems(current => current.map(item => item.id === activeId ? conversation : item));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
   const ownsActive = Boolean(me?.userId && active?.assigned_to === me.userId);
@@ -977,11 +1025,21 @@ export default function Atendimento() {
       if (result.survey === 'failed' || result.survey === 'window_closed') {
         setError('Atendimento finalizado. O WhatsApp não confirmou o envio da avaliação.');
       } else {
-        setNotice(result.survey === 'sent' ? 'Atendimento finalizado. Pedido de nota enviado.' : 'Atendimento finalizado.');
+        setNotice(result.survey === 'queued' ? 'Atendimento finalizado. Pedido de nota em envio.' : 'Atendimento finalizado.');
       }
       void refreshConversations().catch(() => {});
     } catch {
-      setError('Falha ao finalizar. Confira o estado do atendimento antes de tentar novamente.');
+      const latest = await fetchConversation(active.id).catch(() => null);
+      if (latest?.status === 'closed') {
+        pinnedConversation.current = active.id;
+        setShowFinished(true);
+        setUnreadOnly(false);
+        setSearch('');
+        setItems(current => current.map(item => item.id === active.id ? latest : item));
+        setNotice('Atendimento finalizado.');
+      } else {
+        setError('Falha ao finalizar. Confira o estado do atendimento antes de tentar novamente.');
+      }
     } finally {
       setChangingState(false);
     }
