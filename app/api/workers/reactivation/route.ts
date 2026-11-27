@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   try {
+    const history = reconcileRecentEvolutionMessages().catch(() => ({ error: 'evolution_history_failed' }));
     await enqueueLeadFollowUps().catch(() => {});
     const data = await workReactivationQueue();
     const { error } = await createAdminClient().from('whatsapp_reactivation_heartbeat')
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     const pipeline = await queuePipelineMessages()
       .then(async staged => ({ ...staged, delivery: await processOutboundQueue(10, undefined, true) }))
       .catch(() => ({ error: 'pipeline_queue_failed' }));
-    const whatsappHistory = await reconcileRecentEvolutionMessages().catch(() => ({ error: 'evolution_history_failed' }));
+    const whatsappHistory = await history;
     const retention = await cleanupExpiredAttachments(undefined, 10, true)
       .catch(() => ({ error: 'attachment_retention_failed' }));
     return NextResponse.json({ data, pipeline, whatsappHistory, retention });

@@ -1,5 +1,6 @@
 'use client';
 
+import { whatsappPhoneKey } from '@/lib/whatsapp-phone-variants';
 import { canViewTeamAttendance } from '@/lib/attendance-access';
 import MessageAudio from './message-audio';
 import ContactDeals from './contact-deals';
@@ -115,13 +116,11 @@ function messageTime(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function whatsappConversationKeys(conversation: Conversation) {
-  if (conversation.channel !== 'whatsapp' || conversation.status === 'closed') return [];
-  const keys = conversation.contact?.id ? [`contact:${conversation.contact.id}`] : [];
-  const phone = conversation.contact?.phone?.trim() ?? '';
-  const digits = phone.replace(/\D/g, '');
-  if (/^\+?[\d\s().-]+$/.test(phone) && /^[1-9]\d{10,14}$/.test(digits)) keys.push(`phone:${digits}`);
-  return keys;
+function conversationListKey(conversation: Conversation) {
+  if (conversation.channel !== 'whatsapp') return conversation.id;
+  const phone = whatsappPhoneKey(conversation.contact?.phone);
+  if (phone) return `whatsapp:phone:${phone}`;
+  return conversation.contact?.id ? `whatsapp:contact:${conversation.contact.id}` : conversation.id;
 }
 
 function conversationActivity(conversation: Conversation) {
@@ -430,6 +429,12 @@ export default function Atendimento() {
 
     const onVisibility = () => { if (!document.hidden) refresh(); };
     document.addEventListener('visibilitychange', onVisibility);
+    async function recoverRecentReplies() {
+      if (document.hidden) return;
+      const response = await fetch('/api/conversations/recent-whatsapp', { method: 'POST', cache: 'no-store' });
+      if (response.ok && (await response.json()).recovered > 0) refresh();
+    }
+    const recoveryInterval = window.setInterval(() => void recoverRecentReplies().catch(() => {}), 12000);
     const fallback = window.setInterval(() => {
       const now = Date.now();
       if (document.hidden || (connected && now - lastFallback < 30000)) return;
@@ -439,6 +444,7 @@ export default function Atendimento() {
     return () => {
       if (refreshTimer) window.clearTimeout(refreshTimer);
       window.clearInterval(fallback);
+      window.clearInterval(recoveryInterval);
       document.removeEventListener('visibilitychange', onVisibility);
       void supabase.removeChannel(channel);
     };
@@ -484,22 +490,9 @@ export default function Atendimento() {
     return { attendants: [...attendants].sort(byLabel), tags: [...tags].sort(byLabel), channels: [...channels].sort(), origins: [...origins].sort() };
   }, [items, registeredTags]);
 
-  const visibleItems = useMemo(() => {
-    const occupied = new Set(items.filter(item =>
-      item.messages?.length || item.last_inbound_at || item.last_outbound_at
-    ).flatMap(whatsappConversationKeys));
-    return items.filter(item => {
-      const keys = whatsappConversationKeys(item);
-      if (!keys.length || item.messages?.length || item.last_inbound_at || item.last_outbound_at) return true;
-      if (keys.some(key => occupied.has(key))) return false;
-      keys.forEach(key => occupied.add(key));
-      return true;
-    });
-  }, [items]);
-
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return visibleItems.filter(item => {
+    const matching = items.filter(item => {
       if ((item.status === 'closed') !== showFinished) return false;
       if (!showFinished && (item.attendance_state ?? 'waiting') !== queue) return false;
       if (unreadOnly && unreadCount(item) === 0 && !(item.id === activeId && item.id === explicitlyOpened)) return false;
@@ -513,14 +506,26 @@ export default function Atendimento() {
     }).sort((a, b) => {
       const comparison = conversationActivity(a) - conversationActivity(b)
         || String(a.last_inbound_at ?? '').localeCompare(String(b.last_inbound_at ?? ''));
-      return oldestFirst ? comparison : -comparison;
+      return -comparison;
     });
-  }, [visibleItems, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey, activeId, explicitlyOpened]);
+    const distinct = new Map<string, Conversation>();
+    for (const item of matching) {
+      const key = conversationListKey(item);
+      const current = distinct.get(key);
+      if (!current || (item.messages.length > 0 && current.messages.length === 0)) {
+        distinct.set(key, item);
+      }
+    }
+    const grouped = [...distinct.values()].sort((a, b) => conversationActivity(b) - conversationActivity(a));
+    return oldestFirst ? grouped.reverse() : grouped;
+  }, [items, queue, showFinished, search, attendantFilter, tagFilter, channelFilter, originFilter, oldestFirst, unreadOnly, readState, readKey, activeId, explicitlyOpened]);
   useEffect(() => {
     if (activeId && pinnedConversation.current === activeId && items.some(item => item.id === activeId)) return;
-    if (filtered.some(item => item.id === activeId)) return;
+    const current = items.find(item => item.id === activeId);
+    if (current && Boolean(current.status === 'closed') === showFinished &&
+      filtered.some(item => conversationListKey(item) === conversationListKey(current))) return;
     setActiveId(filtered[0]?.id ?? null);
-  }, [filtered, activeId, items]);
+  }, [filtered, activeId, items, showFinished]);
 
   useEffect(()=>{
     if(!activeId){setNotes([]);return;}
@@ -547,6 +552,11 @@ export default function Atendimento() {
   }, [activeId]);
 
   const active = items.find(item => item.id === activeId) ?? null;
+  const relatedSessions = useMemo(() => active?.channel === 'whatsapp'
+    ? items.filter(item => (item.status === 'closed' || item.id === active.id) && item.messages.length > 0 &&
+      conversationListKey(item) === conversationListKey(active))
+      .sort((a, b) => conversationActivity(b) - conversationActivity(a))
+    : [], [active, items]);
   const ownsActive = Boolean(me?.userId && active?.assigned_to === me.userId);
   const replyTarget = reply && reply.conversationId === active?.id ? reply.message : null;
   const [loadedQuote, setLoadedQuote] = useState<{ conversationId: string; messages: Message[] } | null>(null);
@@ -1323,7 +1333,7 @@ export default function Atendimento() {
             const last = conversation.messages?.[conversation.messages.length - 1];
             const unread = unreadCount(conversation);
             const timestamp = conversationActivity(conversation);
-            return <button className={`${styles.conversation} ${activeId === conversation.id ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { pinnedConversation.current = null; setActiveId(conversation.id); setExplicitlyOpened(conversation.id); setMobileChatOpen(true); }}>
+            return <button className={`${styles.conversation} ${active && conversationListKey(active) === conversationListKey(conversation) ? styles.conversationActive : ''}`} key={conversation.id} onClick={() => { pinnedConversation.current = null; setActiveId(conversation.id); setExplicitlyOpened(conversation.id); setMobileChatOpen(true); }}>
               <ContactAvatar id={conversation.contact?.id} name={conversation.contact?.name??'Contato'} enabled={conversation.channel==='whatsapp'} className={styles.avatar}/>
               <span className={styles.conversationCopy}>
                 <span className={styles.conversationName}><b>{conversation.contact?.name ?? 'Contato'}</b><small>{timestamp ? formatTime(new Date(timestamp).toISOString()) : ''}</small></span>
@@ -1346,6 +1356,13 @@ export default function Atendimento() {
             <button type="button" className={styles.mobileBack} onClick={() => setMobileChatOpen(false)} aria-label="Voltar para conversas"><ChevronLeft size={22}/></button>
             <div className={styles.contactIdentity}><ContactAvatar id={active.contact?.id} name={active.contact?.name??'Contato'} enabled={active.channel==='whatsapp'} className={styles.avatar}/><div><strong>{active.contact?.name ?? 'Contato'}</strong><span>{channelName(active.channel)}{(active.contact?.phone ?? active.contact?.email) && <> · {active.contact?.phone ?? active.contact?.email}</>}</span></div></div>
             <div className={styles.headerActions}>
+              {relatedSessions.length > 1 && <select className="select" aria-label="Histórico de atendimentos do cliente"
+                value={active.id} onChange={event => { void focusConversation(event.target.value).catch(() => {}); }}>
+                {!relatedSessions.some(session => session.id === active.id) && <option value={active.id}>Atendimento atual</option>}
+                {relatedSessions.map((session, index) => <option key={session.id} value={session.id}>
+                  {session.status === 'closed' ? 'Finalizado' : 'Em atendimento'} · {new Date(conversationActivity(session)).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} · {index + 1}
+                </option>)}
+              </select>}
               <button type="button" className="btn btn-secondary" aria-label="Diminuir fonte das mensagens" title="Diminuir fonte" disabled={fontSize <= 12} onClick={() => changeFontSize(-2)}>A−</button>
               <button type="button" className="btn btn-secondary" aria-label="Aumentar fonte das mensagens" title="Aumentar fonte" disabled={fontSize >= 22} onClick={() => changeFontSize(2)}>A+</button>
               {active.status !== 'closed' && active.attendance_state !== 'in_service' && <button className="btn btn-primary" disabled={changingState} onClick={() => void changeAttendance('in_service')}><UserCheck size={15}/>Assumir</button>}
