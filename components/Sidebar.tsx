@@ -11,6 +11,7 @@ const groups:{title:string;items:Item[]}[]=[
   {title:'Visão geral',items:[{href:'/app',label:'Painel',Icon:LayoutDashboard}]},
   {title:'Comercial',items:[
     {href:'/app/atendimento',label:'Atendimento',Icon:MessageCircle,permission:'conversations.view',feature:'atendimento'},
+    {href:'/app/acompanhamento',label:'Acompanhamento',Icon:CalendarClock,permission:'conversations.view',feature:'atendimento'},
     {href:'/app/contatos',label:'Contatos',Icon:Users,permission:'contacts.view'},
     {href:'/app/leads',label:'Pré-vendas',Icon:UserPlus,permission:'contacts.view'},
     {href:'/app/pipeline',label:'Funil',Icon:Kanban,permission:'deals.view'},
