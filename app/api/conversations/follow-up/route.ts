@@ -30,7 +30,7 @@ export async function GET(request: Request) {
 
     for (let offset = 0; ; offset += pageSize) {
       let query = supabase.from('conversations')
-        .select('id,channel,contact:contacts(id,name,phone),assignee:profiles!conversations_assigned_to_fkey(full_name),messages(id,direction,body,message_type,attachment_name,created_at)')
+        .select('id,channel,contact_id,contact:contacts(id,name,phone),assignee:profiles!conversations_assigned_to_fkey(full_name),messages(id,direction,body,message_type,attachment_name,created_at)')
         .eq('tenant_id', ctx.tenantId)
         .neq('status', 'closed')
         .eq('attendance_state', 'in_service')
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
 
     // Attendance permissions can differ from deal permissions. Check only contacts
     // already visible to this operator and return no deal data to the browser.
-    const contactIds = [...new Set(pending.flatMap(row => row.contact?.id ? [row.contact.id] : []))];
+    const contactIds = [...new Set(pending.flatMap(row => row.contact_id ? [row.contact_id] : []))];
     const excluded = new Set<string>();
     if (contactIds.length) {
       const admin = createAdminClient();
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
         for (const deal of data ?? []) excluded.add(deal.contact_id);
       }
     }
-    const eligible = pending.filter(row => !row.contact?.id || !excluded.has(row.contact.id));
+    const eligible = pending.filter(row => !row.contact_id || !excluded.has(row.contact_id));
     eligible.sort((a, b) => Date.parse(a.last.created_at) - Date.parse(b.last.created_at));
     return NextResponse.json({ data: eligible, tenantId: ctx.tenantId, canViewTeam, attendants }, {
       headers: { 'Cache-Control': 'no-store' }
