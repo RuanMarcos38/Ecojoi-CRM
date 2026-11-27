@@ -1,4 +1,5 @@
 import { sendWhatsAppText } from '@/lib/server/whatsapp';
+import { whatsappPhoneVariants } from '@/lib/whatsapp-phone-variants';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const legacySurvey = 'Obrigado por falar com a Ecojoi! 😊 De 0 a 10, que nota você dá ao nosso atendimento? Pode responder por aqui.\n\nSe puder, conte também como foi sua experiência no Google. Sua opinião ajuda nossa equipe a melhorar.\nhttps://g.page/r/CZEiyMj9j4CCEBM/review';
@@ -14,27 +15,38 @@ export function parseAttendanceRating(message?: string | null) {
 type Admin = ReturnType<typeof createAdminClient>;
 type Survey = { id: string; conversation_id: string; sender_user_id: string; sendReview: boolean };
 
-export async function findAttendanceSurvey(admin: Admin, tenantId: string, contactId: string, reference?: string | null) {
+export async function findAttendanceSurvey(admin: Admin, tenantId: string, contactId: string, reference?: string | null, phone?: string | null, receivedAt?: string) {
+  const contactIds = [contactId];
+  if (phone) {
+    const { data, error } = await admin.from('contacts').select('id')
+      .eq('tenant_id', tenantId).in('phone', whatsappPhoneVariants(phone));
+    if (error) throw error;
+    for (const contact of data ?? []) contactIds.push(contact.id);
+  }
+  const replyTime = receivedAt ?? new Date().toISOString();
+  // Historical Evolution timestamps have second precision.
+  const latestPrompt = receivedAt ? new Date(Date.parse(receivedAt) + 999).toISOString() : replyTime;
   let query = admin.from('messages')
     .select('id,conversation_id,sender_user_id,created_at,body,conversations!inner(contact_id,status,channel)')
     .eq('tenant_id', tenantId).eq('direction', 'outbound').in('body', [attendanceSurvey, legacySurvey])
-    .eq('conversations.contact_id', contactId).eq('conversations.status', 'closed').eq('conversations.channel', 'whatsapp')
+    .in('conversations.contact_id', contactIds).eq('conversations.status', 'closed').eq('conversations.channel', 'whatsapp')
     .in('status', ['sent', 'delivered', 'read'])
-    .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+    .gte('created_at', new Date(Date.parse(replyTime) - 7 * 86400000).toISOString()).lte('created_at', latestPrompt);
   if (reference) query = query.eq('provider_message_id', reference);
   const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (error) throw error;
   if (!data?.sender_user_id) return null;
   if (!reference) {
-    const { count, error } = await admin.from('conversations').select('id', { count: 'exact', head: true })
-      .eq('tenant_id', tenantId).eq('contact_id', contactId).eq('channel', 'whatsapp').neq('status', 'closed')
-      .or(`last_inbound_at.gt.${data.created_at},last_outbound_at.gt.${data.created_at}`);
-    if (error || count) return null;
+    const { data: newerConversation, error } = await admin.from('messages')
+      .select('id,conversations!inner(contact_id,status,channel)')
+      .eq('tenant_id', tenantId).in('conversations.contact_id', contactIds)
+      .eq('conversations.channel', 'whatsapp').neq('conversations.status', 'closed')
+      .eq('direction', 'inbound').gt('created_at', data.created_at).lt('created_at', replyTime)
+      .limit(1).maybeSingle();
+    if (error) throw error;
+    if (newerConversation) return null;
   }
-  const { data: previous, error: noteError } = await admin.from('conversation_notes').select('id')
-    .eq('tenant_id', tenantId).eq('id', data.id).maybeSingle();
-  if (noteError) throw noteError;
-  return previous ? null : { id: data.id, conversation_id: data.conversation_id, sender_user_id: data.sender_user_id, sendReview: data.body === attendanceSurvey };
+  return { id: data.id, conversation_id: data.conversation_id, sender_user_id: data.sender_user_id, sendReview: data.body === attendanceSurvey };
 }
 
 export async function saveAttendanceRating(admin: Admin, tenantId: string, survey: Survey, rating: number, phone?: string | null) {

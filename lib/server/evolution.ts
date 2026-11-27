@@ -1,4 +1,3 @@
-import { parseAttendanceRating } from '@/lib/server/attendance-survey';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { metaAdPreview } from '@/lib/server/meta-attribution';
@@ -583,7 +582,8 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
     };
     const displayName = outbound ? null : data?.pushName || data?.data?.pushName || null;
     const type = inboundType(message);
-    const base = await ingestLead({
+    const node = mediaNode(message, type);
+    const base = node ? await ingestLead({
       tenantId,
       channel: 'whatsapp',
       externalId: phone,
@@ -593,13 +593,11 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       source: 'WhatsApp',
       attribution,
       preserveExisting: outbound,
-      createConversation: recovered || type !== 'text' || parseAttendanceRating(textFromMessage(message)) === undefined
-    });
-
-    const node = mediaNode(message, type);
+      createConversation: true
+    }) : null;
     let attachment: { path?: string | null; name?: string | null; mime?: string | null; size?: number | null } | undefined;
     let body = textFromMessage(message);
-    if (node && base.conversationId) {
+    if (node && base?.conversationId) {
       try {
         let base64 = [data?.base64, data?.data?.base64, message?.base64, node.base64]
           .map(inboundBase64).find(Boolean);
@@ -636,6 +634,7 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
       name: displayName,
       phone,
       source: 'WhatsApp',
+      attribution,
       message: body,
       providerMessageId: String(key.id),
       replyToProviderId,
@@ -650,7 +649,7 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
     if (attachment?.path && !received.conversationId) {
       await createAdminClient().storage.from(BUCKET).remove([attachment.path]);
     }
-    if (!recovered) await notifyAutomaticConversation(tenantId, received.conversationId);
+    if (!recovered && !received.isSurveyReply) await notifyAutomaticConversation(tenantId, received.conversationId);
     return Boolean(received.conversationId);
   } catch (error) {
     await createAdminClient().from('integration_events').delete()
