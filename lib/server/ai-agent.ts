@@ -48,6 +48,51 @@ async function resolveBridge(tenantId: string) {
   }
 }
 
+export async function interpretAgentAttachment(input: {
+  tenantId: string;
+  conversationId: string;
+  path: string;
+  name: string | null;
+  mime: string | null;
+}): Promise<string | null> {
+  const mime = input.mime?.split(';')[0].trim().toLowerCase() ?? '';
+  const supported = [
+    'audio/ogg', 'audio/opus', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+    'audio/webm', 'audio/flac', 'image/jpeg', 'image/png', 'image/webp',
+    'image/gif', 'application/pdf', 'text/plain', 'text/csv',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  if (!supported.includes(mime) || !input.path.startsWith(`${input.tenantId}/${input.conversationId}/`)) return null;
+
+  try {
+    const bridge = await resolveBridge(input.tenantId);
+    if (!bridge.endpoint || !bridge.token || new URL(bridge.endpoint).protocol !== 'https:') return null;
+    const { data, error } = await createAdminClient().storage.from('ecojoi-message-attachments')
+      .createSignedUrl(input.path, 90);
+    if (error || !data?.signedUrl) return null;
+
+    const response = await fetch(bridge.endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${bridge.token}` },
+      body: JSON.stringify({
+        event: 'ecojoi.crm.attachment.interpret',
+        tenant_id: input.tenantId,
+        conversation_id: input.conversationId,
+        attachment: { url: data.signedUrl, mime, name: input.name }
+      }),
+      redirect: 'error',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!response.ok) return null;
+    const { text } = await response.json();
+    return typeof text === 'string' ? text.trim().slice(0, 3000) || null : null;
+  } catch {
+    return null;
+  }
+}
+
 async function knowledgeForTenant(tenantId: string) {
   const admin = createAdminClient();
   const { data } = await admin
