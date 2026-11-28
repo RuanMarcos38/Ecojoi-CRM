@@ -573,8 +573,7 @@ async function notifyAutomaticConversation(tenantId: string, conversationId: str
     .slice(-30);
 
   const newest = recentMessages.at(-1);
-  const sendWebhookReply = newest?.provider_message_id === providerId && newest.direction === 'inbound'
-    && ['audio', 'image', 'file'].includes(newest.message_type);
+  const sendWebhookReply = newest?.provider_message_id === providerId && newest.direction === 'inbound';
 
   await notifyAiAgentMessage({
     sendWebhookReply,
