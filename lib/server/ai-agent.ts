@@ -9,6 +9,7 @@ type AgentEvent = {
   contact?: unknown;
   messages?: unknown[];
   eventName?: string;
+  sendWebhookReply?: boolean;
 };
 
 async function resolveBridge(tenantId: string) {
@@ -45,6 +46,51 @@ async function resolveBridge(tenantId: string) {
       workflowId: null,
       config: {}
     };
+  }
+}
+
+export async function interpretAgentAttachment(input: {
+  tenantId: string;
+  conversationId: string;
+  path: string;
+  name: string | null;
+  mime: string | null;
+}): Promise<string | null> {
+  const mime = input.mime?.split(';')[0].trim().toLowerCase() ?? '';
+  const supported = [
+    'audio/ogg', 'audio/opus', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+    'audio/webm', 'audio/flac', 'image/jpeg', 'image/png', 'image/webp',
+    'image/gif', 'application/pdf', 'text/plain', 'text/csv',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  if (!supported.includes(mime) || !input.path.startsWith(`${input.tenantId}/${input.conversationId}/`)) return null;
+
+  try {
+    const bridge = await resolveBridge(input.tenantId);
+    if (!bridge.endpoint || !bridge.token || new URL(bridge.endpoint).protocol !== 'https:') return null;
+    const { data, error } = await createAdminClient().storage.from('ecojoi-message-attachments')
+      .createSignedUrl(input.path, 90);
+    if (error || !data?.signedUrl) return null;
+
+    const response = await fetch(bridge.endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${bridge.token}` },
+      body: JSON.stringify({
+        event: 'ecojoi.crm.attachment.interpret',
+        tenant_id: input.tenantId,
+        conversation_id: input.conversationId,
+        attachment: { url: data.signedUrl, mime, name: input.name }
+      }),
+      redirect: 'error',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20000)
+    });
+    if (!response.ok) return null;
+    const { text } = await response.json();
+    return typeof text === 'string' ? text.trim().slice(0, 3000) || null : null;
+  } catch {
+    return null;
   }
 }
 
@@ -117,6 +163,30 @@ export async function notifyAiAgent(event: AgentEvent) {
         durationMs: Date.now() - started,
         error: response.ok ? null : `HTTP ${response.status}`
       }).catch(() => {});
+    }
+
+    if (event.sendWebhookReply && response.ok && appUrl) {
+      const token = process.env.N8N_WEBHOOK_TOKEN?.trim() || process.env.AI_AGENT_WEBHOOK_TOKEN?.trim();
+      const reply = await response.json();
+      if (!token || reply?.tenant_id !== event.tenantId || reply?.conversation_id !== event.conversationId
+          || typeof reply?.body !== 'string' || !reply.body.trim()) {
+        return { configured: true, delivered: false, source: bridge.source };
+      }
+      const result = await fetch(appUrl + '/api/ai-agent/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          tenant_id: event.tenantId,
+          conversation_id: event.conversationId,
+          body: reply.body.trim().slice(0, 4000),
+          summary: typeof reply.summary === 'string' ? reply.summary.slice(0, 8000) : null,
+          next_action: typeof reply.next_action === 'string' ? reply.next_action.slice(0, 2000) : null
+        }),
+        redirect: 'error',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000)
+      });
+      return { configured: true, delivered: result.ok, source: bridge.source };
     }
 
     return { configured: true, delivered: response.ok, source: bridge.source };
