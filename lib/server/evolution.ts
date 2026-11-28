@@ -505,6 +505,58 @@ async function saveInboundBase64(
   return { path, mime, size: bytes.byteLength, name: fileName };
 }
 
+const CATALOG_FILENAME = 'Catalogo-Ecojoi-2026.pdf';
+const CATALOG_MIME = 'application/pdf';
+
+function requestsCatalog(body: string) {
+  const text = body.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  if (/\b(?:nao (?:quero|preciso|mande|envie)|ja recebi)\b/.test(text)) return false;
+  return /^(?:o )?catalogo(?: (?:da )?ecojoi| em pdf| por favor| pdf)*[.!?\s]*$/.test(text)
+    || /\b(?:enviar|envia|enviem|envie|mandar|manda|mande|passar|passa|passe|mostrar|mostra|compartilhar|quero|gostaria|preciso|tem|teria|ver|receber) (?:de |me |para mim |o |um |do |seu |esse |esse seu )*catalogo\b/.test(text);
+}
+
+async function sendRequestedCatalog(tenantId: string, conversationId: string, phone: string, inboundId: string) {
+  const admin = createAdminClient();
+  const bucket = admin.storage.from(BUCKET);
+  const filename = CATALOG_FILENAME;
+  const original = `${tenantId}/catalog/${filename}`;
+  const { data: source, error: sourceError } = await bucket.download(original);
+  if (sourceError || !source) throw new Error('catalog_pdf_unavailable');
+
+  const bytes = await source.arrayBuffer();
+  if (bytes.byteLength < 5 || bytes.byteLength > MAX_ATTACHMENT_BYTES
+      || new TextDecoder().decode(bytes.slice(0, 5)) !== '%PDF-') {
+    throw new Error('catalog_pdf_invalid');
+  }
+
+  const digest = createHash('sha256').update(inboundId).digest('hex');
+  const path = `${tenantId}/${conversationId}/catalog-${digest}.pdf`;
+  const { error: storageError } = await bucket.upload(path, bytes, { contentType: CATALOG_MIME, upsert: true });
+  if (storageError) throw storageError;
+
+  const { data: existing, error: lookupError } = await admin.from('messages').select('id')
+    .eq('tenant_id', tenantId).eq('conversation_id', conversationId).eq('attachment_path', path).maybeSingle();
+  if (lookupError) throw lookupError;
+  if (existing) return;
+
+  const caption = 'Segue o catálogo da Ecojoi em PDF.';
+  const { data: message, error: insertError } = await admin.from('messages').insert({
+    tenant_id: tenantId, conversation_id: conversationId, direction: 'outbound',
+    body: caption, status: 'queued', message_type: 'file',
+    attachment_path: path, attachment_name: filename, attachment_mime: CATALOG_MIME,
+    attachment_size: bytes.byteLength
+  }).select('id').single();
+  if (insertError) throw insertError;
+
+  const sent = await sendEvolutionMedia(tenantId, phone, new File([bytes], filename, { type: CATALOG_MIME }), caption);
+  const { error: updateError } = await admin.from('messages').update({
+    status: sent.delivered ? 'sent' : 'failed',
+    provider_message_id: sent.delivered ? sent.providerMessageId ?? null : null
+  }).eq('tenant_id', tenantId).eq('id', message.id);
+  if (updateError) throw updateError;
+  if (!sent.delivered) console.warn('[evolution] Falha no envio do catálogo solicitado');
+}
+
 async function notifyAutomaticConversation(tenantId: string, conversationId?: string | null) {
   if (!conversationId) return;
   const admin = createAdminClient();
@@ -648,7 +700,13 @@ async function processInboundMessage(instanceName: string, data: any, recovered 
     if (attachment?.path && !received.conversationId) {
       await createAdminClient().storage.from(BUCKET).remove([attachment.path]);
     }
-    if (!recovered && !received.isSurveyReply) await notifyAutomaticConversation(tenantId, received.conversationId);
+    if (!recovered && !received.isSurveyReply) {
+      if (received.conversationId && type === 'text' && requestsCatalog(body)) {
+        await sendRequestedCatalog(tenantId, received.conversationId, phone, String(key.id));
+      } else {
+        await notifyAutomaticConversation(tenantId, received.conversationId);
+      }
+    }
     return Boolean(received.conversationId);
   } catch (error) {
     await createAdminClient().from('integration_events').delete()
