@@ -572,7 +572,12 @@ async function notifyAutomaticConversation(tenantId: string, conversationId: str
     .sort((a: any, b: any) => String(a.created_at).localeCompare(String(b.created_at)))
     .slice(-30);
 
+  const newest = recentMessages.at(-1);
+  const sendWebhookReply = newest?.provider_message_id === providerId && newest.direction === 'inbound'
+    && ['audio', 'image', 'file'].includes(newest.message_type);
+
   await notifyAiAgentMessage({
+    sendWebhookReply,
     tenantId,
     conversationId,
     channel: data.channel,
