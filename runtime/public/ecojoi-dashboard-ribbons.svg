@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 565 53" preserveAspectRatio="none">
+  <defs><linearGradient id="lime" x2=".95" y2=".3" gradientUnits="objectBoundingBox"><stop stop-color="#303d02"/><stop offset=".47" stop-color="#85b100"/><stop offset="1" stop-color="#c5fb00"/></linearGradient></defs>
+  <path d="M0 53q27-23 69-23h152q38 0 59 23Z" fill="url(#lime)" stroke="#b6e514"/>
+  <path d="M263 53l25-27Q311 3 348 3h217v50Z" fill="url(#lime)" stroke="#b6e514"/>
+</svg>
