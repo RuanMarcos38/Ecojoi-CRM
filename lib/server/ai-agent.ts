@@ -9,6 +9,7 @@ type AgentEvent = {
   contact?: unknown;
   messages?: unknown[];
   eventName?: string;
+  sendWebhookReply?: boolean;
 };
 
 async function resolveBridge(tenantId: string) {
@@ -162,6 +163,30 @@ export async function notifyAiAgent(event: AgentEvent) {
         durationMs: Date.now() - started,
         error: response.ok ? null : `HTTP ${response.status}`
       }).catch(() => {});
+    }
+
+    if (event.sendWebhookReply && response.ok && appUrl) {
+      const token = process.env.N8N_WEBHOOK_TOKEN?.trim() || process.env.AI_AGENT_WEBHOOK_TOKEN?.trim();
+      const reply = await response.json();
+      if (!token || reply?.tenant_id !== event.tenantId || reply?.conversation_id !== event.conversationId
+          || typeof reply?.body !== 'string' || !reply.body.trim()) {
+        return { configured: true, delivered: false, source: bridge.source };
+      }
+      const result = await fetch(appUrl + '/api/ai-agent/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          tenant_id: event.tenantId,
+          conversation_id: event.conversationId,
+          body: reply.body.trim().slice(0, 4000),
+          summary: typeof reply.summary === 'string' ? reply.summary.slice(0, 8000) : null,
+          next_action: typeof reply.next_action === 'string' ? reply.next_action.slice(0, 2000) : null
+        }),
+        redirect: 'error',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000)
+      });
+      return { configured: true, delivered: result.ok, source: bridge.source };
     }
 
     return { configured: true, delivered: response.ok, source: bridge.source };
